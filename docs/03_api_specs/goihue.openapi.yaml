@@ -179,7 +179,7 @@ paths:
                 - {$ref: '#/components/schemas/Mutation'}
                 - type: object
                   properties:
-                    action: {type: string, enum: [profile, address-save, address-delete, consent, policy, privacy-create, privacy-update, privacy-supplement, return-create, return-update, return-supplement]}
+                    action: {type: string, enum: [profile, address-save, address-delete, consent, policy, privacy-create, privacy-update, privacy-supplement, return-create, return-submit, return-update, return-supplement, return-confirm, return-withdraw]}
       responses:
         '200': {description: Persisted record or acknowledgement}
         '401': {$ref: '#/components/responses/Error'}

@@ -29,6 +29,8 @@ export function Account({
     [paymentStatus, setPaymentStatus] = useState(""),
     [orderPage, setOrderPage] = useState(1);
   const selectedFromUrl = useRef(false);
+  const [returnLines, setReturnLines] = useState([{ id: 0, productId: "", reason: "DAMAGED" }]);
+  const nextReturnLine = useRef(1);
   useEffect(() => {
     if (state && section === "orders" && !selectedFromUrl.current) {
       selectedFromUrl.current = true;
@@ -57,6 +59,9 @@ export function Account({
         (r) => r.id === selected.id,
       ) ?? selected)
     : null;
+  const orderItems = (current?.items as Row[] | undefined) ?? [];
+  const selectedProducts = returnLines.map((line) => line.productId || String(orderItems[0]?.productId ?? ""));
+  const nextProduct = orderItems.find((item) => !selectedProducts.includes(String(item.productId)));
   const filteredOrders = state.orders.filter(
     (o) =>
       (!orderQuery ||
@@ -307,7 +312,11 @@ export function Account({
               <button
                 className="store-row"
                 key={o.id}
-                onClick={() => setSelected(o)}
+                onClick={() => {
+                  setReturnLines([{ id: 0, productId: "", reason: "DAMAGED" }]);
+                  setFiles([]);
+                  setSelected(o);
+                }}
               >
                 <strong>
                   {String(o.number)} · {money(o.total)}
@@ -338,22 +347,28 @@ export function Account({
               {!admin && <Link href="/account/orders">Mở đơn đã giao để gửi yêu cầu</Link>}
             </div>
           )}
-          {state.returns.map((r) => (
+          {state.returns.filter((r, i, rows) => !r.caseId || rows.findIndex((row) => row.caseId === r.caseId) === i).map((r) => {
+            const lines = r.caseId ? state.returns.filter((row) => row.caseId === r.caseId) : [r];
+            const closed = lines.every((row) => ["RESOLVED", "REJECTED", "WITHDRAWN"].includes(String(row.status)));
+            const fulfilled = lines.filter((row) => row.status === "RESOLVED");
+            const partial = fulfilled.length > 0 && (fulfilled.length < lines.length || fulfilled.some((row) => Number(row.approvedQuantity ?? row.quantity) < Number(row.quantity)));
+            return (
             <button
               key={r.id}
               className="store-row"
               onClick={() => setSelected(r)}
             >
               <strong>
-                {String(r.orderNumber)} · {String(r.product)}
+                {String(r.orderNumber)} · {lines.length > 1 ? `${lines.length} dòng hàng` : String(r.product)}
               </strong>
               <span>
                 {label(r.reason)} · {String(r.quantity)} sản phẩm
               </span>
-              <span className="store-status-chip">{label(r.status)}</span>
+              <span className="store-status-chip">{closed && partial ? "Hoàn tất một phần" : lines.length === 1 ? label(r.status) : closed ? "Đã đóng hồ sơ" : "Đang xử lý"}</span>
               <small>{date(r.createdAt)}</small>
             </button>
-          ))}
+            );
+          })}
         </section>
       )}
       {section === "policies" && admin && (
@@ -568,28 +583,33 @@ export function Account({
                   />
                 )}
                 {!admin && current.status === "DELIVERED" && (
-                  <form
+                  <form key={current.id}
                     className="store-form store-return-form"
                     onSubmit={(e) => {
                       const b = fields(e);
                       void run(async () => {
                         const evidenceIds = await upload(files);
-                        const r = await mutate("command", "return-create", {
-                          ...b,
+                        const r = await mutate("command", "return-submit", {
                           orderId: current.id,
-                          quantity: Number(b.quantity),
+                          items: returnLines.map(({ id: i }) => ({ lineId: b[`lineId-${i}`], quantity: Number(b[`quantity-${i}`]), reason: b[`reason-${i}`], resolution: b[`resolution-${i}`], description: b[`description-${i}`] })),
                           evidenceIds,
                         });
                         setSelected(r);
                         setFiles([]);
+                        setReturnLines([{ id: 0, productId: "", reason: "DAMAGED" }]);
                       });
                     }}
                   >
                     <div><h3>Yêu cầu đổi trả</h3><p className="store-subtle">Chọn sản phẩm trong đơn và mô tả vấn đề để cửa hàng xem xét.</p></div>
+                    {returnLines.map(({ id: line, reason }, index) => <fieldset className="store-return-line" key={line}>
+                    <legend>Món cần xử lý</legend>
                     <label>
                       Sản phẩm
-                      <select name="lineId">
-                        {(current.items as Row[]).map((l, i) => (
+                      <select name={`lineId-${line}`} value={selectedProducts[index]} required onChange={(event) => {
+                        const productId = event.target.value;
+                        setReturnLines(returnLines.map((row) => row.id === line ? { ...row, productId } : row));
+                      }}>
+                        {orderItems.filter((item) => String(item.productId) === selectedProducts[index] || !selectedProducts.includes(String(item.productId))).map((l, i) => (
                           <option key={i} value={String(l.productId)}>
                             {String(l.name)} (đã mua {String(l.quantity)})
                           </option>
@@ -599,23 +619,28 @@ export function Account({
                     <label>
                       Số lượng
                       <input
-                        name="quantity"
+                        name={`quantity-${line}`}
                         type="number"
                         min={1}
-                        max={100}
+                        max={Number(orderItems.find((item) => String(item.productId) === selectedProducts[index])?.quantity ?? 1)}
                         defaultValue={1}
                         required
                       />
                     </label>
                     <label>
                       Lý do
-                      <select name="reason">
+                      <select name={`reason-${line}`} value={reason} onChange={(event) => {
+                        const reason = event.target.value;
+                        setReturnLines(returnLines.map((row) => row.id === line ? { ...row, reason } : row));
+                      }}>
                         {[
                           "DAMAGED",
                           "WRONG_ITEM",
                           "MISSING_ITEM",
                           "UNSAFE",
                           "QUALITY",
+                          "NOT_RECEIVED",
+                          "CHANGE_OF_MIND",
                         ].map((s) => (
                           <option key={s} value={s}>
                             {label(s)}
@@ -625,15 +650,20 @@ export function Account({
                     </label>
                     <label>
                       Mong muốn
-                      <select name="resolution">
-                        <option value="REPLACEMENT">Đổi hàng</option>
+                      <select key={missingReturnItem(reason) ? "missing" : "received"} name={`resolution-${line}`}>
+                        <option value={missingReturnItem(reason) ? "MAKE_UP" : "REPLACEMENT"}>{missingReturnItem(reason) ? "Giao bù" : "Đổi hàng"}</option>
                         <option value="REFUND">Hoàn tiền</option>
                       </select>
                     </label>
                     <label>
                       Nội dung
-                      <textarea name="description" required maxLength={2000} />
+                      <textarea name={`description-${line}`} required maxLength={2000} />
                     </label>
+                    {returnLines.length > 1 && <button type="button" onClick={() => setReturnLines(returnLines.filter((row) => row.id !== line))}>Bỏ dòng</button>}
+                    </fieldset>)}
+                    <button type="button" disabled={!nextProduct || returnLines.length >= 50} onClick={() => {
+                      if (nextProduct) setReturnLines([...returnLines, { id: nextReturnLine.current++, productId: String(nextProduct.productId), reason: "DAMAGED" }]);
+                    }}>Thêm dòng sản phẩm</button>
                     <label>
                       Ảnh PNG/JPEG (tối đa 5 ảnh, 5 MB/ảnh)
                       <input
@@ -665,6 +695,11 @@ export function Account({
                 )}
                 {!current.type && (
                   <>
+                    {Boolean(current.caseId) && <div className="store-row-actions" aria-label="Các món trong hồ sơ">{state.returns.filter((row) => row.caseId === current.caseId).map((row) => <button key={row.id} onClick={() => setSelected(row)} aria-pressed={row.id === current.id}>{String(row.product)} · {label(row.status)}</button>)}</div>}
+                    {Boolean(current.replacementTracking) && <p>Vận đơn hàng thay thế: {String(current.replacementTracking)}</p>}
+                    {current.receivedQuantity != null && <p>Đã nhận hàng trả: {String(current.receivedQuantity)}</p>}
+                    {current.status === "CUSTOMER_CONFIRMATION" && <p>Phương án đề xuất: {label(current.resolution)} cho {String(current.proposedQuantity)} sản phẩm.</p>}
+                    {!admin && ["REQUESTED","REVIEWING","EVIDENCE_REQUIRED","CUSTOMER_CONFIRMATION"].includes(String(current.status)) && <div className="store-row-actions">{(current.status === "CUSTOMER_CONFIRMATION" ? ["return-confirm","return-withdraw"] : ["return-withdraw"]).map((action) => <button key={action} disabled={busy} onClick={() => { const note = action === "return-confirm" ? "Khách đồng ý phương án." : "Khách rút yêu cầu."; if (window.confirm(note)) void run(async () => { await mutate("command", action, {id: current.id, revision: current.revision, note}); }); }}>{action === "return-confirm" ? "Đồng ý phương án" : "Rút yêu cầu cho món này"}</button>)}</div>}
                     <p>
                       Sản phẩm: {String(current.product)} · Yêu cầu{" "}
                       {String(current.quantity)} · Duyệt{" "}
@@ -716,9 +751,9 @@ export function Account({
                   </a>
                 )}
                 {!admin &&
-                  !["COMPLETED", "RESOLVED", "REJECTED"].includes(
-                    String(current.status),
-                  ) && (
+                  (current.type
+                    ? !["COMPLETED", "RESOLVED", "REJECTED", "WITHDRAWN"].includes(String(current.status))
+                    : current.status === "EVIDENCE_REQUIRED") && (
                     <form
                       className="store-form"
                       onSubmit={(e) => {
@@ -801,6 +836,7 @@ export function Account({
                   <CaseAction
                     key={current.id + String(current.revision)}
                     row={current}
+                    paymentStatus={state.orders.find((order) => order.id === current.orderId)?.paymentStatus}
                     onSave={(b) =>
                       void run(async () => {
                         await mutate(
@@ -920,15 +956,24 @@ function OrderAction({
   );
 }
 
+function missingReturnItem(reason: unknown) {
+  return reason === "MISSING_ITEM" || reason === "NOT_RECEIVED";
+}
+
 function CaseAction({
   row,
+  paymentStatus,
   busy,
   onSave,
 }: {
   row: Row;
   busy: boolean;
+  paymentStatus?: unknown;
   onSave: (data: Record<string, unknown>) => void;
 }) {
+  const missing = missingReturnItem(row.reason);
+  const shipment = ["REPLACEMENT", "MAKE_UP"].includes(String(row.resolution));
+  const financial = ["REFUND", "ADJUST_DUE"].includes(String(row.resolution));
   const options: Record<string, string[]> = row.type
     ? {
         SUBMITTED: ["REVIEWING"],
@@ -939,13 +984,22 @@ function CaseAction({
         REQUESTED: ["REVIEWING"],
         REVIEWING: ["EVIDENCE_REQUIRED", "APPROVED", "REJECTED"],
         EVIDENCE_REQUIRED: ["REVIEWING"],
-        APPROVED: [row.goods === "NOT_REQUIRED" ? "PROCESSING" : "RECEIVED"],
-        RECEIVED: ["INSPECTED"],
-        INSPECTED: ["PROCESSING"],
-        PROCESSING: ["RESOLVED"],
+        APPROVED: [row.goods === "NOT_REQUIRED" ? "PROCESSING" : "RECEIVED", "WAITING_STOCK", "PAYMENT_REVIEW", "EXCEPTION"],
+        RECEIVED: ["INSPECTED", "EXCEPTION"],
+        INSPECTED: ["PROCESSING", "EXCEPTION", "PAYMENT_REVIEW"],
+        PROCESSING: [row.caseId && ["REPLACEMENT","MAKE_UP"].includes(String(row.resolution)) ? "REPLACEMENT_SENT" : "RESOLVED", "EXCEPTION", "PAYMENT_REVIEW"],
+        REPLACEMENT_SENT: ["RESOLVED", "EXCEPTION"],
+        WAITING_STOCK: row.resumeStatus === "APPROVED" && row.goods === "NOT_REQUIRED" ? ["RESUME", "APPROVED"] : ["RESUME"],
+        PAYMENT_REVIEW: row.resumeStatus === "APPROVED" && row.goods === "NOT_REQUIRED" ? ["RESUME", "APPROVED"] : ["RESUME"],
+        EXCEPTION: ["RESUME"],
       };
-  const next = options[String(row.status)] ?? [],
-    [target, setTarget] = useState(next[0] ?? "");
+  const paymentBlocked = row.resolution === "REFUND" ? paymentStatus !== "PAID" : row.resolution === "ADJUST_DUE" && paymentStatus === "PAID";
+  const next = (options[String(row.status)] ?? []).filter((step) =>
+    (step !== "WAITING_STOCK" || shipment) && (step !== "PAYMENT_REVIEW" || financial) &&
+    (!paymentBlocked || !["PROCESSING", "RESOLVED"].includes(step)),
+  );
+  const [selection, setTarget] = useState("");
+  const target = next.includes(selection) ? selection : next[0];
   if (!next.length) return null;
   return (
     <form
@@ -960,6 +1014,7 @@ function CaseAction({
       }}
     >
       <h3>Xử lý hồ sơ</h3>
+      {paymentBlocked && <p className="store-warning">{row.resolution === "REFUND" ? "Cần xác nhận đã thu tiền trước khi hoàn." : "Đơn đã thu tiền. Cần chuyển sang phương án hoàn tiền."}</p>}
       <label>
         Bước tiếp theo
         <select
@@ -982,8 +1037,8 @@ function CaseAction({
               name="approvedQuantity"
               type="number"
               min={1}
-              max={Number(row.quantity)}
-              defaultValue={Number(row.quantity)}
+              max={Number(row.approvedQuantity ?? row.quantity)}
+              defaultValue={Number(row.approvedQuantity ?? row.quantity)}
               required
             />
           </label>
@@ -991,15 +1046,19 @@ function CaseAction({
             Phương án
             <select name="resolution" defaultValue={String(row.resolution)}>
               <option value="REFUND">Hoàn tiền</option>
-              <option value="REPLACEMENT">Đổi hàng</option>
+              {!missing && <option value="REPLACEMENT">Đổi hàng</option>}
+              {missing && <option value="MAKE_UP">Giao bù</option>}
+              <option value="ADJUST_DUE">Điều chỉnh khoản phải thu</option>
             </select>
           </label>
-          <label className="store-check">
+          {!missing && <label className="store-check">
             <input name="returnRequired" type="checkbox" />
             Cần thu hồi hàng
-          </label>
+          </label>}
         </>
       )}
+      {target === "RECEIVED" && <label>Số lượng thực nhận<input name="receivedQuantity" type="number" required min={0} max={Number(row.approvedQuantity)} defaultValue={Number(row.approvedQuantity)} /></label>}
+      {target === "INSPECTED" && <label>Số lượng đạt kiểm hàng<input name="inspectedQuantity" type="number" required min={1} max={Number(row.receivedQuantity ?? row.approvedQuantity)} defaultValue={Number(row.receivedQuantity ?? row.approvedQuantity)} /></label>}
       {target === "INSPECTED" && (
         <label>
           Phân loại
@@ -1012,9 +1071,9 @@ function CaseAction({
           </select>
         </label>
       )}
-      {target === "RESOLVED" && (
+      {["RESOLVED","REPLACEMENT_SENT"].includes(target) && (
         <label>
-          Mã chứng từ hoàn tiền hoặc vận đơn hàng thay thế
+          {target === "REPLACEMENT_SENT" ? "Mã vận đơn gửi hàng" : "Mã chứng từ xác nhận kết quả"}
           <input name="reference" required maxLength={200} />
         </label>
       )}

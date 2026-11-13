@@ -24,6 +24,7 @@
 .store-address-options label { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
 .store-address-options label:has(input:checked) { border-color: var(--primary); background: var(--surface-low); }
 .store-address-options small { display: block; margin-top: 4px; color: var(--muted); overflow-wrap: anywhere; }
+.store-return-line { display: grid; gap: 12px; min-width: 0; border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
 .store-payment, .store-empty { padding: 16px; background: var(--surface-low); border-radius: 12px; }
 .store-payment p, .store-empty p { margin: 4px 0; }
 .store-profile-heading, .store-cart-product { display: flex; align-items: center; gap: 14px; }
