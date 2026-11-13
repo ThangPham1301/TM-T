@@ -85,7 +85,7 @@ paths:
     get:
       operationId: accountState
       responses:
-        '200': {description: User and role-scoped collections; ADMIN includes audit/policy versions}
+        '200': {description: User and role-scoped collections including saved addresses for CUSTOMER and audit/policy versions for ADMIN}
         '401': {$ref: '#/components/responses/Error'}
   /cart:
     get:
@@ -136,6 +136,7 @@ paths:
                 - {$ref: '#/components/schemas/Mutation'}
                 - type: object
                   properties:
+                    addressId: {type: string, format: uuid, description: Optional saved CUSTOMER destination for checkout in place of manual recipient fields}
                     action: {type: string, enum: [cart-set, cart-clear, cart-refresh, checkout, order-cancel, order-status, order-paid, order-recipient, product-save, product-delete, category-save, category-delete, catalog-toggle, shipping-save, catalog-image-intent]}
       responses:
         '200': {description: Persisted record or acknowledgement}
@@ -143,6 +144,25 @@ paths:
         '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+  /password:
+    post:
+      operationId: changePassword
+      description: Trusted Origin and valid session. Verifies the current password, updates BCrypt hash, and revokes all other sessions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: {type: string, format: password, maxLength: 72}
+                newPassword: {type: string, format: password, minLength: 12, maxLength: 72, description: At most 72 UTF-8 bytes}
+      responses:
+        '200': {description: Password updated}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
         '422': {$ref: '#/components/responses/Error'}
   /command:
     post:
@@ -159,7 +179,7 @@ paths:
                 - {$ref: '#/components/schemas/Mutation'}
                 - type: object
                   properties:
-                    action: {type: string, enum: [profile, consent, policy, privacy-create, privacy-update, privacy-supplement, return-create, return-update, return-supplement]}
+                    action: {type: string, enum: [profile, address-save, address-delete, consent, policy, privacy-create, privacy-update, privacy-supplement, return-create, return-update, return-supplement]}
       responses:
         '200': {description: Persisted record or acknowledgement}
         '401': {$ref: '#/components/responses/Error'}

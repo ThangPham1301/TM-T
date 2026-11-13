@@ -12,6 +12,7 @@ import {
 export type Row = { id: string; [key: string]: unknown };
 export type StoreState = {
   user: Row;
+  addresses: Row[];
   orders: Row[];
   privacy: Row[];
   returns: Row[];
@@ -130,10 +131,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
   const pending = useRef<{ body: string; key: string } | null>(null);
+  const reloadVersion = useRef(0);
   const reload = useCallback(async () => {
+    const version = ++reloadVersion.current;
     try {
-      setState(await api("state"));
+      const snapshot = await api("state");
+      if (version === reloadVersion.current) setState(snapshot);
     } catch (e) {
+      if (version !== reloadVersion.current) return;
       if (e instanceof ApiError && e.status === 401) setState(null);
       else throw e;
     }
@@ -151,6 +156,40 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       active = false;
     };
   }, [reload]);
+  const userId = state?.user.id;
+  useEffect(() => {
+    if (!userId) return;
+    let disposed = false;
+    let retry: ReturnType<typeof setTimeout>;
+    let socket: WebSocket;
+    let delay = 1000;
+    const sync = () => { if (!disposed) void reload().catch(() => {}); };
+    const connect = () => {
+      const url = new URL("/api/store/live", location.href);
+      url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
+      url.port = "8088";
+      socket = new WebSocket(url);
+      socket.onopen = () => {
+        delay = 1000;
+        sync();
+      };
+      socket.onmessage = sync;
+      socket.onclose = () => {
+        if (disposed) return;
+        sync();
+        retry = setTimeout(connect, delay);
+        delay = Math.min(delay * 2, 15000);
+      };
+    };
+    connect();
+    window.addEventListener("focus", sync);
+    return () => {
+      disposed = true;
+      clearTimeout(retry);
+      socket.close();
+      window.removeEventListener("focus", sync);
+    };
+  }, [userId, reload]);
   async function run(work: () => Promise<void>) {
     setBusy(true);
     setError("");
@@ -181,6 +220,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }
   async function logout() {
     await api("auth/logout", "POST", {});
+    ++reloadVersion.current;
     setState(null);
   }
   return (

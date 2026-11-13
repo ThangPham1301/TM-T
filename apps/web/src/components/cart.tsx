@@ -2,6 +2,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AddressFields } from "./account-settings";
+import { ProductImage } from "./product/product-image";
 import { api, fields, money, type Row, useStore } from "@/lib/store";
 type Summary = {
   items: Row[];
@@ -17,6 +19,8 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
   const [summary, setSummary] = useState<Summary | null>(null),
     [error, setError] = useState(""),
     [fetching, setFetching] = useState(false);
+  const [addressChoice, setAddressChoice] = useState("");
+  const [addingAddress, setAddingAddress] = useState(false);
   async function refresh() {
     setFetching(true);
     try {
@@ -65,6 +69,7 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
         <Link href="/admin">Về quản trị cửa hàng</Link>
       </main>
     );
+  const selectedAddress = state.addresses.find((entry) => entry.id === addressChoice);
   const rows = summary?.items ?? [],
     blocked = rows.some(
       (l) =>
@@ -77,9 +82,13 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
     await refresh();
   }
   return (
-    <main className="store-page">
+    <main className="store-page store-journey">
       <header className="store-heading">
-        <span className="eyebrow">Hành trình mua sắm</span>
+        <nav className="store-steps" aria-label="Các bước đặt hàng">
+          <Link href="/cart" aria-current={checkout ? undefined : "step"}>Giỏ hàng</Link>
+          <span aria-hidden="true">›</span>
+          <span aria-current={checkout ? "step" : undefined}>Giao hàng & thanh toán</span>
+        </nav>
         <h1>{checkout ? "Xác nhận đơn hàng" : "Giỏ hàng của bạn"}</h1>
       </header>
       <div className="store-row-actions">
@@ -125,7 +134,9 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
             <section className="store-card">
               {rows.map((l) => (
                 <div key={l.id} className="store-cart-line">
-                  <div>
+                  <div className="store-cart-product">
+                    {Boolean(l.image) && <ProductImage src={String(l.image)} alt="" width={64} height={64} />}
+                    <div>
                     <strong>{String(l.name)}</strong>
                     <p>
                       {money(l.price)} × {String(l.quantity)}
@@ -148,6 +159,7 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
                         </p>
                       )
                     )}
+                    </div>
                   </div>
                   {!checkout && (
                     <div>
@@ -199,6 +211,41 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
                 </p>
               )}
               {checkout && (
+                <div className="store-checkout-address">
+                  <div className="store-list-heading">
+                    <h2>Giao đến</h2>
+                    <button type="button" disabled={busy} onClick={() => setAddingAddress(!addingAddress)}>
+                      {addingAddress ? "Đóng" : "Thêm địa chỉ"}
+                    </button>
+                  </div>
+                  {addingAddress && (
+                    <form className="store-form" onSubmit={(event) => {
+                      const details = fields(event);
+                      void run(async () => {
+                        const address = await mutate("command", "address-save", details);
+                        setAddressChoice(address.id);
+                        setAddingAddress(false);
+                      });
+                    }}>
+                      <AddressFields />
+                      <button className="primary-button" disabled={busy}>Lưu và chọn địa chỉ</button>
+                    </form>
+                  )}
+                  {state.addresses.length > 0 && (
+                    <fieldset className="store-address-options">
+                      <legend>Chọn nơi nhận hàng</legend>
+                      {state.addresses.map((entry) => (
+                        <label key={entry.id}>
+                          <input type="radio" name="addressChoice" checked={selectedAddress?.id === entry.id} onChange={() => setAddressChoice(entry.id)} />
+                          <span><strong>{String(entry.label)} · {String(entry.recipient)}</strong><small>{String(entry.phone)} · {String(entry.address)}</small></span>
+                        </label>
+                      ))}
+                      <label><input type="radio" name="addressChoice" checked={!selectedAddress} onChange={() => setAddressChoice("")} /> Nhập địa chỉ cho đơn này</label>
+                    </fieldset>
+                  )}
+                </div>
+              )}
+              {checkout && !addingAddress && (
                 <form
                   className="store-form"
                   onSubmit={(e) => {
@@ -208,6 +255,7 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
                         throw new Error("Giỏ chưa đủ điều kiện đặt hàng.");
                       const order = await mutate("commerce", "checkout", {
                         ...b,
+                        ...(selectedAddress ? { addressId: selectedAddress.id } : {}),
                         cartToken: summary.cartToken,
                         shippingRevision: summary.shipping.revision,
                       });
@@ -215,7 +263,8 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
                     });
                   }}
                 >
-                  <h2>Thông tin nhận hàng</h2>
+                  {!selectedAddress && <>
+                  <h3>Thông tin người nhận</h3>
                   <label>
                     Người nhận
                     <input
@@ -230,7 +279,7 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
                     <input
                       name="phone"
                       type="tel"
-                      defaultValue={String(state.user.phone)}
+                      defaultValue={String(state.user.phone ?? "")}
                       required
                       minLength={8}
                       maxLength={30}
@@ -240,15 +289,13 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
                     Địa chỉ
                     <textarea
                       name="address"
-                      defaultValue={String(state.user.address)}
+                      defaultValue={String(state.user.address ?? "")}
                       required
                       maxLength={400}
                     />
                   </label>
-                  <p>
-                    Thanh toán khi nhận hàng (COD). Phí giao hàng được máy chủ
-                    xác nhận tại thời điểm đặt.
-                  </p>
+                  </>}
+                  <div className="store-payment"><strong>Thanh toán khi nhận hàng</strong><p>Trả tiền mặt khi đơn được giao (COD).</p></div>
                   <p className="store-subtle">
                     <Link href="/privacy-policy">Chính sách bảo mật</Link> ·{" "}
                     <Link href="/return-policy">Chính sách đổi trả</Link>
@@ -262,7 +309,7 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
                 </form>
               )}
             </section>
-            <aside className="store-card">
+            <aside className="store-card store-order-summary">
               <h2>Tóm tắt đơn</h2>
               <p>
                 Tiền hàng <strong>{money(summary.subtotal)}</strong>

@@ -65,13 +65,16 @@ export function Catalog({ slug }: { slug?: string }) {
   return (
     <main className="store-page">
       <div className="store-heading">
-        <span className="eyebrow">Tinh tuyển phong vị Huế</span>
+        <nav className="store-steps" aria-label="Đường dẫn">
+          <Link href="/">Trang chủ</Link><span aria-hidden="true">›</span>
+          {slug ? <Link href="/products">Bộ sưu tập</Link> : <span aria-current="page">Bộ sưu tập</span>}
+        </nav>
         <h1>
           {slug
             ? String(products[0]?.name ?? "Chi tiết sản phẩm")
             : "Bộ sưu tập Gói Huế"}
         </h1>
-        <p>Bánh mứt, mè xửng và quà biếu cho những khoảnh khắc sum vầy.</p>
+        {!slug && <p>Bánh mứt, mè xửng và quà biếu từ Huế.</p>}
       </div>
       {!slug && (
         <form action="/products" className="store-filters">
@@ -128,15 +131,13 @@ export function Catalog({ slug }: { slug?: string }) {
                     p.category,
                 )}
               </small>
-              <Link className="product-name" href={`/products/${p.slug}`}>
-                {String(p.name)}
-              </Link>
+              {!slug && <Link className="product-name" href={`/products/${p.slug}`}>{String(p.name)}</Link>}
               <p className="store-product-description">
                 {String(p.description)}
               </p>
               <div className="store-product-meta">
                 <strong>{money(p.price)}</strong>
-                <span>Còn {String(p.stock)} sản phẩm</span>
+                <span className="store-status-chip">{Number(p.stock) ? `Còn ${p.stock} sản phẩm` : "Tạm hết hàng"}</span>
               </div>
               <form
                 onSubmit={(e) => {
@@ -156,9 +157,10 @@ export function Catalog({ slug }: { slug?: string }) {
                   defaultValue={1}
                 />
                 <button disabled={busy || Number(p.stock) <= 0}>
-                  ♧ Thêm vào giỏ
+                  {Number(p.stock) ? "Thêm vào giỏ" : "Hết hàng"}
                 </button>
               </form>
+              {slug && <div className="store-product-service"><span>Thanh toán khi nhận hàng</span><Link href="/return-policy">Điều kiện đổi trả →</Link></div>}
             </div>
           </article>
         ))}

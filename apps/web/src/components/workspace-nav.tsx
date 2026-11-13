@@ -20,6 +20,8 @@ export function WorkspaceNav({
       ]
     : [
         ["profile", "Hồ sơ"],
+        ["addresses", "Sổ địa chỉ"],
+        ["security", "Mật khẩu"],
         ["orders", "Đơn hàng"],
         ["returns", "Đổi trả"],
         ["privacy", "Quyền dữ liệu"],

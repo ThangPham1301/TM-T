@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { AddressBook, PasswordSettings } from "./account-settings";
 import { WorkspaceNav, Pagination } from "./workspace-nav";
 import {
   api,
@@ -99,10 +100,15 @@ export function Account({
         </p>
       </div>
       <WorkspaceNav admin={admin} section={section} />
-      {section === "profile" && (
+      {section === "addresses" && state.user.role === "CUSTOMER" && <AddressBook />}
+      {section === "security" && <PasswordSettings />}
+      {section === "profile" && state.user.role === "CUSTOMER" && (
         <div className="store-two">
           <section className="store-card">
-            <h2>Thông tin cá nhân</h2>
+            <div className="store-profile-heading">
+              <span aria-hidden="true">{String(state.user.name).charAt(0).toLocaleUpperCase("vi")}</span>
+              <div><h2>Thông tin cá nhân</h2><p>{String(state.user.email)}</p></div>
+            </div>
             <form
               className="store-form"
               onSubmit={(e) => {
@@ -173,6 +179,7 @@ export function Account({
           </section>
         </div>
       )}
+      {section === "profile" && state.user.role === "ADMIN" && <PasswordSettings />}
       {section === "privacy" && (
         <div className="store-two">
           {!admin && (
@@ -326,7 +333,10 @@ export function Account({
         <section className="store-card">
           <h2>Yêu cầu đổi trả</h2>
           {!state.returns.length && (
-            <p>Chưa có yêu cầu. Tạo yêu cầu từ đơn hàng đã giao.</p>
+            <div className="store-empty">
+              <p>Chưa có yêu cầu đổi trả.</p>
+              {!admin && <Link href="/account/orders">Mở đơn đã giao để gửi yêu cầu</Link>}
+            </div>
           )}
           {state.returns.map((r) => (
             <button
@@ -338,9 +348,9 @@ export function Account({
                 {String(r.orderNumber)} · {String(r.product)}
               </strong>
               <span>
-                {label(r.reason)} · {label(r.status)} · {String(r.quantity)} sản
-                phẩm
+                {label(r.reason)} · {String(r.quantity)} sản phẩm
               </span>
+              <span className="store-status-chip">{label(r.status)}</span>
               <small>{date(r.createdAt)}</small>
             </button>
           ))}
@@ -559,7 +569,7 @@ export function Account({
                 )}
                 {!admin && current.status === "DELIVERED" && (
                   <form
-                    className="store-form"
+                    className="store-form store-return-form"
                     onSubmit={(e) => {
                       const b = fields(e);
                       void run(async () => {
@@ -575,7 +585,7 @@ export function Account({
                       });
                     }}
                   >
-                    <h3>Yêu cầu đổi trả</h3>
+                    <div><h3>Yêu cầu đổi trả</h3><p className="store-subtle">Chọn sản phẩm trong đơn và mô tả vấn đề để cửa hàng xem xét.</p></div>
                     <label>
                       Sản phẩm
                       <select name="lineId">
@@ -642,7 +652,8 @@ export function Account({
                         }}
                       />
                     </label>
-                    <button disabled={busy}>Gửi yêu cầu đổi trả</button>
+                    {files.length > 0 && <p className="store-subtle">{files.map((file) => file.name).join(", ")}</p>}
+                    <button className="primary-button" disabled={busy}>Gửi yêu cầu đổi trả</button>
                   </form>
                 )}
               </>

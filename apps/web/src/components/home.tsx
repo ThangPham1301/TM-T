@@ -1,11 +1,13 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { api, money, type Row } from "@/lib/store";
+import { api, money, type Row, useStore } from "@/lib/store";
 import { ProductImage } from "./product/product-image";
 const HERO =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuBgDTnNDpDqWayHGmfgdpMZ7xrIpepsmqvZgohQd66eSgDGKr7krs5KknIa7b4nRGLRpZ1FQt5ye-7UfbqbiPvJvJk1WwXIrbwaCwIrTdJFFNr3ykdI5S8DWq6OdVN3-EKG57DFKRSrBew_wdq8j-i8jLch_hKQsGgnqbqtyN9t9H5K_e3TDwZ3WbFQPlBv1Hz4dJd1EJUaLXqGEKZh5C-4YeKNuxpklujrvtUvGDeZTK552UkmRfHd";
 export function HomeExperience() {
+  const { state } = useStore();
+  const customer = state?.user.role === "CUSTOMER" ? state.user : null;
   const [products, setProducts] = useState<Row[]>([]),
     [categories, setCategories] = useState<Row[]>([]),
     [error, setError] = useState("");
@@ -27,9 +29,9 @@ export function HomeExperience() {
       >
         <div className="heritage-shell hero-grid">
           <div className="hero-copy">
-            <span className="heritage-pill">✺ Phong vị Cố Đô · Gói Huế</span>
+            <span className="heritage-pill">{customer ? `Chào ${customer.name}` : "Đặc sản và quà biếu từ Huế"}</span>
             <h1>
-              Tinh Hoa Bánh Mứt Cung Đình Huế<em>Gói Trọn Hương Vị Kinh Kỳ</em>
+              Món quà từ Huế<em>Gửi người thương</em>
             </h1>
             <p>
               Những thức quà mang hương vị mè rang, trà sen và bánh mứt truyền
@@ -38,7 +40,7 @@ export function HomeExperience() {
             </p>
             <div className="hero-buttons">
               <Link href="/products">Khám Phá Bộ Sưu Tập →</Link>
-              <Link href="/return-policy">Chăm Sóc Sau Bán Hàng</Link>
+              {customer && <Link href={state?.cartCount ? "/cart" : "/account/orders"}>{state?.cartCount ? "Tiếp tục với giỏ hàng" : "Theo dõi đơn của tôi"}</Link>}
             </div>
             <dl className="hero-metrics">
               <div>

@@ -98,3 +98,13 @@ Return: REQUESTED→REVIEWING→EVIDENCE_REQUIRED/APPROVED/REJECTED. Nếu cần
 | Evidence | Ảnh private, xem trực tiếp khi click; chưa có antivirus |
 
 Error từ backend gồm code, message, requestId. BFF có thể trả message riêng khi route/origin/size/upstream lỗi. Không chạy test nghiệp vụ trong lần chuyển khung theo yêu cầu người dùng.
+
+## Address book, password and live order/return updates
+
+| Operation | Success | Error |
+| --- | --- | --- |
+| CUSTOMER address-save | Save label, recipient, phone and address. Supply id and revision when editing. | 401 expired session, 403 wrong role, 404 unknown or other customer's id, 409 stale revision, 422 invalid fields or over 20 addresses. |
+| CUSTOMER address-delete | Supply id and revision. Existing order snapshots retain recipient details. | 401/403/404/409 as above. |
+| Checkout | Send owned addressId or manual recipient, phone and address. Server snapshots destination. | 404 for unowned or removed address. Existing cart/pricing rules still apply. |
+| Password | Send currentPassword and newPassword. Current session survives; other sessions are revoked. | 401 expired session, 403 bad origin, 422 wrong current password or invalid replacement. |
+| WebSocket | Connect at :8088/api/store/live with valid session cookie and a configured storefront Origin. After commit, order and return invalidations reach the owner and admins. Fetch GET /state for the latest records. | Upgrade denied for invalid sessions/origins. Clients reconnect and refresh state after opening. |
