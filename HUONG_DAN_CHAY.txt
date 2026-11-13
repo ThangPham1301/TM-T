@@ -1,0 +1,50 @@
+GÓI HUẾ — HƯỚNG DẪN CHẠY
+
+1. Mở Docker Desktop.
+2. Mở PowerShell tại D:\IT_THANG_23T_DT3\TMĐT\DUT.PBL6-dev\DUT.PBL6-dev
+3. Chạy:
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
+   docker compose up -d --build
+4. Mở http://localhost:3000
+   ADMIN: xem ADMIN_EMAIL và ADMIN_PASSWORD trong .env ở thư mục gốc.
+   CUSTOMER: tự đăng ký tại /register. Không còn tự tạo đơn mẫu.
+   ADMIN vào /admin/products cập nhật giá và tồn thực tế trước khi đặt hàng (tồn khởi tạo bằng 0).
+5. Quản trị các chức năng vừa bổ sung:
+   /admin/categories: thêm/sửa/xóa danh mục chưa có sản phẩm, ẩn/hiện, upload ảnh.
+   /admin/products: thêm/sửa/xóa sản phẩm chưa liên kết giỏ/đơn, ẩn/hiện, giá/tồn/ảnh.
+   /admin/settings: phí giao cơ bản, ngưỡng miễn phí (0 = tắt), bật/tắt nhận đơn.
+   /admin/orders: tìm/lọc, xem chi tiết, sửa người nhận trước đóng gói,
+   chuyển trạng thái tuần tự và ghi nhận thu tiền với mã chứng từ.
+6. Khách mua tại /products → /cart → /checkout → /account/orders.
+   Nếu giá, tồn, giỏ hoặc phí giao thay đổi: tải lại và xử lý cảnh báo trước khi đặt.
+
+Trang chính: /products, /cart, /checkout, /account, /account/orders,
+/account/privacy, /account/returns, /privacy-policy, /return-policy, /admin.
+
+Luồng mua hàng: thêm giỏ → checkout COD → ADMIN xác nhận/đóng gói/giao hàng.
+ADMIN chỉ ghi nhận thu tiền với mã chứng từ khi đã thực thu.
+Khách gửi đổi trả từ đơn đã giao → ADMIN xem xét/duyệt/kiểm hàng →
+thực hiện đổi/hoàn bên ngoài → nhập mã chứng từ/vận đơn để xác nhận kết quả.
+Website hiện không tự chuyển tiền hoặc gọi carrier.
+Không xóa đơn hàng. Sản phẩm đã có giỏ/đơn chỉ được ẩn thay vì xóa.
+Upload ảnh PNG/JPEG tối đa 5 MB. Dữ liệu và ảnh được lưu qua Docker volumes.
+
+Chạy lại: docker compose up -d
+Dừng: docker compose stop
+Xem lỗi: docker compose logs --tail=100 api web
+Không dùng down -v nếu muốn giữ dữ liệu.
+
+Source hoạt động nằm trong apps/web và apps/api. Source cũ ở archive/legacy.
+Đọc README.md để chạy frontend local và xem giới hạn tính năng hiện tại.
+
+XEM DATABASE BẰNG DBEAVER
+Mở New Database Connection → PostgreSQL.
+Host: 127.0.0.1 | Port: 5433 | Database: goihue | Username: goihue.
+Password: lấy giá trị DB_PASSWORD trong .env ở cùng thư mục compose.yml.
+Chọn Test Connection (Download driver nếu được yêu cầu), sau đó Finish.
+Mở goihue → Schemas → public → Tables, nhấp phải bảng → View Data → All Rows.
+customers: tài khoản; records: sản phẩm/danh mục/giỏ/đơn/cấu hình/đổi trả;
+audit: nhật ký; operations: kết quả chống gửi lặp; sessions: phiên đăng nhập.
+Trong records, lọc kind = 'product', 'category', 'order', 'cart' hoặc 'return'.
+Cột data là JSONB; có thể mở ô để xem JSON hoặc SELECT các trường thành cột.
+Cổng 5433 chỉ được mở trên máy local (127.0.0.1).

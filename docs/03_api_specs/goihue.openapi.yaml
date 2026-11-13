@@ -1,0 +1,254 @@
+openapi: 3.0.3
+info:
+  title: Goi Hue Unified Store API
+  version: 1.1.0-draft
+  description: Unified persistence API. See goihue-state-matrix.md for payload limits, permissions and transitions. Payment/shipping are recorded manually, not provider operations.
+servers:
+  - url: /api/store
+security:
+  - Session: []
+paths:
+  /categories:
+    get:
+      operationId: activeCategories
+      security: []
+      responses:
+        '200': {description: Active categories sorted by sortOrder and name}
+  /admin/categories:
+    get:
+      operationId: manageCategories
+      responses:
+        '200': {description: ADMIN catalog.manage; all category records}
+        '403': {$ref: '#/components/responses/Error'}
+  /shipping:
+    get:
+      operationId: shippingSettings
+      security: []
+      responses:
+        '200': {description: id/code/baseFee/freeShippingThreshold/enabled/revision; threshold zero disables free shipping}
+  /cart/summary:
+    get:
+      operationId: cartQuote
+      responses:
+        '200': {description: CUSTOMER items/cartToken/subtotal/shippingFee/total/shipping settings with revision}
+        '401': {$ref: '#/components/responses/Error'}
+  /catalog/images/{id}/content:
+    parameters:
+      - {$ref: '#/components/parameters/Id'}
+    put:
+      operationId: uploadCatalogImage
+      description: ADMIN with trusted Origin; intent created using catalog-image-intent command. Immutable completion with same-bytes replay. Decode/re-encode JPEG/PNG, max 5MB/6000px per side/16M pixels.
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        '200': {description: Ready image id and public path}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+  /catalog/images/{id}:
+    get:
+      operationId: viewCatalogImage
+      security: []
+      description: Public only when attached to an active category/product in an active category; otherwise ADMIN required. PNG no-store/nosniff.
+      parameters:
+        - {$ref: '#/components/parameters/Id'}
+      responses:
+        '200': {description: Re-encoded PNG content}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+  /products:
+    get:
+      operationId: listProducts
+      security: []
+      responses:
+        '200': {description: Active catalog array}
+  /products/{slug}:
+    get:
+      operationId: productDetail
+      security: []
+      parameters:
+        - {in: path, name: slug, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Product}
+        '404': {$ref: '#/components/responses/Error'}
+  /admin/products:
+    get:
+      operationId: manageCatalog
+      responses:
+        '200': {description: ADMIN catalog including inactive products}
+        '403': {$ref: '#/components/responses/Error'}
+  /state:
+    get:
+      operationId: accountState
+      responses:
+        '200': {description: User and role-scoped collections; ADMIN includes audit/policy versions}
+        '401': {$ref: '#/components/responses/Error'}
+  /cart:
+    get:
+      operationId: currentCart
+      responses:
+        '200': {description: CUSTOMER cart array}
+        '401': {$ref: '#/components/responses/Error'}
+  /policy:
+    get:
+      operationId: currentDraftPolicy
+      security: []
+      responses:
+        '200': {description: Latest DRAFT privacy policy}
+  /auth/{action}:
+    post:
+      operationId: authenticate
+      security: []
+      description: Trusted Origin. Register grants CUSTOMER only. Logout requires a valid session.
+      parameters:
+        - {in: path, name: action, required: true, schema: {type: string, enum: [register, login, logout]}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: {type: string, maxLength: 100}
+                email: {type: string, format: email, maxLength: 150}
+                password: {type: string, format: password, maxLength: 72}
+      responses:
+        '200': {description: Safe user and HttpOnly session cookie, or logout acknowledgement}
+        '401': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+  /commerce:
+    post:
+      operationId: commerceMutation
+      description: Action-specific required fields, money limits and permissions are in the state matrix. Owner and monetary values are server-controlled.
+      parameters:
+        - {$ref: '#/components/parameters/Idempotency'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - {$ref: '#/components/schemas/Mutation'}
+                - type: object
+                  properties:
+                    action: {type: string, enum: [cart-set, cart-clear, cart-refresh, checkout, order-cancel, order-status, order-paid, order-recipient, product-save, product-delete, category-save, category-delete, catalog-toggle, shipping-save, catalog-image-intent]}
+      responses:
+        '200': {description: Persisted record or acknowledgement}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+  /command:
+    post:
+      operationId: platformMutation
+      description: Profile, consent, privacy, policy and return actions. Each case update requires current revision. Full fields are in state matrix.
+      parameters:
+        - {$ref: '#/components/parameters/Idempotency'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - {$ref: '#/components/schemas/Mutation'}
+                - type: object
+                  properties:
+                    action: {type: string, enum: [profile, consent, policy, privacy-create, privacy-update, privacy-supplement, return-create, return-update, return-supplement]}
+      responses:
+        '200': {description: Persisted record or acknowledgement}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+  /evidence/intents:
+    post:
+      operationId: createEvidenceIntent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: {type: string, maxLength: 120}
+      responses:
+        '200': {description: Owned private fileId; no arbitrary URL accepted}
+  /evidence/{id}/content:
+    parameters:
+      - {$ref: '#/components/parameters/Id'}
+    put:
+      operationId: completeEvidenceUpload
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        '200': {description: Private JPEG/PNG up to 5MB, STORED_UNSCANNED}
+        '404': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+    get:
+      operationId: downloadEvidence
+      responses:
+        '200': {description: Inline image for owner/ADMIN; no-store/nosniff}
+        '404': {$ref: '#/components/responses/Error'}
+  /privacy/{id}/export:
+    get:
+      operationId: exportAccountData
+      parameters:
+        - {$ref: '#/components/parameters/Id'}
+      responses:
+        '200': {description: JSON snapshot after completed ACCESS/EXPORT, owner/ADMIN only}
+        '404': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    Session: {type: apiKey, in: cookie, name: goihue_session}
+  parameters:
+    Id: {in: path, name: id, required: true, schema: {type: string, format: uuid}}
+    Idempotency: {in: header, name: Idempotency-Key, required: true, schema: {type: string, pattern: '^[a-zA-Z0-9-]{16,80}$'}}
+  schemas:
+    Mutation:
+      type: object
+      required: [action]
+      additionalProperties: true
+      properties:
+        action: {type: string}
+        id: {type: string, format: uuid}
+        revision: {type: integer, minimum: 1}
+        note: {type: string, maxLength: 2000}
+        reference: {type: string, maxLength: 200}
+        productId: {type: string, format: uuid}
+        orderId: {type: string, format: uuid}
+        lineId: {type: string, format: uuid}
+        quantity: {type: integer, minimum: 0, maximum: 100}
+        cartToken: {type: string, minLength: 64, maxLength: 64}
+        shippingRevision: {type: integer, minimum: 1}
+        imageId: {type: string, description: Empty clears image; absent preserves current image; UUID references a READY catalog upload}
+        kind: {type: string, enum: [product, category]}
+        code: {type: string, maxLength: 120}
+        sortOrder: {type: integer, minimum: 0, maximum: 10000}
+        baseFee: {type: integer, minimum: 0, maximum: 1000000}
+        freeShippingThreshold: {type: integer, minimum: 0, maximum: 100000000}
+        enabled: {type: boolean}
+        evidenceIds: {type: array, maxItems: 5, description: Owned evidence IDs for return-create or return-supplement; the case total cannot exceed five images., items: {type: string, format: uuid}}
+  responses:
+    Error:
+      description: Safe error; BFF may use 503 when upstream unavailable.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [message]
+            properties:
+              code: {type: string}
+              message: {type: string}
+              requestId: {type: string}

@@ -1,0 +1,46 @@
+name: goihue
+services:
+  web:
+    build: ./apps/web
+    environment:
+      API_UPSTREAM_URL: http://api:8088/api/v1
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "127.0.0.1:5433:5432"
+    environment:
+      POSTGRES_DB: goihue
+      POSTGRES_USER: goihue
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Run setup.ps1 first}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U goihue -d goihue"]
+      interval: 3s
+      retries: 20
+    restart: unless-stopped
+  api:
+    build: ./apps/api
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/goihue
+      SPRING_DATASOURCE_USERNAME: goihue
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?Run setup.ps1 first}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Run setup.ps1 first}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Run setup.ps1 first}
+      APP_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    ports:
+      - "127.0.0.1:8088:8088"
+    volumes:
+      - evidence:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  database:
+  evidence:

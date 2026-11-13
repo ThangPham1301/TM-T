@@ -1,0 +1,176 @@
+openapi: 3.0.3
+info:
+  title: Goi Hue Academic Privacy and Returns
+  version: 1.0.0-draft
+  description: |
+    Independent two-role academic demo. Not production accepted.
+    Full command fields, permissions, transitions, validation and UI states are
+    specified in academic-policy-return-state-matrix.md.
+servers:
+  - url: http://localhost:3000/api/academic
+security:
+  - AcademicSession: []
+paths:
+  /policy:
+    get:
+      operationId: readAcademicDraftPolicy
+      security: []
+      responses:
+        '200': {description: Latest DRAFT policy, no official effective date}
+  /state:
+    get:
+      operationId: readAcademicWorkspace
+      responses:
+        '200': {description: Role-scoped user and collections, empty arrays allowed}
+        '401': {$ref: '#/components/responses/Error'}
+  /auth/{action}:
+    post:
+      operationId: academicAuthentication
+      security: []
+      description: Register grants CUSTOMER only. Logout requires current session. Trusted Origin required.
+      parameters:
+        - in: path
+          name: action
+          required: true
+          schema: {type: string, enum: [login, register, logout]}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: {type: string, format: email, maxLength: 150}
+                password: {type: string, format: password, maxLength: 72}
+                name: {type: string, maxLength: 100}
+      responses:
+        '200': {description: Safe user plus HttpOnly session cookie or logout acknowledgement}
+        '401': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+  /command:
+    post:
+      operationId: executeAcademicCommand
+      description: |
+        Same actor/key/body replays original result. Different body returns 409.
+        All case updates require current revision. Trusted Origin required.
+        Role bundles grant permissions listed in companion state matrix.
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: {type: string, pattern: '^[a-zA-Z0-9-]{16,80}$'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [profile, consent, policy, privacy-create, return-create, privacy-supplement, return-supplement, privacy-update, return-update]
+                id: {type: string, format: uuid}
+                revision: {type: integer, minimum: 1}
+                note: {type: string, maxLength: 2000}
+                name: {type: string, maxLength: 100}
+                phone: {type: string, maxLength: 30}
+                address: {type: string, maxLength: 400}
+                granted: {type: boolean}
+                version: {type: string, maxLength: 40}
+                content: {type: string, maxLength: 16000}
+                type: {type: string, enum: [ACCESS, EXPORT, DELETE, RESTRICT, COMPLAINT]}
+                description: {type: string, maxLength: 2000}
+                orderId: {type: string, format: uuid}
+                quantity: {type: integer, minimum: 1}
+                reason: {type: string, enum: [WRONG_ITEM, MISSING_ITEM, DAMAGED, UNSAFE, QUALITY]}
+                resolution: {type: string, enum: [REFUND, REPLACEMENT]}
+                evidenceIds: {type: array, maxItems: 5, items: {type: string, format: uuid}}
+                status: {type: string, enum: [REVIEWING, EVIDENCE_REQUIRED, COMPLETED, REJECTED, APPROVED, RECEIVED, INSPECTED, PROCESSING, RESOLVED]}
+                approvedQuantity: {type: integer, minimum: 1}
+                returnRequired: {type: boolean}
+                disposition: {type: string, enum: [QUARANTINE, DAMAGED, DISPOSE]}
+      responses:
+        '200': {description: Persisted record or acknowledgement; execution results are simulated}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+  /evidence/intents:
+    post:
+      operationId: createAcademicEvidenceIntent
+      description: CUSTOMER only. Issues an owned immutable fileId. Upload uses isolated private storage API, no arbitrary URL accepted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: {type: string, maxLength: 120}
+      responses:
+        '200': {description: id of owned upload intent}
+        '403': {$ref: '#/components/responses/Error'}
+  /evidence/{id}/content:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: {type: string, format: uuid}
+    put:
+      operationId: uploadAcademicEvidence
+      description: Owned intent, immutable completion, PNG/JPEG signature, max 5MiB. No antivirus; STORED_UNSCANNED is explicit.
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        '200': {description: Stored id and STORED_UNSCANNED state}
+        '404': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+    get:
+      operationId: downloadAcademicEvidence
+      description: Owner or ADMIN; attachment, no-store, nosniff.
+      responses:
+        '200':
+          description: Private file download
+          content:
+            image/png: {schema: {type: string, format: binary}}
+            image/jpeg: {schema: {type: string, format: binary}}
+        '404': {$ref: '#/components/responses/Error'}
+  /privacy/{id}/export:
+    get:
+      operationId: downloadAcademicPrivacyExport
+      description: Owner or ADMIN, completed ACCESS/EXPORT only, isolated-service snapshot.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200': {description: JSON attachment with profile, orders, consents and return cases}
+        '404': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    AcademicSession:
+      type: apiKey
+      in: cookie
+      name: gh_academic
+  responses:
+    Error:
+      description: Safe failure with code, message and requestId. BFF returns 503 if upstream unavailable.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [message]
+            properties:
+              code: {type: string}
+              message: {type: string}
+              requestId: {type: string}
