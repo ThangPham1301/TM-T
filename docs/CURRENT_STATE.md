@@ -1,7 +1,7 @@
 # Current handoff
 
 ## Task and branch
-Lân's five assigned Gói Huế pages are implemented in E:/.vscode/TM-T-Lan on feature/lan-store-products-ui, based on main 837098c. HEAD before final checkpoint: 0c708b35d683bb960c37f25eb02d7294a4f84958. The commit containing this handoff is the final delivery checkpoint; resolve its exact SHA with git log. Earlier checkpoints e51351d, 868d2a0, 56b1bd2, 4d0408f and 4996606 were pushed successfully.
+Lân's five assigned Gói Huế pages are implemented in E:/.vscode/TM-T-Lan on feature/lan-store-products-ui, based on main 837098c. Delivery code HEAD: cdfb071ceded55eb52c6d09dd884d21fc9dc1563, verified identical to the remote feature branch after push. This documentation-only checkpoint records that delivered code. Earlier checkpoints e51351d, 868d2a0, 56b1bd2, 4d0408f and 4996606 were pushed successfully.
 
 ## Completed scope
 - Home /: hero, values, left categories + six products, two gifts selected by category, gallery and story in Stitch sequence.
@@ -28,4 +28,3 @@ No live backend is running at localhost:8088: browser checks use intercepted syn
 
 ## Exact next action
 User reviews the pushed feature branch visually. To run: cd apps/web; npm ci; npm run dev. To rerun browser QA, provide Playwright through NODE_PATH, then node tests/lan-ui.mjs while localhost:3000 is running (default Edge channel; BROWSER_CHANNEL can override). Integrate/test against the team's real backend in a separately scoped follow-up. Do not merge automatically.
-
