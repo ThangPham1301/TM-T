@@ -5,13 +5,21 @@ import { api, fields, money, type Row, useStore } from "@/lib/store";
 import { WorkspaceNav, Pagination } from "./workspace-nav";
 import { ProductImage } from "./product/product-image";
 import { LanAdminShell } from "./lan-admin-shell";
+import { LanDialog } from "./lan-dialog";
 
 export function CatalogAdmin({
   section,
 }: {
   section: "products" | "categories" | "settings";
 }) {
-  const { state, loading, busy, run, mutate } = useStore();
+  const {
+    state,
+    loading,
+    busy,
+    run,
+    mutate,
+    error: mutationError,
+  } = useStore();
   const [products, setProducts] = useState<Row[]>([]),
     [categories, setCategories] = useState<Row[]>([]),
     [shipping, setShipping] = useState<Row | null>(null),
@@ -25,7 +33,11 @@ export function CatalogAdmin({
     [fileError, setFileError] = useState(""),
     [removeImage, setRemoveImage] = useState(false);
   const uploaded = useRef<{ file: File; id: string } | null>(null);
-  const [fetching, setFetching] = useState(true), [attempt,setAttempt] = useState(0);
+  const [fetching, setFetching] = useState(true),
+    [attempt, setAttempt] = useState(0);
+  const [categorySort, setCategorySort] = useState("order"),
+    [deleteCandidate, setDeleteCandidate] = useState<Row | null>(null);
+  const [draftCode, setDraftCode] = useState("");
   useEffect(() => {
     let live = true;
     if (state?.user.role === "ADMIN")
@@ -44,7 +56,10 @@ export function CatalogAdmin({
         })
         .catch((e) => {
           if (live) setLoadError(e.message);
-        }).finally(() => { if(live) setFetching(false); });
+        })
+        .finally(() => {
+          if (live) setFetching(false);
+        });
     return () => {
       live = false;
     };
@@ -74,14 +89,23 @@ export function CatalogAdmin({
       (!isProduct || !category || r.category === category),
   );
   const safePage = Math.min(page, Math.max(1, Math.ceil(matches.length / 8))),
-    rows = matches.slice((safePage - 1) * 8, safePage * 8);
+    rows = (
+      isProduct
+        ? matches
+        : [...matches].sort((a, b) =>
+            categorySort === "count"
+              ? products.filter((p) => p.category === b.code).length -
+                products.filter((p) => p.category === a.code).length
+              : Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0),
+          )
+    ).slice((safePage - 1) * 8, safePage * 8);
   function edit(row: Row) {
     setSelected(row);
     setFile(null);
     setFileError("");
     setRemoveImage(false);
     uploaded.current = null;
-    requestAnimationFrame(() => document.getElementById("lan-catalog-editor")?.scrollIntoView({block:"start",behavior:"smooth"}));
+    setDraftCode(String(row.code ?? ""));
   }
   async function imageId() {
     if (!file) return undefined;
@@ -110,286 +134,730 @@ export function CatalogAdmin({
   }
   return (
     <LanAdminShell section={section}>
-    <main className={section === "settings" ? "store-page" : "store-page lan-page lan-admin"}>
-      <header className="store-heading">
-        <span className="eyebrow">Quản trị cửa hàng</span>
-        <h1>
-          {section === "settings"
-            ? "Cấu hình phí giao hàng"
-            : isProduct
-              ? "Quản lý sản phẩm"
-              : "Quản lý danh mục"}
-        </h1>
-      </header>
-      {section === "settings" ? <WorkspaceNav admin section={section} /> : <>
-        <div className="lan-admin-intro"><p>{isProduct ? "Theo dõi thông tin đặc sản, giá niêm yết, số lượng tồn kho và cấu hình hiển thị cửa hàng." : "Danh mục đang hiển thị sẽ xuất hiện trên trang chủ và Bộ sưu tập theo thứ tự đã cấu hình."}</p><button className="lan-button" disabled={busy} onClick={() => edit({id:"new",active:true})}>+ Thêm {isProduct?"sản phẩm":"danh mục"} mới</button></div>
-        {isProduct && <section className="lan-admin-metrics" aria-label="Tổng quan sản phẩm">{[["Tổng sản phẩm",products.length],["Đang kinh doanh",products.filter(p=>p.active).length],["Tạm ẩn",products.filter(p=>!p.active).length]].map(([title,count])=><div className="lan-frame" key={title}><small>{title}</small><strong>{count}</strong></div>)}</section>}
-      </>}
-      {loadError && <div className="store-error" role="alert"><p>{loadError}</p><button className="lan-button" onClick={()=>{setFetching(true);setAttempt(attempt+1);}}>Thử lại</button></div>}
-      {section === "settings" ? (
-        shipping && (
-          <section className="store-card">
-            <h2>Phí giao hàng chung</h2>
-            <form
-              key={String(shipping.revision)}
-              className="store-form"
-              onSubmit={(e) => {
-                const b = fields(e);
-                if (
-                  !window.confirm(
-                    "Lưu cấu hình phí giao hàng mới? Đơn đã đặt vẫn giữ phí cũ.",
-                  )
-                )
-                  return;
-                void run(async () => {
-                  await mutate("commerce", "shipping-save", {
-                    revision: shipping.revision,
-                    baseFee: Number(b.baseFee),
-                    freeShippingThreshold: Number(b.freeShippingThreshold),
-                    enabled: b.enabled === "on",
-                  });
-                });
+      <main
+        className={
+          section === "settings"
+            ? "store-page"
+            : "store-page lan-page lan-admin"
+        }
+      >
+        <header className="store-heading">
+          <span className="eyebrow">Quản trị cửa hàng</span>
+          <h1>
+            {section === "settings"
+              ? "Cấu hình phí giao hàng"
+              : isProduct
+                ? "Quản lý sản phẩm"
+                : "Quản lý danh mục"}
+          </h1>
+        </header>
+        {section === "settings" ? (
+          <WorkspaceNav admin section={section} />
+        ) : (
+          <>
+            <div className="lan-admin-intro">
+              <p>
+                {isProduct
+                  ? "Theo dõi thông tin đặc sản, giá niêm yết, số lượng tồn kho và cấu hình hiển thị cửa hàng."
+                  : "Danh mục đang hiển thị sẽ xuất hiện trên trang chủ và Bộ sưu tập theo thứ tự đã cấu hình."}
+              </p>
+              <button
+                className="lan-button"
+                disabled={busy}
+                onClick={() => edit({ id: "new", active: true })}
+              >
+                + Thêm {isProduct ? "sản phẩm" : "danh mục"} mới
+              </button>
+            </div>
+            {isProduct && (
+              <section
+                className="lan-admin-metrics"
+                aria-label="Tổng quan sản phẩm"
+              >
+                {[
+                  ["Tổng sản phẩm", products.length],
+                  ["Đang kinh doanh", products.filter((p) => p.active).length],
+                  ["Tạm ẩn", products.filter((p) => !p.active).length],
+                ].map(([title, count]) => (
+                  <div className="lan-frame" key={title}>
+                    <small>{title}</small>
+                    <strong>{count}</strong>
+                  </div>
+                ))}
+              </section>
+            )}
+          </>
+        )}
+        {loadError && (
+          <div className="store-error" role="alert">
+            <p>{loadError}</p>
+            <button
+              className="lan-button"
+              onClick={() => {
+                setFetching(true);
+                setAttempt(attempt + 1);
               }}
             >
-              <label>
-                Phí cơ bản (VND)
-                <input
-                  name="baseFee"
-                  type="number"
-                  required
-                  min={0}
-                  max={1000000}
-                  defaultValue={Number(shipping.baseFee)}
-                />
-              </label>
-              <label>
-                Miễn phí từ tiền hàng (VND; 0 = không áp dụng)
-                <input
-                  name="freeShippingThreshold"
-                  type="number"
-                  required
-                  min={0}
-                  max={100000000}
-                  defaultValue={Number(shipping.freeShippingThreshold)}
-                />
-              </label>
-              <label className="store-check">
-                <input
-                  name="enabled"
-                  type="checkbox"
-                  defaultChecked={Boolean(shipping.enabled)}
-                />
-                Cho phép nhận đơn hàng mới
-              </label>
-              <p className="store-subtle">
-                Áp dụng tại checkout; máy chủ tính phí và lưu snapshot vào đơn.
-                Phí đơn cũ không thay đổi.
-              </p>
-              <button disabled={busy}>Lưu cấu hình</button>
-            </form>
-          </section>
-        )
-      ) : (
-        <>
-          <section className="store-card">
-            <div className="store-list-heading">
-              <h2>{isProduct ? "Danh sách sản phẩm" : "Danh sách danh mục"}</h2>
-            </div>
-            <div className="store-filters">
-              <label>
-                Tìm theo tên/mã
-                <input
-                  value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="Nhập từ khóa…"
-                />
-              </label>
-              <label>
-                Trạng thái
-                <select
-                  value={active}
-                  onChange={(e) => {
-                    setActive(e.target.value);
-                    setPage(1);
-                  }}
-                >
-                  <option value="">Tất cả</option>
-                  <option value="true">Đang hiển thị</option>
-                  <option value="false">Đã ẩn</option>
-                </select>
-              </label>
-              {isProduct && (
+              Thử lại
+            </button>
+          </div>
+        )}
+        {section === "settings" ? (
+          shipping && (
+            <section className="store-card">
+              <h2>Phí giao hàng chung</h2>
+              <form
+                key={String(shipping.revision)}
+                className="store-form"
+                onSubmit={(e) => {
+                  const b = fields(e);
+                  if (
+                    !window.confirm(
+                      "Lưu cấu hình phí giao hàng mới? Đơn đã đặt vẫn giữ phí cũ.",
+                    )
+                  )
+                    return;
+                  void run(async () => {
+                    await mutate("commerce", "shipping-save", {
+                      revision: shipping.revision,
+                      baseFee: Number(b.baseFee),
+                      freeShippingThreshold: Number(b.freeShippingThreshold),
+                      enabled: b.enabled === "on",
+                    });
+                  });
+                }}
+              >
                 <label>
-                  Danh mục
-                  <select
-                    value={category}
+                  Phí cơ bản (VND)
+                  <input
+                    name="baseFee"
+                    type="number"
+                    required
+                    min={0}
+                    max={1000000}
+                    defaultValue={Number(shipping.baseFee)}
+                  />
+                </label>
+                <label>
+                  Miễn phí từ tiền hàng (VND; 0 = không áp dụng)
+                  <input
+                    name="freeShippingThreshold"
+                    type="number"
+                    required
+                    min={0}
+                    max={100000000}
+                    defaultValue={Number(shipping.freeShippingThreshold)}
+                  />
+                </label>
+                <label className="store-check">
+                  <input
+                    name="enabled"
+                    type="checkbox"
+                    defaultChecked={Boolean(shipping.enabled)}
+                  />
+                  Cho phép nhận đơn hàng mới
+                </label>
+                <p className="store-subtle">
+                  Áp dụng tại checkout; máy chủ tính phí và lưu snapshot vào
+                  đơn. Phí đơn cũ không thay đổi.
+                </p>
+                <button disabled={busy}>Lưu cấu hình</button>
+              </form>
+            </section>
+          )
+        ) : (
+          <>
+            <section className="store-card">
+              <div className="store-list-heading">
+                <h2>
+                  {isProduct ? "Danh sách sản phẩm" : "Danh sách danh mục"}
+                </h2>
+              </div>
+              <div className="store-filters">
+                <label>
+                  Tìm theo tên/mã
+                  <input
+                    value={query}
                     onChange={(e) => {
-                      setCategory(e.target.value);
+                      setQuery(e.target.value);
+                      setPage(1);
+                    }}
+                    placeholder="Nhập từ khóa…"
+                  />
+                </label>
+                <label>
+                  Trạng thái
+                  <select
+                    value={active}
+                    onChange={(e) => {
+                      setActive(e.target.value);
                       setPage(1);
                     }}
                   >
                     <option value="">Tất cả</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={String(c.code)}>
-                        {String(c.name)}
-                      </option>
-                    ))}
+                    <option value="true">Đang hiển thị</option>
+                    <option value="false">Đã ẩn</option>
                   </select>
                 </label>
+                {!isProduct && (
+                  <label>
+                    Sắp xếp danh mục
+                    <select
+                      value={categorySort}
+                      onChange={(e) => {
+                        setCategorySort(e.target.value);
+                        setPage(1);
+                      }}
+                    >
+                      <option value="order">Thứ tự điều hướng</option>
+                      <option value="count">Nhiều sản phẩm nhất</option>
+                    </select>
+                  </label>
+                )}
+                {isProduct && (
+                  <label>
+                    Danh mục
+                    <select
+                      value={category}
+                      onChange={(e) => {
+                        setCategory(e.target.value);
+                        setPage(1);
+                      }}
+                    >
+                      <option value="">Tất cả</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={String(c.code)}>
+                          {String(c.name)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
+              {!isProduct && (
+                <div
+                  className="lan-category-status-tabs"
+                  aria-label="Lọc trạng thái danh mục"
+                >
+                  {[
+                    ["", "Tất cả"],
+                    ["true", "Đang hiển thị"],
+                    ["false", "Tạm ẩn"],
+                  ].map(([value, title]) => (
+                    <button
+                      key={value}
+                      aria-pressed={active === value}
+                      onClick={() => {
+                        setActive(value);
+                        setPage(1);
+                      }}
+                    >
+                      {title} (
+                      {
+                        categories.filter(
+                          (c) => !value || String(c.active) === value,
+                        ).length
+                      }
+                      )
+                    </button>
+                  ))}
+                </div>
               )}
-            </div>
-            {fetching && <p role="status">Đang tải danh sách…</p>}
-            {!fetching && !loadError && !rows.length && <p>Không có kết quả phù hợp.</p>}
-            <div className="lan-table-scroll" tabIndex={0} role="region" aria-label={isProduct?"Bảng sản phẩm":"Bảng danh mục"}>
-            <table className="lan-admin-table"><thead><tr>
-              {!isProduct&&<th scope="col">Thứ tự</th>}<th scope="col">Ảnh</th><th scope="col">{isProduct?"Tên sản phẩm & Phân loại":"Tên danh mục"}</th><th scope="col">{isProduct?"Mã định danh / Slug":"Mã danh mục (Slug)"}</th><th scope="col">{isProduct?"Danh mục":"Mô tả tóm tắt"}</th><th scope="col">{isProduct?"Giá niêm yết":"Số sản phẩm"}</th>{isProduct&&<th scope="col">Số lượng tồn kho</th>}<th scope="col">Trạng thái</th><th scope="col">Thao tác</th>
-            </tr></thead><tbody>
-            {rows.map((r) => (
-              <tr key={r.id}>
-                {!isProduct&&<td>{Number(r.sortOrder??0)}</td>}
-                <td>
-                <ProductImage
-                  src={String(r.image)}
-                  alt={String(r.name)}
-                  width={100}
-                  height={85}
-                /></td>
-                <td>
-                  <strong>{String(r.name)}</strong>
-                  {isProduct&&<p>{String(r.description??"")}</p>}
-                </td>
-                <td><code>{String(r.slug??r.code)}</code></td>
-                <td>{isProduct?String(categories.find(c=>c.code===r.category)?.name??r.category):String(r.description??"")}</td>
-                <td>{isProduct?<strong className="lan-table-price">{money(r.price)}</strong>:products.filter(p=>p.category===r.code).length}</td>
-                {isProduct&&<td>{Number(r.stock)}</td>}
-                <td><span className={`lan-admin-status ${r.active?"is-active":""}`}>{r.active?"Đang hiển thị":"Tạm ẩn"}</span></td>
-                <td><div className="store-row-actions">
-                  <button disabled={busy} aria-label={`Sửa ${r.name}`} onClick={() => edit(r)}>
-                    Sửa
-                  </button>
+              {fetching && <p role="status">Đang tải danh sách…</p>}
+              {!fetching && !loadError && !rows.length && (
+                <p>Không có kết quả phù hợp.</p>
+              )}
+              <div
+                className="lan-table-scroll"
+                tabIndex={0}
+                role="region"
+                aria-label={isProduct ? "Bảng sản phẩm" : "Bảng danh mục"}
+              >
+                <table className="lan-admin-table">
+                  <thead>
+                    <tr>
+                      {!isProduct && <th scope="col">Thứ tự</th>}
+                      <th scope="col">Ảnh</th>
+                      <th scope="col">
+                        {isProduct
+                          ? "Tên sản phẩm & Phân loại"
+                          : "Tên danh mục"}
+                      </th>
+                      <th scope="col">
+                        {isProduct
+                          ? "Mã định danh / Slug"
+                          : "Mã danh mục (Slug)"}
+                      </th>
+                      <th scope="col">
+                        {isProduct ? "Danh mục" : "Mô tả tóm tắt"}
+                      </th>
+                      <th scope="col">
+                        {isProduct ? "Giá niêm yết" : "Số sản phẩm"}
+                      </th>
+                      {isProduct && <th scope="col">Số lượng tồn kho</th>}
+                      <th scope="col">Trạng thái</th>
+                      <th scope="col">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr key={r.id}>
+                        {!isProduct && <td>{Number(r.sortOrder ?? 0)}</td>}
+                        <td>
+                          <ProductImage
+                            src={String(r.image)}
+                            alt={String(r.name)}
+                            width={100}
+                            height={85}
+                          />
+                        </td>
+                        <td>
+                          <strong>{String(r.name)}</strong>
+                          {isProduct && <p>{String(r.description ?? "")}</p>}
+                        </td>
+                        <td>
+                          <code>{String(r.slug ?? r.code)}</code>
+                        </td>
+                        <td>
+                          {isProduct
+                            ? String(
+                                categories.find((c) => c.code === r.category)
+                                  ?.name ?? r.category,
+                              )
+                            : String(r.description ?? "")}
+                        </td>
+                        <td>
+                          {isProduct ? (
+                            <strong className="lan-table-price">
+                              {money(r.price)}
+                            </strong>
+                          ) : (
+                            products.filter((p) => p.category === r.code).length
+                          )}
+                        </td>
+                        {isProduct && <td>{Number(r.stock)}</td>}
+                        <td>
+                          <span
+                            className={`lan-admin-status ${r.active ? "is-active" : ""}`}
+                          >
+                            {r.active ? "Đang hiển thị" : "Tạm ẩn"}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="store-row-actions">
+                            <button
+                              disabled={busy}
+                              aria-label={`Sửa ${r.name}`}
+                              onClick={() => edit(r)}
+                            >
+                              Sửa
+                            </button>
+                            <button
+                              disabled={busy}
+                              aria-label={`${r.active ? "Ẩn" : "Hiện"} ${r.name}`}
+                              onClick={() => {
+                                if (
+                                  r.active &&
+                                  !window.confirm(
+                                    `Ẩn “${r.name}”? ${isProduct ? "Sản phẩm sẽ ngừng bán." : "Sản phẩm thuộc danh mục cũng bị ẩn khỏi cửa hàng."}`,
+                                  )
+                                )
+                                  return;
+                                void run(async () => {
+                                  await mutate("commerce", "catalog-toggle", {
+                                    id: r.id,
+                                    revision: r.revision,
+                                    kind: isProduct ? "product" : "category",
+                                    active: !r.active,
+                                  });
+                                });
+                              }}
+                            >
+                              {r.active ? "Ẩn" : "Hiện"}
+                            </button>
+                            <button
+                              disabled={busy}
+                              className="store-danger"
+                              aria-label={`Xóa ${r.name}`}
+                              onClick={() => {
+                                if (!isProduct) {
+                                  setDeleteCandidate(r);
+                                  return;
+                                }
+                                if (
+                                  !window.confirm(
+                                    `Xóa “${r.name}”? Chỉ xóa được khi chưa có dữ liệu liên kết.`,
+                                  )
+                                )
+                                  return;
+                                void run(async () => {
+                                  await mutate(
+                                    "commerce",
+                                    isProduct
+                                      ? "product-delete"
+                                      : "category-delete",
+                                    { id: r.id, revision: r.revision },
+                                  );
+                                  if (selected?.id === r.id) setSelected(null);
+                                });
+                              }}
+                            >
+                              Xóa
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Pagination
+                page={safePage}
+                total={matches.length}
+                pageSize={8}
+                onChange={setPage}
+              />
+              {!isProduct && (
+                <p className="lan-category-summary">
+                  Cấu hình thứ tự hiển thị trong cửa sổ chỉnh sửa. Tổng số:{" "}
+                  {categories.length} danh mục (
+                  {categories.filter((c) => c.active).length} đang hiển thị).
+                </p>
+              )}
+            </section>
+            {selected && (
+              <LanDialog
+                label={isProduct ? "Chỉnh sửa sản phẩm" : "Chỉnh sửa danh mục"}
+                drawer={!isProduct}
+                onClose={() => setSelected(null)}
+              >
+                <section
+                  className="store-card store-detail lan-editor"
+                  id="lan-catalog-editor"
+                  aria-label={
+                    isProduct ? "Chỉnh sửa sản phẩm" : "Chỉnh sửa danh mục"
+                  }
+                >
                   <button
-                    disabled={busy}
-                    aria-label={`${r.active?"Ẩn":"Hiện"} ${r.name}`}
-                    onClick={() => {
-                      if (
-                        r.active &&
-                        !window.confirm(
-                          `Ẩn “${r.name}”? ${isProduct ? "Sản phẩm sẽ ngừng bán." : "Sản phẩm thuộc danh mục cũng bị ẩn khỏi cửa hàng."}`,
-                        )
-                      )
-                        return;
-                      void run(async () => {
-                        await mutate("commerce", "catalog-toggle", {
-                          id: r.id,
-                          revision: r.revision,
-                          kind: isProduct ? "product" : "category",
-                          active: !r.active,
-                        });
-                      });
-                    }}
+                    className="store-close"
+                    onClick={() => setSelected(null)}
                   >
-                    {r.active ? "Ẩn" : "Hiện"}
+                    Đóng ×
                   </button>
-                  <button
-                    disabled={busy}
-                    className="store-danger"
-                    aria-label={`Xóa ${r.name}`}
-                    onClick={() => {
-                      if (
-                        !window.confirm(
-                          `Xóa “${r.name}”? Chỉ xóa được khi chưa có dữ liệu liên kết.`,
-                        )
-                      )
-                        return;
+                  <h2>
+                    {selected.id === "new" ? "Thêm mới" : "Chỉnh sửa"}{" "}
+                    {isProduct ? "sản phẩm" : "danh mục"}
+                  </h2>
+                  {mutationError && (
+                    <p className="store-error" role="alert">
+                      {mutationError}
+                    </p>
+                  )}
+                  <form
+                    className="store-form"
+                    key={selected.id}
+                    onSubmit={(e) => {
+                      const b = fields(e);
                       void run(async () => {
+                        const id = await imageId();
+                        const payload: Record<string, unknown> = {
+                          ...b,
+                          id: selected.id === "new" ? undefined : selected.id,
+                          revision: selected.revision,
+                          active: b.active === "on",
+                        };
+                        if (isProduct) {
+                          payload.price = Number(b.price);
+                          payload.stock = Number(b.stock);
+                        } else payload.sortOrder = Number(b.sortOrder);
+                        if (id) payload.imageId = id;
+                        else if (removeImage) payload.imageId = "";
                         await mutate(
                           "commerce",
-                          isProduct ? "product-delete" : "category-delete",
-                          { id: r.id, revision: r.revision },
+                          isProduct ? "product-save" : "category-save",
+                          payload,
                         );
-                        if (selected?.id === r.id) setSelected(null);
+                        setSelected(null);
+                        setFile(null);
                       });
                     }}
                   >
-                    Xóa
-                  </button>
-                </div></td>
-              </tr>
-            ))}
-            </tbody></table></div>
-            <Pagination
-              page={safePage}
-              total={matches.length}
-              pageSize={8}
-              onChange={setPage}
-            />
-          </section>
-          {selected && (
-            <section className="store-card store-detail lan-editor" id="lan-catalog-editor" aria-label={isProduct?"Chỉnh sửa sản phẩm":"Chỉnh sửa danh mục"}>
-              <button className="store-close" onClick={() => setSelected(null)}>
-                Đóng ×
-              </button>
-              <h2>
-                {selected.id === "new" ? "Thêm mới" : "Chỉnh sửa"}{" "}
-                {isProduct ? "sản phẩm" : "danh mục"}
-              </h2>
-              <form
-                className="store-form"
-                key={selected.id}
-                onSubmit={(e) => {
-                  const b = fields(e);
-                  void run(async () => {
-                    const id = await imageId();
-                    const payload: Record<string, unknown> = {
-                      ...b,
-                      id: selected.id === "new" ? undefined : selected.id,
-                      revision: selected.revision,
-                      active: b.active === "on",
-                    };
-                    if (isProduct) {
-                      payload.price = Number(b.price);
-                      payload.stock = Number(b.stock);
-                    } else payload.sortOrder = Number(b.sortOrder);
-                    if (id) payload.imageId = id;
-                    else if (removeImage) payload.imageId = "";
-                    await mutate(
-                      "commerce",
-                      isProduct ? "product-save" : "category-save",
-                      payload,
-                    );
-                    setSelected(null);
-                    setFile(null);
-                  });
-                }}
+                    <fieldset className="lan-editor-section">
+                      <legend>01 — Thông tin cơ bản</legend>
+                      <label>
+                        Tên {isProduct ? "sản phẩm" : "danh mục"} *
+                        <input
+                          name="name"
+                          defaultValue={String(selected.name ?? "")}
+                          required
+                          maxLength={150}
+                        />
+                      </label>
+                      <label>
+                        {isProduct ? "Slug đường dẫn" : "Mã danh mục"} *
+                        <input
+                          name={isProduct ? "slug" : "code"}
+                          defaultValue={String(
+                            selected.slug ?? selected.code ?? "",
+                          )}
+                          onChange={(e) => {
+                            if (!isProduct) setDraftCode(e.target.value);
+                          }}
+                          required
+                          pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                          maxLength={120}
+                        />
+                      </label>
+                      {isProduct && (
+                        <label>
+                          Danh mục *
+                          <select
+                            name="category"
+                            defaultValue={String(selected.category ?? "")}
+                            required
+                          >
+                            <option value="" disabled>
+                              Chọn danh mục đang hoạt động
+                            </option>
+                            {categories.map((c) => (
+                              <option
+                                key={c.id}
+                                value={String(c.code)}
+                                disabled={!c.active}
+                              >
+                                {String(c.name)}
+                                {!c.active ? " (đã ẩn)" : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                      <label className="lan-full-width">
+                        Mô tả{isProduct ? " *" : ""}
+                        <textarea
+                          name="description"
+                          defaultValue={String(selected.description ?? "")}
+                          required={isProduct}
+                          maxLength={isProduct ? 4000 : 2000}
+                          rows={5}
+                        />
+                      </label>
+                    </fieldset>
+                    <fieldset className="lan-editor-section">
+                      <legend>
+                        {isProduct
+                          ? "02 — Thông tin bán hàng"
+                          : "Thứ tự & Hiển thị"}
+                      </legend>
+                      {isProduct ? (
+                        <>
+                          <label>
+                            Giá niêm yết (VND) *
+                            <input
+                              name="price"
+                              type="number"
+                              min={1}
+                              max={10000000}
+                              defaultValue={Number(selected.price ?? 85000)}
+                              required
+                            />
+                          </label>
+                          <label>
+                            Số lượng tồn kho *
+                            <input
+                              name="stock"
+                              type="number"
+                              min={0}
+                              max={1000000}
+                              defaultValue={Number(selected.stock ?? 0)}
+                              required
+                            />
+                          </label>
+                        </>
+                      ) : (
+                        <label>
+                          Thứ tự hiển thị
+                          <input
+                            name="sortOrder"
+                            type="number"
+                            min={0}
+                            max={10000}
+                            defaultValue={Number(selected.sortOrder ?? 0)}
+                            required
+                          />
+                        </label>
+                      )}
+                      <label className="store-check lan-full-width">
+                        <input
+                          name="active"
+                          type="checkbox"
+                          defaultChecked={Boolean(selected.active)}
+                        />
+                        Hiển thị trên cửa hàng
+                      </label>
+                    </fieldset>
+                    <fieldset className="lan-editor-section">
+                      <legend>
+                        {isProduct
+                          ? "03 — Hình ảnh sản phẩm"
+                          : "Hình ảnh đại diện"}
+                      </legend>
+                      {!removeImage && selected.image != null && (
+                        <ProductImage
+                          src={String(selected.image)}
+                          alt="Ảnh hiện tại"
+                          width={180}
+                          height={180}
+                        />
+                      )}
+                      <label>
+                        Upload ảnh thay thế (PNG/JPEG, tối đa 5 MB)
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0] ?? null;
+                            uploaded.current = null;
+                            if (
+                              f &&
+                              (f.size > 5 * 1024 * 1024 ||
+                                !["image/png", "image/jpeg"].includes(f.type))
+                            ) {
+                              setFileError("Chọn PNG/JPEG tối đa 5 MB.");
+                              e.target.value = "";
+                              setFile(null);
+                            } else {
+                              setFileError("");
+                              setFile(f);
+                              setRemoveImage(false);
+                            }
+                          }}
+                        />
+                      </label>
+                      {fileError && (
+                        <p className="store-error" role="alert">
+                          {fileError}
+                        </p>
+                      )}
+                      {file && <p>Ảnh đã chọn: {file.name}</p>}
+                      <label className="store-check lan-full-width">
+                        <input
+                          type="checkbox"
+                          checked={removeImage}
+                          onChange={(e) => {
+                            setRemoveImage(e.target.checked);
+                            setFile(null);
+                            uploaded.current = null;
+                          }}
+                        />
+                        Gỡ ảnh hiện tại và dùng ảnh mặc định
+                      </label>
+                      {isProduct && (
+                        <div className="lan-gallery-proposal lan-full-width">
+                          <h3>Thư viện ảnh sản phẩm</h3>
+                          <p>
+                            Đề xuất trong mẫu Stitch — chưa hỗ trợ lưu nhiều
+                            ảnh. Hiện mỗi sản phẩm sử dụng một ảnh chính.
+                          </p>
+                          <div>
+                            <ProductImage
+                              src={String(selected.image ?? "")}
+                              alt="Ảnh chính"
+                              width={90}
+                              height={90}
+                            />
+                            <button type="button" disabled>
+                              + Thêm ảnh phụ
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </fieldset>
+                    <fieldset className="lan-editor-section">
+                      <legend>
+                        {isProduct
+                          ? "04 — Lưu & Xác nhận dữ liệu"
+                          : "Lưu danh mục"}
+                      </legend>
+                      {!isProduct && (
+                        <Link
+                          className="lan-category-preview lan-full-width"
+                          href={`/products?category=${encodeURIComponent(draftCode)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          /products?category={draftCode || "…"} — Kiểm tra ↗
+                        </Link>
+                      )}
+                      <p className="lan-full-width">
+                        Kiểm tra các thông tin bắt buộc trước khi lưu.
+                      </p>
+                      <div className="lan-editor-actions lan-full-width">
+                        <button
+                          className="lan-button lan-button-paper"
+                          type="button"
+                          onClick={() => setSelected(null)}
+                        >
+                          Hủy thay đổi
+                        </button>
+                        <button
+                          className="lan-button"
+                          disabled={busy || Boolean(fileError)}
+                        >
+                          Lưu {isProduct ? "sản phẩm" : "danh mục"}
+                        </button>
+                      </div>
+                    </fieldset>
+                  </form>
+                </section>
+              </LanDialog>
+            )}
+            {deleteCandidate && (
+              <LanDialog
+                label="Xác nhận xóa danh mục"
+                onClose={() => setDeleteCandidate(null)}
               >
-                <fieldset className="lan-editor-section"><legend>01 — Thông tin cơ bản</legend>
-                  <label>Tên {isProduct?"sản phẩm":"danh mục"} *<input name="name" defaultValue={String(selected.name??"")} required maxLength={150}/></label>
-                  <label>{isProduct?"Slug đường dẫn":"Mã danh mục"} *<input name={isProduct?"slug":"code"} defaultValue={String(selected.slug??selected.code??"")} required pattern="[a-z0-9]+(-[a-z0-9]+)*" maxLength={120}/></label>
-                  {isProduct&&<label>Danh mục *<select name="category" defaultValue={String(selected.category??"")} required><option value="" disabled>Chọn danh mục đang hoạt động</option>{categories.map(c=><option key={c.id} value={String(c.code)} disabled={!c.active}>{String(c.name)}{!c.active?" (đã ẩn)":""}</option>)}</select></label>}
-                  <label className="lan-full-width">Mô tả{isProduct?" *":""}<textarea name="description" defaultValue={String(selected.description??"")} required={isProduct} maxLength={isProduct?4000:2000} rows={5}/></label>
-                </fieldset>
-                <fieldset className="lan-editor-section"><legend>02 — {isProduct?"Thông tin bán hàng":"Thứ tự & Hiển thị"}</legend>
-                  {isProduct?<><label>Giá niêm yết (VND) *<input name="price" type="number" min={1} max={10000000} defaultValue={Number(selected.price??85000)} required/></label><label>Số lượng tồn kho *<input name="stock" type="number" min={0} max={1000000} defaultValue={Number(selected.stock??0)} required/></label></>:<label>Thứ tự hiển thị<input name="sortOrder" type="number" min={0} max={10000} defaultValue={Number(selected.sortOrder??0)} required/></label>}
-                  <label className="store-check lan-full-width"><input name="active" type="checkbox" defaultChecked={Boolean(selected.active)}/>Hiển thị trên cửa hàng</label>
-                </fieldset>
-                <fieldset className="lan-editor-section"><legend>03 — Hình ảnh {isProduct?"sản phẩm":"danh mục"}</legend>
-                  {!removeImage&&selected.image!=null&&<ProductImage src={String(selected.image)} alt="Ảnh hiện tại" width={180} height={180}/>}
-                  <label>Upload ảnh thay thế (PNG/JPEG, tối đa 5 MB)<input type="file" accept="image/png,image/jpeg" onChange={e=>{const f=e.target.files?.[0]??null;uploaded.current=null;if(f&&(f.size>5*1024*1024||!["image/png","image/jpeg"].includes(f.type))){setFileError("Chọn PNG/JPEG tối đa 5 MB.");e.target.value="";setFile(null);}else{setFileError("");setFile(f);setRemoveImage(false);}}}/></label>
-                  {fileError&&<p className="store-error" role="alert">{fileError}</p>}{file&&<p>Ảnh đã chọn: {file.name}</p>}
-                  <label className="store-check lan-full-width"><input type="checkbox" checked={removeImage} onChange={e=>{setRemoveImage(e.target.checked);setFile(null);uploaded.current=null;}}/>Gỡ ảnh hiện tại và dùng ảnh mặc định</label>
-                  {isProduct&&<div className="lan-gallery-proposal lan-full-width"><h3>Thư viện ảnh sản phẩm</h3><p>Đề xuất trong mẫu Stitch — chưa hỗ trợ lưu nhiều ảnh. Hiện mỗi sản phẩm sử dụng một ảnh chính.</p><div><ProductImage src={String(selected.image??"")} alt="Ảnh chính" width={90} height={90}/><button type="button" disabled>+ Thêm ảnh phụ</button></div></div>}
-                </fieldset>
-                <fieldset className="lan-editor-section"><legend>04 — Lưu & Xác nhận dữ liệu</legend><p className="lan-full-width">Kiểm tra các thông tin bắt buộc trước khi lưu.</p><div className="lan-editor-actions lan-full-width"><button className="lan-button lan-button-paper" type="button" onClick={()=>setSelected(null)}>Hủy thay đổi</button><button className="lan-button" disabled={busy||Boolean(fileError)}>Lưu {isProduct?"sản phẩm":"danh mục"}</button></div></fieldset>
-              </form>
-            </section>
-          )}
-        </>
-      )}
-    </main>
+                <section className="lan-delete-confirm">
+                  <h2>Xác nhận xóa danh mục</h2>
+                  {mutationError && (
+                    <p className="store-error" role="alert">
+                      {mutationError}
+                    </p>
+                  )}
+                  <p>
+                    Bạn có chắc chắn muốn xóa “{String(deleteCandidate.name)}”?
+                    Chỉ xóa được khi chưa có dữ liệu liên kết. Thao tác này
+                    không thể hoàn tác.
+                  </p>
+                  <div className="lan-editor-actions">
+                    <button
+                      className="lan-button lan-button-paper"
+                      onClick={() => setDeleteCandidate(null)}
+                    >
+                      Hủy bỏ
+                    </button>
+                    <button
+                      className="lan-button"
+                      disabled={busy}
+                      onClick={() =>
+                        void run(async () => {
+                          await mutate("commerce", "category-delete", {
+                            id: deleteCandidate.id,
+                            revision: deleteCandidate.revision,
+                          });
+                          setDeleteCandidate(null);
+                        })
+                      }
+                    >
+                      Xóa danh mục
+                    </button>
+                  </div>
+                </section>
+              </LanDialog>
+            )}
+          </>
+        )}
+      </main>
     </LanAdminShell>
   );
 }
-

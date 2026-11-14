@@ -27,11 +27,15 @@ Commands (apps/web): npm ci; npm run lint; npm run typecheck; npm run build. Loc
 - [x] Collection
 - [x] Product detail
 - [x] Admin products
-- [ ] Admin categories
+- [x] Admin categories
 
 ## Exact next step
-Implement collection with left filters, grid, sorting and pagination; retain API. Final visual/fixture validation follows the five page checkpoints.
+All five page implementations and fixture/visual QA complete. Review pushed feature branch; live backend integration remains unverified and outside this UI delivery. See docs/CURRENT_STATE.md for commands, evidence and limitations.
 
 
 
+
+
+## Final checkpoint
+All five page goals were created in the runtime. Each page has a durable implementation milestone and remote checkpoint. Final focused lint, typecheck, build and five-page browser suite PASS; full lint retains only the recorded pre-existing failures. No live persistence is claimed.
 

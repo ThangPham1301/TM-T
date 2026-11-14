@@ -100,3 +100,9 @@ These rows are proposals. Backend may refine them, but must record the decision 
 4. Every mutation validates `400/422`, transition or revision conflict `409`, and retry behavior.
 5. Every endpoint has controlled latency and `500/503` UI tests.
 6. Error responses preserve `code` and `requestId`; clients do not branch on translated `message`.
+
+## Lân five-page UI checkpoint (2026-11-14)
+
+The current Next.js storefront still uses the existing `/api/store/*` adapter; this UI change does not implement or alter the stable REST endpoints above. Home/collection/detail expose loading, empty results, API error with explicit retry, filter reset and missing-image fallback. Product 404 offers collection recovery. Missing specifications show updating instead of invented values. Sold-out purchase is disabled; guest purchase goes to login; non-Customer purchase is disabled. Cart writes preserve productId/quantity/cartToken and existing idempotency. SKU and multi-image persistence remain unsupported by this adapter.
+
+Browser checks in `apps/web/tests/lan-ui.mjs` use synthetic fixtures and do not establish live backend integration.
