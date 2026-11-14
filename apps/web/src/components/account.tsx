@@ -255,22 +255,27 @@ export function Account({
       )}
       {section === "orders" && (
         <section className="store-card">
-          <h2>{admin ? "Đơn hàng cửa hàng" : "Đơn hàng của tôi"}</h2>
+          <div className={styles.kpiHeader}>
+            <h2>{admin ? "Đơn hàng cửa hàng" : "Đơn hàng của tôi"}</h2>
+            {admin && state.orders.length > 0 && (
+              <span className={styles.kpiScopeNote}>Toàn bộ đơn</span>
+            )}
+          </div>
           {admin && state.orders.length > 0 && (
-            <div className={styles.kpiStrip} aria-label="Tình hình đơn hàng">
-              <span className={styles.kpiScope}>
-                Tình hình đơn hàng · Toàn bộ đơn
-              </span>
+            <div className={styles.kpiGrid} aria-label="Tình hình đơn hàng">
               {[
                 ["Tổng đơn", state.orders.length],
                 ["Chờ xác nhận", orderCount("PLACED")],
                 ["Đang đóng gói", orderCount("PACKED")],
                 ["Đang giao", orderCount("SHIPPED")],
                 ["Đã giao", orderCount("DELIVERED")],
-              ].map(([labelText, value]) => (
-                <span className={styles.kpiItem} key={labelText}>
-                  <span className={styles.kpiValue}>{value}</span>
+              ].map(([labelText, value], i) => (
+                <span
+                  className={`${styles.kpiCell} ${i === 0 ? styles.kpiCellTotal : ""}`}
+                  key={labelText}
+                >
                   <span className={styles.kpiLabel}>{labelText}</span>
+                  <span className={styles.kpiValue}>{value}</span>
                 </span>
               ))}
             </div>

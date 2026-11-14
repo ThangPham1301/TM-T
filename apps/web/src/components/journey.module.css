@@ -257,36 +257,60 @@
   color: var(--gh-text);
 }
 
-/* --- admin KPI strip --- */
-.kpiStrip {
+/* --- admin KPI grid --- */
+.kpiHeader {
   display: flex;
-  flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--gh-space-3) var(--gh-space-6);
-  padding: var(--gh-space-3) 0;
-  border-top: 1px solid var(--gh-border);
-  border-bottom: 1px solid var(--gh-border);
-  margin-bottom: var(--gh-space-4);
+  justify-content: space-between;
+  gap: var(--gh-space-4);
+  flex-wrap: wrap;
 }
-.kpiScope {
-  width: 100%;
-  font-size: var(--gh-text-sm);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.kpiScopeNote {
   color: var(--gh-text-muted);
+  font-size: var(--gh-text-sm);
 }
-.kpiItem {
+.kpiGrid {
   display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: var(--gh-space-3) 0 var(--gh-space-4);
+}
+.kpiCell {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 2px;
+  padding: 12px 8px;
+}
+.kpiCell + .kpiCell {
+  border-left: 1px solid var(--gh-border);
+}
+.kpiLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--gh-text-muted);
 }
 .kpiValue {
   font-family: var(--gh-font-display);
-  font-size: var(--gh-text-xl);
+  font-size: 1.75rem;
   color: var(--gh-text);
   line-height: 1.1;
+  font-variant-numeric: tabular-nums;
 }
-.kpiLabel {
-  font-size: var(--gh-text-sm);
-  color: var(--gh-text-muted);
+.kpiCellTotal .kpiValue {
+  font-size: 2rem;
+  font-weight: 700;
+}
+@media (max-width: 767px) {
+  .kpiGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .kpiCell:nth-child(odd) {
+    border-left: none;
+  }
+  .kpiCell:last-child {
+    grid-column: 1 / -1;
+    border-left: none;
+  }
 }
 
 /* --- payment panel --- */
