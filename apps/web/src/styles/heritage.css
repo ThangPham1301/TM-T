@@ -14,7 +14,7 @@
   --error-pale: #ffdad6;
   --border: #e7ded4;
   --shadow: 0 16px 40px rgba(47, 36, 28, 0.11);
-  --font-display: "Times New Roman", "Noto Serif", serif;
+  --font-display: var(--gh-font-display);
 }
 
 * {
@@ -31,7 +31,7 @@ body {
   overflow-x: hidden;
   color: var(--ink);
   background: var(--surface);
-  font-family: "Be Vietnam Pro", "Segoe UI", sans-serif;
+  font-family: var(--gh-font-body);
   line-height: 1.55;
 }
 button,

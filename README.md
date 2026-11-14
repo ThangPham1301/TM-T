@@ -4,6 +4,8 @@ Website bán hàng với Next.js, Spring Boot và PostgreSQL. Giao diện kế t
 
 ## Chạy chương trình
 
+Hướng dẫn pull đúng nhánh, chạy đồng bộ giao diện và phân biệt dữ liệu local: [PULL_AND_RUN.md](docs/PULL_AND_RUN.md). Font tiếng Việt và ảnh giao diện Stitch đang sử dụng đã được đóng gói trong repository.
+
 Mở Docker Desktop, mở PowerShell tại thư mục có file `compose.yml` rồi chạy:
 
 ```powershell

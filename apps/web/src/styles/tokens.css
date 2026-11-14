@@ -1,0 +1,40 @@
+:root {
+  --gh-primary: #573722;
+  --gh-secondary: #795139;
+  --gh-accent: #c99643;
+  --gh-background: #fbf7f0;
+  --gh-surface: #f4ebdd;
+  --gh-footer-surface: #ffeadb;
+  --gh-text: #35291f;
+  --gh-text-muted: #795139;
+  --gh-on-primary: #fbf7f0;
+  --gh-border: #d8c5ae;
+  --gh-danger: #9b251d;
+  --gh-danger-surface: #ffdad6;
+  --gh-success: #285a38;
+  --gh-success-surface: #e8f1e7;
+  --gh-focus: #795139;
+  --gh-backdrop: rgb(53 41 31 / 45%);
+  --gh-font-body: var(--gh-loaded-body, "Segoe UI"), sans-serif;
+  --gh-font-display: var(--gh-loaded-display, Georgia), "Times New Roman", serif;
+  --gh-text-sm: .875rem;
+  --gh-text-md: 1rem;
+  --gh-text-lg: 1.25rem;
+  --gh-text-xl: 2rem;
+  --gh-line-height: 1.6;
+  --gh-space-1: .25rem;
+  --gh-space-2: .5rem;
+  --gh-space-3: .75rem;
+  --gh-space-4: 1rem;
+  --gh-space-6: 1.5rem;
+  --gh-space-8: 2rem;
+  --gh-radius-sm: .25rem;
+  --gh-radius-md: .5rem;
+  --gh-radius-pill: 999px;
+  --gh-shadow: 0 16px 36px -8px rgb(53 41 31 / 12%);
+  --gh-focus-width: 3px;
+  --gh-focus-offset: 3px;
+  --gh-z-navigation: 10;
+  --gh-z-overlay: 100;
+}
+

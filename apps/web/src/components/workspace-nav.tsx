@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { accountNavigation, adminNavigation } from "@/shared/layout/navigation";
 export function WorkspaceNav({
   admin = false,
   section,
@@ -7,35 +8,17 @@ export function WorkspaceNav({
   admin?: boolean;
   section: string;
 }) {
-  const sections = admin
-    ? [
-        ["orders", "Đơn hàng"],
-        ["products", "Sản phẩm"],
-        ["categories", "Danh mục"],
-        ["settings", "Phí giao hàng"],
-        ["returns", "Đổi trả"],
-        ["privacy", "Quyền dữ liệu"],
-        ["policies", "Chính sách"],
-        ["audit", "Nhật ký"],
-      ]
-    : [
-        ["profile", "Hồ sơ"],
-        ["addresses", "Sổ địa chỉ"],
-        ["security", "Mật khẩu"],
-        ["orders", "Đơn hàng"],
-        ["returns", "Đổi trả"],
-        ["privacy", "Quyền dữ liệu"],
-      ];
+  const sections = admin ? adminNavigation : accountNavigation;
   return (
     <nav
       className="store-tabs"
       aria-label={admin ? "Chức năng quản trị" : "Chức năng tài khoản"}
     >
-      {sections.map(([key, name]) => (
+      {sections.map(({ key, label: name, href }) => (
         <Link
           className={section === key ? "active" : ""}
           key={key}
-          href={`${admin ? "/admin" : "/account"}/${key}`}
+          href={href}
         >
           {name}
         </Link>
