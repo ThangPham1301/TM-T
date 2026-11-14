@@ -3,6 +3,9 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AddressBook, PasswordSettings } from "./account-settings";
 import { PaymentPanel } from "./payment-panel";
+import { OrderBadges, OrderTimeline } from "./order-presentation";
+import { ProductImage } from "./product/product-image";
+import styles from "./journey.module.css";
 import { WorkspaceNav, Pagination } from "./workspace-nav";
 import {
   api,
@@ -63,6 +66,8 @@ export function Account({
   const orderItems = (current?.items as Row[] | undefined) ?? [];
   const selectedProducts = returnLines.map((line) => line.productId || String(orderItems[0]?.productId ?? ""));
   const nextProduct = orderItems.find((item) => !selectedProducts.includes(String(item.productId)));
+  const orderCount = (s: string) =>
+    state.orders.filter((o) => o.status === s).length;
   const filteredOrders = state.orders.filter(
     (o) =>
       (!orderQuery ||
@@ -251,6 +256,25 @@ export function Account({
       {section === "orders" && (
         <section className="store-card">
           <h2>{admin ? "Đơn hàng cửa hàng" : "Đơn hàng của tôi"}</h2>
+          {admin && state.orders.length > 0 && (
+            <div className={styles.kpiStrip} aria-label="Tình hình đơn hàng">
+              <span className={styles.kpiScope}>
+                Tình hình đơn hàng · Toàn bộ đơn
+              </span>
+              {[
+                ["Tổng đơn", state.orders.length],
+                ["Chờ xác nhận", orderCount("PLACED")],
+                ["Đang đóng gói", orderCount("PACKED")],
+                ["Đang giao", orderCount("SHIPPED")],
+                ["Đã giao", orderCount("DELIVERED")],
+              ].map(([labelText, value]) => (
+                <span className={styles.kpiItem} key={labelText}>
+                  <span className={styles.kpiValue}>{value}</span>
+                  <span className={styles.kpiLabel}>{labelText}</span>
+                </span>
+              ))}
+            </div>
+          )}
           <div className="store-filters">
             <label>
               Tìm mã đơn/người nhận/điện thoại
@@ -321,12 +345,26 @@ export function Account({
                   setSelected(o);
                 }}
               >
+                {((o.items as Row[] | undefined) ?? []).length > 0 && (
+                  <span className={styles.thumbRow}>
+                    {((o.items as Row[] | undefined) ?? [])
+                      .slice(0, 3)
+                      .map((line, i) => (
+                        <ProductImage
+                          key={i}
+                          src={String(line.image ?? "")}
+                          alt=""
+                          width={40}
+                          height={40}
+                          className={styles.thumb}
+                        />
+                      ))}
+                  </span>
+                )}
                 <strong>
                   {String(o.number)} · {money(o.total)}
                 </strong>
-                <span>
-                  {label(o.status)} · {label(o.paymentStatus)}
-                </span>
+                <OrderBadges order={o} />
                 <small>{date(o.createdAt)}</small>
               </button>
             ))}
@@ -448,18 +486,32 @@ export function Account({
                 ? label(current.type)
                 : String(current.number ?? current.orderNumber)}
             </h2>
-            <p className="store-badge">{label(current.status)}</p>
+            {current.items != null ? (
+              <OrderBadges order={current} />
+            ) : (
+              <p className="store-badge">{label(current.status)}</p>
+            )}
             <p>Mã hồ sơ: {current.id}</p>
             {current.items != null ? (
               <>
+                <OrderTimeline order={current} />
                 <p>
                   {String(current.recipient)} · {String(current.phone)}
                 </p>
                 <p>{String(current.address)}</p>
                 {(current.items as Row[]).map((line, i) => (
-                  <p key={i}>
-                    {String(line.name)} · {String(line.quantity)} ×{" "}
-                    {money(line.price)}
+                  <p key={i} className={styles.detailItem}>
+                    <ProductImage
+                      src={String(line.image ?? "")}
+                      alt=""
+                      width={44}
+                      height={44}
+                      className={styles.thumb}
+                    />
+                    <span>
+                      {String(line.name)} · {String(line.quantity)} ×{" "}
+                      {money(line.price)}
+                    </span>
                   </p>
                 ))}
                 <p>

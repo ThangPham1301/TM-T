@@ -1,9 +1,10 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AddressFields } from "./account-settings";
 import { ProductImage } from "./product/product-image";
+import styles from "./journey.module.css";
 import { api, fields, money, type Row, useStore } from "@/lib/store";
 type Summary = {
   items: Row[];
@@ -21,6 +22,14 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
     [fetching, setFetching] = useState(false);
   const [addressChoice, setAddressChoice] = useState("");
   const [addingAddress, setAddingAddress] = useState(false);
+  const autoAddress = useRef(false);
+  useEffect(() => {
+    if (!checkout || autoAddress.current) return;
+    if (state?.addresses.length === 1) {
+      autoAddress.current = true;
+      setAddressChoice(state.addresses[0].id);
+    }
+  }, [checkout, state]);
   async function refresh() {
     setFetching(true);
     try {
@@ -82,7 +91,7 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
     await refresh();
   }
   return (
-    <main className="store-page store-journey">
+    <main className={`store-page store-journey ${!checkout && summary && rows.length > 0 ? styles.hasMobileBar : ""}`}>
       <header className="store-heading">
         <nav className="store-steps" aria-label="Các bước đặt hàng">
           <Link href="/cart" aria-current={checkout ? undefined : "step"}>Giỏ hàng</Link>
@@ -135,7 +144,7 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
               {rows.map((l) => (
                 <div key={l.id} className="store-cart-line">
                   <div className="store-cart-product">
-                    {Boolean(l.image) && <ProductImage src={String(l.image)} alt="" width={64} height={64} />}
+                    {Boolean(l.image) && <ProductImage src={String(l.image)} alt="" width={88} height={88} className={styles.lineImg} />}
                     <div>
                     <strong>{String(l.name)}</strong>
                     <p>
@@ -161,27 +170,74 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
                     )}
                     </div>
                   </div>
-                  {!checkout && (
-                    <div>
-                      <input
-                        key={l.id + String(l.quantity) + String(l.version)}
-                        aria-label={`Số lượng ${l.name}`}
-                        type="number"
-                        min={1}
-                        max={100}
-                        defaultValue={Number(l.quantity)}
-                        disabled={disabled}
-                        onBlur={(e) => {
-                          const qty = Number(e.target.value);
-                          if (qty !== Number(l.quantity))
+                  {checkout ? (
+                    <div className={styles.lineSide}>
+                      <p className={styles.lineTotal}>
+                        {money(Number(l.price) * Number(l.quantity))}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className={styles.lineSide}>
+                      <p className={styles.lineTotal}>
+                        {money(Number(l.price) * Number(l.quantity))}
+                      </p>
+                      <div className={styles.stepper}>
+                        <button
+                          type="button"
+                          className={styles.stepBtn}
+                          disabled={disabled || Number(l.quantity) <= 1}
+                          aria-label={`Giảm số lượng ${l.name}`}
+                          onClick={() =>
                             void run(() =>
                               update("cart-set", {
                                 productId: l.productId,
-                                quantity: qty,
+                                quantity: Number(l.quantity) - 1,
                               }),
-                            );
-                        }}
-                      />
+                            )
+                          }
+                        >
+                          −
+                        </button>
+                        <input
+                          key={l.id + String(l.quantity) + String(l.version)}
+                          aria-label={`Số lượng ${l.name}`}
+                          type="number"
+                          min={1}
+                          max={100}
+                          defaultValue={Number(l.quantity)}
+                          disabled={disabled}
+                          onBlur={(e) => {
+                            const qty = Number(e.target.value);
+                            if (qty !== Number(l.quantity))
+                              void run(() =>
+                                update("cart-set", {
+                                  productId: l.productId,
+                                  quantity: qty,
+                                }),
+                              );
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className={styles.stepBtn}
+                          disabled={
+                            disabled ||
+                            Number(l.quantity) >=
+                              Math.min(100, Number(l.stock))
+                          }
+                          aria-label={`Tăng số lượng ${l.name}`}
+                          onClick={() =>
+                            void run(() =>
+                              update("cart-set", {
+                                productId: l.productId,
+                                quantity: Number(l.quantity) + 1,
+                              }),
+                            )
+                          }
+                        >
+                          +
+                        </button>
+                      </div>
                       <button
                         disabled={disabled}
                         onClick={() =>
@@ -295,15 +351,21 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
                     />
                   </label>
                   </>}
-                  <fieldset className="store-payment">
+                  <fieldset className={`store-payment ${styles.payCards}`}>
                     <legend><strong>Phương thức thanh toán</strong></legend>
-                    <label>
+                    <label className={styles.payCard}>
                       <input type="radio" name="paymentMethod" value="COD" defaultChecked />
-                      Thanh toán khi nhận hàng (COD) — trả tiền mặt khi đơn được giao.
+                      <span className={styles.payCardBody}>
+                        <span className={styles.payCardTitle}>Thanh toán khi nhận hàng (COD)</span>
+                        <span className={styles.payCardDesc}>Trả tiền mặt khi đơn được giao.</span>
+                      </span>
                     </label>
-                    <label>
+                    <label className={styles.payCard}>
                       <input type="radio" name="paymentMethod" value="VIETQR" />
-                      Chuyển khoản VietQR — quét mã ngay sau khi đặt; hệ thống chỉ ghi nhận khi thông báo thanh toán (IPN) đã xác minh khớp đúng số tiền (hạn 15 phút).
+                      <span className={styles.payCardBody}>
+                        <span className={styles.payCardTitle}>Chuyển khoản VietQR</span>
+                        <span className={styles.payCardDesc}>Quét mã ngay sau khi đặt; hệ thống chỉ ghi nhận khi thông báo thanh toán (IPN) đã xác minh khớp đúng số tiền (hạn 15 phút).</span>
+                      </span>
                     </label>
                   </fieldset>
                   <p className="store-subtle">
@@ -327,12 +389,32 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
               <p>
                 Giao hàng <strong>{money(summary.shippingFee)}</strong>
               </p>
-              {Number(summary.shipping.freeShippingThreshold) > 0 && (
-                <p className="store-subtle">
-                  Miễn phí giao từ{" "}
-                  {money(summary.shipping.freeShippingThreshold)} tiền hàng.
-                </p>
-              )}
+              {Number(summary.shipping.freeShippingThreshold) > 0 &&
+                (summary.subtotal >=
+                Number(summary.shipping.freeShippingThreshold) ? (
+                  <p className={styles.shipOk}>
+                    Đơn hàng đủ điều kiện miễn phí giao hàng.
+                  </p>
+                ) : (
+                  <div className={styles.shipProgress}>
+                    <p className={styles.shipText}>
+                      Còn{" "}
+                      {money(
+                        Number(summary.shipping.freeShippingThreshold) -
+                          summary.subtotal,
+                      )}{" "}
+                      nữa để được miễn phí giao hàng.
+                    </p>
+                    <div className={styles.shipBar}>
+                      <div
+                        className={styles.shipFill}
+                        style={{
+                          width: `${Math.min(100, (summary.subtotal / Number(summary.shipping.freeShippingThreshold)) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
               <hr />
               <p>
                 Tổng thanh toán <strong>{money(summary.total)}</strong>
@@ -353,6 +435,21 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
             </aside>
           </div>
         )
+      )}
+      {!checkout && summary && rows.length > 0 && (
+        <div className={styles.mobileBar}>
+          <div>
+            <small>Tổng thanh toán</small>
+            <strong>{money(summary.total)}</strong>
+          </div>
+          <button
+            className="primary-button"
+            disabled={disabled || blocked || !summary.shipping.enabled}
+            onClick={() => router.push("/checkout")}
+          >
+            Tiến hành đặt hàng
+          </button>
+        </div>
       )}
     </main>
   );

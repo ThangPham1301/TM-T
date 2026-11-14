@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { date, label, money, type Row } from "@/lib/store";
+import styles from "./journey.module.css";
 
 /**
  * VietQR payment block on the order detail. The QR payload comes from the
@@ -55,13 +56,15 @@ export function PaymentPanel({ order }: { order: Row }) {
       {pStatus === "PENDING" && (
         <>
           {qrUrl && (
-            <img
-              src={qrUrl}
-              width={216}
-              height={216}
-              alt="Mã VietQR của đơn hàng"
-              draggable
-            />
+            <div className={styles.qrFrame}>
+              <img
+                src={qrUrl}
+                width={216}
+                height={216}
+                alt="Mã VietQR của đơn hàng"
+                draggable
+              />
+            </div>
           )}
           <p>
             Quét bằng ứng dụng ngân hàng: <strong>{money(payment.amount)}</strong>
