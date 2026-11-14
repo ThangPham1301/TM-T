@@ -28,6 +28,8 @@ export const labels: Record<string, string> = {
   PACKED: "Đã đóng gói",
   SHIPPED: "Đang giao",
   DELIVERED: "Đã giao",
+  DELIVERY_FAILED: "Giao thất bại",
+  RETURNED: "Đã hoàn kho",
   CANCELLED: "Đã hủy",
   PAID: "Đã thu tiền",
   UNPAID: "Chưa thu tiền",

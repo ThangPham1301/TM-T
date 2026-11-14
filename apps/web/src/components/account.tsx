@@ -278,6 +278,8 @@ export function Account({
                   "PACKED",
                   "SHIPPED",
                   "DELIVERED",
+                  "DELIVERY_FAILED",
+                  "RETURNED",
                   "CANCELLED",
                 ].map((s) => (
                   <option value={s} key={s}>
@@ -882,17 +884,18 @@ function OrderAction({
   busy: boolean;
   onSave: (b: Record<string, unknown>) => void;
 }) {
-  const next = (
+  const nextOptions = (
     {
-      PLACED: "CONFIRMED",
-      CONFIRMED: "PACKED",
-      PACKED: "SHIPPED",
-      SHIPPED: "DELIVERED",
-    } as Record<string, string>
-  )[String(row.status)];
+      PLACED: ["CONFIRMED"],
+      CONFIRMED: ["PACKED"],
+      PACKED: ["SHIPPED"],
+      SHIPPED: ["DELIVERED", "DELIVERY_FAILED"],
+      DELIVERY_FAILED: ["SHIPPED", "RETURNED"],
+    } as Record<string, string[]>
+  )[String(row.status)] ?? [];
   const actions = [
     ...(row.paymentStatus === "REVIEW" ? ["payment-resolve"] : []),
-    ...(next ? ["order-status"] : []),
+    ...(nextOptions.length ? ["order-status"] : []),
     ...(row.paymentStatus !== "PAID" && row.status !== "CANCELLED"
       ? ["order-paid"]
       : []),
@@ -902,13 +905,17 @@ function OrderAction({
       : []),
   ];
   const [action, setAction] = useState(actions[0] ?? "");
+  const [next, setNext] = useState(nextOptions[0] ?? "");
+  const nextValue = nextOptions.includes(next)
+    ? next
+    : (nextOptions[0] ?? "");
   if (!actions.length)
     return <p>Không còn thao tác xử lý trực tiếp cho đơn này.</p>;
   const title =
     action === "payment-resolve"
       ? "Xử lý đối soát thanh toán (REVIEW)"
       : action === "order-status"
-        ? `Chuyển sang ${label(next)}`
+        ? `Chuyển sang ${label(nextValue)}`
         : action === "order-paid"
           ? "Xác nhận đã thu tiền"
           : "Hủy đơn đủ điều kiện";
@@ -918,7 +925,7 @@ function OrderAction({
       onSubmit={(e) => {
         const b = fields(e);
         if (window.confirm(`${title} cho đơn ${row.number}?`))
-          onSave({ ...b, status: next });
+          onSave({ ...b, status: nextValue });
       }}
     >
       <h3>Xử lý đơn hàng</h3>
@@ -934,7 +941,7 @@ function OrderAction({
               {a === "payment-resolve"
                 ? "Đối soát thanh toán (REVIEW)"
                 : a === "order-status"
-                  ? `Chuyển sang ${label(next)}`
+                  ? `Chuyển sang ${label(nextValue)}`
                   : a === "order-paid"
                     ? "Xác nhận đã thu tiền"
                     : "Hủy đơn"}
@@ -942,6 +949,21 @@ function OrderAction({
           ))}
         </select>
       </label>
+      {action === "order-status" && nextOptions.length > 1 && (
+        <label>
+          Trạng thái tiếp theo
+          <select
+            value={nextValue}
+            onChange={(e) => setNext(e.target.value)}
+          >
+            {nextOptions.map((s) => (
+              <option value={s} key={s}>
+                {label(s)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {action === "payment-resolve" && (
         <label>
           Kết quả đối soát
@@ -957,7 +979,7 @@ function OrderAction({
       )}
       {(action === "order-paid" ||
         action === "payment-resolve" ||
-        (action === "order-status" && next === "SHIPPED")) && (
+        (action === "order-status" && nextValue === "SHIPPED")) && (
         <label>
           {action === "order-paid"
             ? "Mã chứng từ thu tiền"
