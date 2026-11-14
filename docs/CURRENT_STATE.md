@@ -9,3 +9,6 @@ Validation: npm ci PASS; focused ESLint PASS; full typecheck PASS; local headles
 Decisions: keep existing API/auth/mutations. No backend/deploy/merge. Preserve Stitch structure, apply mon-02 decoration. Actual data only; no invented SKU or gallery persistence.
 
 Next: goal 2, collection sidebar/filter/grid. Then detail, admin products, admin categories. Push every page checkpoint.
+
+Collection checkpoint: sidebar category/price/stock/search filters, stable original order and explicit price sort, grid, pagination, clear filters, story CTA. ProductDetail extracted unchanged pending goal 3. Focused lint PASS; typecheck result below. Next: product detail.
+Collection validation: focused lint and typecheck PASS; synthetic browser checks PASS for home sections, collection search without accents, sort, pagination, retry, empty and 390px overflow. Live backend not claimed. Next: goal 3 product detail.

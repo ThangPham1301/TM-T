@@ -1,170 +1,26 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { api, fields, money, type Row, useStore } from "@/lib/store";
-import { ProductImage } from "./product/product-image";
+import { api, type Row } from "@/lib/store";
+import { ProductCard, LoadState, CollectionStory } from "./product/lan-primitives";
+import { ProductDetail } from "./product/product-detail";
+import { Pagination } from "./workspace-nav";
 
-export function Catalog({ slug }: { slug?: string }) {
-  const [products, setProducts] = useState<Row[]>([]),
-    [categories, setCategories] = useState<Row[]>([]),
-    [searchTerm, setSearchTerm] = useState(""),
-    [categoryCode, setCategoryCode] = useState(""),
-    [error, setError] = useState(""),
-    [loading, setLoading] = useState(true);
-  const { state, busy, run, mutate } = useStore();
-  const router = useRouter();
-  useEffect(() => {
-    let active = true;
-    void Promise.all([
-      api(slug ? `products/${encodeURIComponent(slug)}` : "products"),
-      api("categories"),
-    ])
-      .then(([data, categoryRows]) => {
-        if (!active) return;
-        let rows: Row[] = slug ? [data] : data;
-        const query = new URLSearchParams(window.location.search),
-          q = query.get("q")?.toLocaleLowerCase("vi"),
-          category = query.get("category");
-        if (q)
-          rows = rows.filter((p) =>
-            String(p.name).toLocaleLowerCase("vi").includes(q),
-          );
-        if (category) rows = rows.filter((p) => p.category === category);
-        setCategories(categoryRows);
-        setSearchTerm(query.get("q") ?? "");
-        setCategoryCode(category ?? "");
-        setProducts(rows);
-      })
-      .catch((e) => {
-        if (active) setError(e.message);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [slug]);
-  function add(p: Row, quantity: number) {
-    if (!state) {
-      router.push("/login");
-      return;
-    }
-    void run(async () => {
-      const summary = await api("cart/summary");
-      const cart: Row[] = summary.items;
-      const current = cart.find((c) => c.productId === p.id);
-      await mutate("commerce", "cart-set", {
-        productId: p.id,
-        quantity: Number(current?.quantity ?? 0) + quantity,
-        cartToken: summary.cartToken,
-      });
-    });
-  }
-  return (
-    <main className="store-page">
-      <div className="store-heading">
-        <nav className="store-steps" aria-label="Đường dẫn">
-          <Link href="/">Trang chủ</Link><span aria-hidden="true">›</span>
-          {slug ? <Link href="/products">Bộ sưu tập</Link> : <span aria-current="page">Bộ sưu tập</span>}
-        </nav>
-        <h1>
-          {slug
-            ? String(products[0]?.name ?? "Chi tiết sản phẩm")
-            : "Bộ sưu tập Gói Huế"}
-        </h1>
-        {!slug && <p>Bánh mứt, mè xửng và quà biếu từ Huế.</p>}
-      </div>
-      {!slug && (
-        <form action="/products" className="store-filters">
-          <label>
-            Tìm sản phẩm
-            <input
-              name="q"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </label>
-          <label>
-            Danh mục
-            <select
-              name="category"
-              value={categoryCode}
-              onChange={(e) => setCategoryCode(e.target.value)}
-            >
-              <option value="">Tất cả</option>
-              {categories.map((c) => (
-                <option key={c.id} value={String(c.code)}>
-                  {String(c.name)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button>Tìm kiếm</button>
-        </form>
-      )}
-      {loading && <p aria-busy="true">Đang tải sản phẩm…</p>}
-      {error && <p className="store-error">{error}</p>}
-      {!loading && !error && !products.length && (
-        <p>Chưa có sản phẩm phù hợp.</p>
-      )}
-      <div
-        className={
-          slug ? "store-product-detail" : "heritage-products store-products"
-        }
-      >
-        {products.map((p) => (
-          <article key={p.id}>
-            <Link className="product-visual" href={`/products/${p.slug}`}>
-              <ProductImage
-                src={String(p.image)}
-                alt={String(p.name)}
-                width={700}
-                height={500}
-              />
-            </Link>
-            <div className="store-product-content">
-              <small className="store-product-category">
-                {String(
-                  categories.find((c) => c.code === p.category)?.name ??
-                    p.category,
-                )}
-              </small>
-              {!slug && <Link className="product-name" href={`/products/${p.slug}`}>{String(p.name)}</Link>}
-              <p className="store-product-description">
-                {String(p.description)}
-              </p>
-              <div className="store-product-meta">
-                <strong>{money(p.price)}</strong>
-                <span className="store-status-chip">{Number(p.stock) ? `Còn ${p.stock} sản phẩm` : "Tạm hết hàng"}</span>
-              </div>
-              <form
-                onSubmit={(e) => {
-                  const b = fields(e);
-                  add(p, Number(b.quantity));
-                }}
-              >
-                <label className="sr-only" htmlFor={`qty-${p.id}`}>
-                  Số lượng
-                </label>
-                <input
-                  id={`qty-${p.id}`}
-                  name="quantity"
-                  type="number"
-                  min={1}
-                  max={Math.min(100, Number(p.stock))}
-                  defaultValue={1}
-                />
-                <button disabled={busy || Number(p.stock) <= 0}>
-                  {Number(p.stock) ? "Thêm vào giỏ" : "Hết hàng"}
-                </button>
-              </form>
-              {slug && <div className="store-product-service"><span>Thanh toán khi nhận hàng</span><Link href="/return-policy">Điều kiện đổi trả →</Link></div>}
-            </div>
-          </article>
-        ))}
-      </div>
-    </main>
-  );
+export function Catalog({slug}:{slug?:string}) {return slug?<ProductDetail slug={slug}/>:<Collection/>;}
+function Collection(){
+  const [products,setProducts]=useState<Row[]>([]),[categories,setCategories]=useState<Row[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState("");
+  const [query,setQuery]=useState(""),[category,setCategory]=useState(""),[price,setPrice]=useState(""),[stock,setStock]=useState(false),[sort,setSort]=useState("original"),[page,setPage]=useState(1),[attempt,setAttempt]=useState(0);
+  useEffect(()=>{let live=true;Promise.all([api("products"),api("categories")]).then(([p,c])=>{if(!live)return;const params=new URLSearchParams(window.location.search);setProducts(p);setCategories(c);setCategory(params.get("category")??"");setQuery(params.get("q")??"");setError("");}).catch(e=>{if(live)setError(e.message);}).finally(()=>{if(live)setLoading(false);});return()=>{live=false;};},[attempt]);
+  const normalize=(s:unknown)=>String(s??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/đ/g,"d").replace(/Đ/g,"D").toLocaleLowerCase("vi");
+  const filtered=products.filter(p=>(!query||normalize(`${p.name} ${p.description}`).includes(normalize(query)))&&(!category||p.category===category)&&(!stock||Number(p.stock)>0)&&(!price||(price==="0"?Number(p.price)<50000:price==="1"?Number(p.price)>=50000&&Number(p.price)<=100000:price==="2"?Number(p.price)>100000&&Number(p.price)<=200000:Number(p.price)>200000)));
+  if(sort!=="original")filtered.sort((a,b)=>sort==="asc"?Number(a.price)-Number(b.price):Number(b.price)-Number(a.price));
+  const current=Math.min(page,Math.max(1,Math.ceil(filtered.length/9))),rows=filtered.slice((current-1)*9,current*9);
+  function reset(){setQuery("");setCategory("");setPrice("");setStock(false);setPage(1);window.history.replaceState(null,"","/products");}
+  return <main className="lan-page lan-collection"><nav className="lan-breadcrumb" aria-label="Đường dẫn"><Link href="/">Trang chủ</Link><span>/</span><span aria-current="page">Bộ sưu tập đặc sản</span></nav>
+    <header className="lan-collection-intro"><small>MỸ VỊ TIẾN CUNG & THỨC QUÀ DÂN GIAN</small><h1>Bộ Sưu Tập Gói Huế</h1><p>Tuyển lựa những thức quà trứ danh xứ Kinh kỳ — từ mạch nha mè rang, hạt sen đến trà và những hộp quà gửi người thương.</p><span>Đặc sản và quà biếu từ Huế</span></header>
+    <div className="lan-toolbar"><p>Hiển thị: <strong>{filtered.length} sản phẩm</strong></p><label>Sắp xếp<select value={sort} onChange={e=>{setSort(e.target.value);setPage(1);}}><option value="original">Thứ tự bộ sưu tập</option><option value="asc">Giá: Thấp đến Cao</option><option value="desc">Giá: Cao đến Thấp</option></select></label></div>
+    <div className="lan-active-filters" aria-label="Bộ lọc đang áp dụng"><span>Đang lọc: {String(categories.find(c=>c.code===category)?.name??"Tất cả đặc sản")}</span>{query&&<button onClick={()=>setQuery("")}>Từ khóa: {query} ×</button>}{price&&<button onClick={()=>setPrice("")}>Khoảng giá ×</button>}{stock&&<button onClick={()=>setStock(false)}>Còn hàng ×</button>}<button onClick={reset}>Xóa tất cả bộ lọc</button></div>
+    <div className="lan-collection-grid"><aside className="lan-filter lan-frame"><h2>Bộ Lọc Tinh Chọn</h2><label>Tìm đặc sản<input type="search" value={query} onChange={e=>{setQuery(e.target.value);setPage(1);}} placeholder="Mè xửng, trà Huế…"/></label><fieldset><legend>Danh mục sản phẩm</legend><label><input type="radio" name="category" checked={!category} onChange={()=>{setCategory("");setPage(1);}}/>Tất cả đặc sản ({products.length})</label>{categories.map(c=><label key={c.id}><input type="radio" name="category" checked={category===c.code} onChange={()=>{setCategory(String(c.code));setPage(1);}}/>{String(c.name)} ({products.filter(p=>p.category===c.code).length})</label>)}</fieldset><fieldset><legend>Khoảng giá (VNĐ)</legend>{[["","Tất cả mức giá"],["0","Dưới 50.000 đ"],["1","50.000 đ – 100.000 đ"],["2","100.000 đ – 200.000 đ"],["3","Trên 200.000 đ"]].map(([value,label])=><label key={value}><input type="radio" name="price" checked={price===value} onChange={()=>{setPrice(value);setPage(1);}}/>{label}</label>)}</fieldset><fieldset><legend>Trạng thái sản phẩm</legend><label><input type="checkbox" checked={stock} onChange={e=>{setStock(e.target.checked);setPage(1);}}/>Còn hàng tại xưởng</label></fieldset></aside>
+    <div><LoadState loading={loading} error={error} empty={!rows.length} retry={()=>{setLoading(true);setAttempt(attempt+1);}}/>{!loading&&!error&&!rows.length&&<button className="lan-button lan-button-paper" onClick={reset}>Đặt lại bộ lọc</button>}<div className="lan-products">{rows.map(p=><ProductCard key={p.id} product={p} category={String(categories.find(c=>c.code===p.category)?.name??p.category)}/>)}</div>{!loading&&!error&&<Pagination page={current} total={filtered.length} pageSize={9} onChange={setPage}/>}</div></div><CollectionStory/>
+  </main>;
 }
