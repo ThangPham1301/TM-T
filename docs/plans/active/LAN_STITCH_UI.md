@@ -26,11 +26,12 @@ Commands (apps/web): npm ci; npm run lint; npm run typecheck; npm run build. Loc
 - [x] Home
 - [x] Collection
 - [x] Product detail
-- [ ] Admin products
+- [x] Admin products
 - [ ] Admin categories
 
 ## Exact next step
 Implement collection with left filters, grid, sorting and pagination; retain API. Final visual/fixture validation follows the five page checkpoints.
+
 
 
 

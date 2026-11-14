@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, fields, money, type Row, useStore } from "@/lib/store";
 import { WorkspaceNav, Pagination } from "./workspace-nav";
 import { ProductImage } from "./product/product-image";
+import { LanAdminShell } from "./lan-admin-shell";
 
 export function CatalogAdmin({
   section,
@@ -24,6 +25,7 @@ export function CatalogAdmin({
     [fileError, setFileError] = useState(""),
     [removeImage, setRemoveImage] = useState(false);
   const uploaded = useRef<{ file: File; id: string } | null>(null);
+  const [fetching, setFetching] = useState(true), [attempt,setAttempt] = useState(0);
   useEffect(() => {
     let live = true;
     if (state?.user.role === "ADMIN")
@@ -42,11 +44,11 @@ export function CatalogAdmin({
         })
         .catch((e) => {
           if (live) setLoadError(e.message);
-        });
+        }).finally(() => { if(live) setFetching(false); });
     return () => {
       live = false;
     };
-  }, [state]);
+  }, [state, attempt]);
   if (loading) return <main className="store-page">Đang tải quản trị…</main>;
   if (!state)
     return (
@@ -79,6 +81,7 @@ export function CatalogAdmin({
     setFileError("");
     setRemoveImage(false);
     uploaded.current = null;
+    requestAnimationFrame(() => document.getElementById("lan-catalog-editor")?.scrollIntoView({block:"start",behavior:"smooth"}));
   }
   async function imageId() {
     if (!file) return undefined;
@@ -106,19 +109,23 @@ export function CatalogAdmin({
     return intent.id;
   }
   return (
-    <main className="store-page">
+    <LanAdminShell section={section}>
+    <main className={section === "settings" ? "store-page" : "store-page lan-page lan-admin"}>
       <header className="store-heading">
         <span className="eyebrow">Quản trị cửa hàng</span>
         <h1>
           {section === "settings"
             ? "Cấu hình phí giao hàng"
             : isProduct
-              ? "Sản phẩm & tồn kho"
-              : "Danh mục sản phẩm"}
+              ? "Quản lý sản phẩm"
+              : "Quản lý danh mục"}
         </h1>
       </header>
-      <WorkspaceNav admin section={section} />
-      {loadError && <p className="store-error">{loadError}</p>}
+      {section === "settings" ? <WorkspaceNav admin section={section} /> : <>
+        <div className="lan-admin-intro"><p>{isProduct ? "Theo dõi thông tin đặc sản, giá niêm yết, số lượng tồn kho và cấu hình hiển thị cửa hàng." : "Danh mục đang hiển thị sẽ xuất hiện trên trang chủ và Bộ sưu tập theo thứ tự đã cấu hình."}</p><button className="lan-button" disabled={busy} onClick={() => edit({id:"new",active:true})}>+ Thêm {isProduct?"sản phẩm":"danh mục"} mới</button></div>
+        {isProduct && <section className="lan-admin-metrics" aria-label="Tổng quan sản phẩm">{[["Tổng sản phẩm",products.length],["Đang kinh doanh",products.filter(p=>p.active).length],["Tạm ẩn",products.filter(p=>!p.active).length]].map(([title,count])=><div className="lan-frame" key={title}><small>{title}</small><strong>{count}</strong></div>)}</section>}
+      </>}
+      {loadError && <div className="store-error" role="alert"><p>{loadError}</p><button className="lan-button" onClick={()=>{setFetching(true);setAttempt(attempt+1);}}>Thử lại</button></div>}
       {section === "settings" ? (
         shipping && (
           <section className="store-card">
@@ -187,12 +194,6 @@ export function CatalogAdmin({
           <section className="store-card">
             <div className="store-list-heading">
               <h2>{isProduct ? "Danh sách sản phẩm" : "Danh sách danh mục"}</h2>
-              <button
-                disabled={busy}
-                onClick={() => edit({ id: "new", active: true })}
-              >
-                + Thêm {isProduct ? "sản phẩm" : "danh mục"}
-              </button>
             </div>
             <div className="store-filters">
               <label>
@@ -240,33 +241,38 @@ export function CatalogAdmin({
                 </label>
               )}
             </div>
-            {!rows.length && <p>Không có kết quả phù hợp.</p>}
+            {fetching && <p role="status">Đang tải danh sách…</p>}
+            {!fetching && !loadError && !rows.length && <p>Không có kết quả phù hợp.</p>}
+            <div className="lan-table-scroll" tabIndex={0} role="region" aria-label={isProduct?"Bảng sản phẩm":"Bảng danh mục"}>
+            <table className="lan-admin-table"><thead><tr>
+              {!isProduct&&<th scope="col">Thứ tự</th>}<th scope="col">Ảnh</th><th scope="col">{isProduct?"Tên sản phẩm & Phân loại":"Tên danh mục"}</th><th scope="col">{isProduct?"Mã định danh / Slug":"Mã danh mục (Slug)"}</th><th scope="col">{isProduct?"Danh mục":"Mô tả tóm tắt"}</th><th scope="col">{isProduct?"Giá niêm yết":"Số sản phẩm"}</th>{isProduct&&<th scope="col">Số lượng tồn kho</th>}<th scope="col">Trạng thái</th><th scope="col">Thao tác</th>
+            </tr></thead><tbody>
             {rows.map((r) => (
-              <article className="store-management-row" key={r.id}>
+              <tr key={r.id}>
+                {!isProduct&&<td>{Number(r.sortOrder??0)}</td>}
+                <td>
                 <ProductImage
                   src={String(r.image)}
                   alt={String(r.name)}
                   width={100}
                   height={85}
-                />
-                <div>
+                /></td>
+                <td>
                   <strong>{String(r.name)}</strong>
-                  <p>
-                    {String(r.slug ?? r.code)} ·{" "}
-                    {r.active ? "Hiển thị" : "Đã ẩn"}
-                  </p>
-                  <small>
-                    {isProduct
-                      ? `${money(r.price)} · Tồn ${r.stock}`
-                      : `Thứ tự ${r.sortOrder}`}
-                  </small>
-                </div>
-                <div className="store-row-actions">
-                  <button disabled={busy} onClick={() => edit(r)}>
+                  {isProduct&&<p>{String(r.description??"")}</p>}
+                </td>
+                <td><code>{String(r.slug??r.code)}</code></td>
+                <td>{isProduct?String(categories.find(c=>c.code===r.category)?.name??r.category):String(r.description??"")}</td>
+                <td>{isProduct?<strong className="lan-table-price">{money(r.price)}</strong>:products.filter(p=>p.category===r.code).length}</td>
+                {isProduct&&<td>{Number(r.stock)}</td>}
+                <td><span className={`lan-admin-status ${r.active?"is-active":""}`}>{r.active?"Đang hiển thị":"Tạm ẩn"}</span></td>
+                <td><div className="store-row-actions">
+                  <button disabled={busy} aria-label={`Sửa ${r.name}`} onClick={() => edit(r)}>
                     Sửa
                   </button>
                   <button
                     disabled={busy}
+                    aria-label={`${r.active?"Ẩn":"Hiện"} ${r.name}`}
                     onClick={() => {
                       if (
                         r.active &&
@@ -290,6 +296,7 @@ export function CatalogAdmin({
                   <button
                     disabled={busy}
                     className="store-danger"
+                    aria-label={`Xóa ${r.name}`}
                     onClick={() => {
                       if (
                         !window.confirm(
@@ -309,9 +316,10 @@ export function CatalogAdmin({
                   >
                     Xóa
                   </button>
-                </div>
-              </article>
+                </div></td>
+              </tr>
             ))}
+            </tbody></table></div>
             <Pagination
               page={safePage}
               total={matches.length}
@@ -320,7 +328,7 @@ export function CatalogAdmin({
             />
           </section>
           {selected && (
-            <section className="store-card store-detail">
+            <section className="store-card store-detail lan-editor" id="lan-catalog-editor" aria-label={isProduct?"Chỉnh sửa sản phẩm":"Chỉnh sửa danh mục"}>
               <button className="store-close" onClick={() => setSelected(null)}>
                 Đóng ×
               </button>
@@ -357,156 +365,31 @@ export function CatalogAdmin({
                   });
                 }}
               >
-                <label>
-                  Tên
-                  <input
-                    name="name"
-                    defaultValue={String(selected.name ?? "")}
-                    required
-                    maxLength={150}
-                  />
-                </label>
-                <label>
-                  {isProduct ? "Slug đường dẫn" : "Mã danh mục"}
-                  <input
-                    name={isProduct ? "slug" : "code"}
-                    defaultValue={String(selected.slug ?? selected.code ?? "")}
-                    required
-                    pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                    maxLength={120}
-                  />
-                </label>
-                {isProduct ? (
-                  <>
-                    <label>
-                      Danh mục
-                      <select
-                        name="category"
-                        defaultValue={String(selected.category ?? "")}
-                        required
-                      >
-                        <option value="" disabled>
-                          Chọn danh mục đang hoạt động
-                        </option>
-                        {categories.map((c) => (
-                          <option
-                            key={c.id}
-                            value={String(c.code)}
-                            disabled={!c.active}
-                          >
-                            {String(c.name)}
-                            {!c.active ? " (đã ẩn)" : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      Giá VND
-                      <input
-                        name="price"
-                        type="number"
-                        min={1}
-                        max={10000000}
-                        defaultValue={Number(selected.price ?? 85000)}
-                        required
-                      />
-                    </label>
-                    <label>
-                      Tồn kho
-                      <input
-                        name="stock"
-                        type="number"
-                        min={0}
-                        max={1000000}
-                        defaultValue={Number(selected.stock ?? 0)}
-                        required
-                      />
-                    </label>
-                  </>
-                ) : (
-                  <label>
-                    Thứ tự hiển thị
-                    <input
-                      name="sortOrder"
-                      type="number"
-                      min={0}
-                      max={10000}
-                      defaultValue={Number(selected.sortOrder ?? 0)}
-                      required
-                    />
-                  </label>
-                )}
-                <label>
-                  Mô tả
-                  <textarea
-                    name="description"
-                    defaultValue={String(selected.description ?? "")}
-                    required={isProduct}
-                    maxLength={isProduct ? 4000 : 2000}
-                  />
-                </label>
-                <label className="store-check">
-                  <input
-                    name="active"
-                    type="checkbox"
-                    defaultChecked={Boolean(selected.active)}
-                  />
-                  Hiển thị trên cửa hàng
-                </label>
-                {!removeImage && selected.image != null && (
-                  <ProductImage
-                    src={String(selected.image)}
-                    alt="Ảnh hiện tại"
-                    width={180}
-                    height={140}
-                  />
-                )}
-                <label>
-                  Upload ảnh thay thế (PNG/JPEG, tối đa 5 MB)
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0] ?? null;
-                      uploaded.current = null;
-                      if (
-                        f &&
-                        (f.size > 5 * 1024 * 1024 ||
-                          !["image/png", "image/jpeg"].includes(f.type))
-                      ) {
-                        setFileError("Chọn PNG/JPEG tối đa 5 MB.");
-                        e.target.value = "";
-                        setFile(null);
-                      } else {
-                        setFileError("");
-                        setFile(f);
-                        setRemoveImage(false);
-                      }
-                    }}
-                  />
-                </label>
-                {fileError && <p className="store-error">{fileError}</p>}
-                {file && <p>Ảnh đã chọn: {file.name}</p>}
-                <label className="store-check">
-                  <input
-                    type="checkbox"
-                    checked={removeImage}
-                    onChange={(e) => {
-                      setRemoveImage(e.target.checked);
-                      setFile(null);
-                      uploaded.current = null;
-                    }}
-                  />
-                  Gỡ ảnh hiện tại và dùng ảnh mặc định
-                </label>
-                <button disabled={busy || Boolean(fileError)}>
-                  Lưu {isProduct ? "sản phẩm" : "danh mục"}
-                </button>
+                <fieldset className="lan-editor-section"><legend>01 — Thông tin cơ bản</legend>
+                  <label>Tên {isProduct?"sản phẩm":"danh mục"} *<input name="name" defaultValue={String(selected.name??"")} required maxLength={150}/></label>
+                  <label>{isProduct?"Slug đường dẫn":"Mã danh mục"} *<input name={isProduct?"slug":"code"} defaultValue={String(selected.slug??selected.code??"")} required pattern="[a-z0-9]+(-[a-z0-9]+)*" maxLength={120}/></label>
+                  {isProduct&&<label>Danh mục *<select name="category" defaultValue={String(selected.category??"")} required><option value="" disabled>Chọn danh mục đang hoạt động</option>{categories.map(c=><option key={c.id} value={String(c.code)} disabled={!c.active}>{String(c.name)}{!c.active?" (đã ẩn)":""}</option>)}</select></label>}
+                  <label className="lan-full-width">Mô tả{isProduct?" *":""}<textarea name="description" defaultValue={String(selected.description??"")} required={isProduct} maxLength={isProduct?4000:2000} rows={5}/></label>
+                </fieldset>
+                <fieldset className="lan-editor-section"><legend>02 — {isProduct?"Thông tin bán hàng":"Thứ tự & Hiển thị"}</legend>
+                  {isProduct?<><label>Giá niêm yết (VND) *<input name="price" type="number" min={1} max={10000000} defaultValue={Number(selected.price??85000)} required/></label><label>Số lượng tồn kho *<input name="stock" type="number" min={0} max={1000000} defaultValue={Number(selected.stock??0)} required/></label></>:<label>Thứ tự hiển thị<input name="sortOrder" type="number" min={0} max={10000} defaultValue={Number(selected.sortOrder??0)} required/></label>}
+                  <label className="store-check lan-full-width"><input name="active" type="checkbox" defaultChecked={Boolean(selected.active)}/>Hiển thị trên cửa hàng</label>
+                </fieldset>
+                <fieldset className="lan-editor-section"><legend>03 — Hình ảnh {isProduct?"sản phẩm":"danh mục"}</legend>
+                  {!removeImage&&selected.image!=null&&<ProductImage src={String(selected.image)} alt="Ảnh hiện tại" width={180} height={180}/>}
+                  <label>Upload ảnh thay thế (PNG/JPEG, tối đa 5 MB)<input type="file" accept="image/png,image/jpeg" onChange={e=>{const f=e.target.files?.[0]??null;uploaded.current=null;if(f&&(f.size>5*1024*1024||!["image/png","image/jpeg"].includes(f.type))){setFileError("Chọn PNG/JPEG tối đa 5 MB.");e.target.value="";setFile(null);}else{setFileError("");setFile(f);setRemoveImage(false);}}}/></label>
+                  {fileError&&<p className="store-error" role="alert">{fileError}</p>}{file&&<p>Ảnh đã chọn: {file.name}</p>}
+                  <label className="store-check lan-full-width"><input type="checkbox" checked={removeImage} onChange={e=>{setRemoveImage(e.target.checked);setFile(null);uploaded.current=null;}}/>Gỡ ảnh hiện tại và dùng ảnh mặc định</label>
+                  {isProduct&&<div className="lan-gallery-proposal lan-full-width"><h3>Thư viện ảnh sản phẩm</h3><p>Đề xuất trong mẫu Stitch — chưa hỗ trợ lưu nhiều ảnh. Hiện mỗi sản phẩm sử dụng một ảnh chính.</p><div><ProductImage src={String(selected.image??"")} alt="Ảnh chính" width={90} height={90}/><button type="button" disabled>+ Thêm ảnh phụ</button></div></div>}
+                </fieldset>
+                <fieldset className="lan-editor-section"><legend>04 — Lưu & Xác nhận dữ liệu</legend><p className="lan-full-width">Kiểm tra các thông tin bắt buộc trước khi lưu.</p><div className="lan-editor-actions lan-full-width"><button className="lan-button lan-button-paper" type="button" onClick={()=>setSelected(null)}>Hủy thay đổi</button><button className="lan-button" disabled={busy||Boolean(fileError)}>Lưu {isProduct?"sản phẩm":"danh mục"}</button></div></fieldset>
               </form>
             </section>
           )}
         </>
       )}
     </main>
+    </LanAdminShell>
   );
 }
+

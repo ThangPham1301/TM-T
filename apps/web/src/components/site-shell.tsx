@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { api, type Row } from "@/lib/store";
 import { useEffect, useState } from "react";
 
 export function SiteHeader() {
   const { state, busy, run, logout } = useStore();
+  const pathname = usePathname();
+  if (["/admin/products", "/admin/categories"].includes(pathname)) return null;
   return (
     <header className="site-header">
       <div className="utility-bar">
@@ -79,12 +82,14 @@ export function SiteHeader() {
   );
 }
 export function SiteFooter() {
+  const pathname = usePathname();
   const [categories, setCategories] = useState<Row[]>([]);
   useEffect(() => {
     void api("categories")
       .then(setCategories)
       .catch(() => setCategories([]));
   }, []);
+  if (["/admin/products", "/admin/categories"].includes(pathname)) return null;
   return (
     <footer className="site-footer">
       <div className="footer-grid">
