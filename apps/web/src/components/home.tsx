@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import styles from "./home-identity.module.css";
 import { useEffect, useState } from "react";
 import { api, money, type Row, useStore } from "@/lib/store";
 import { ProductImage } from "./product/product-image";
@@ -20,13 +21,8 @@ export function HomeExperience() {
       .catch((e) => setError(e.message));
   }, []);
   return (
-    <main className="heritage-home">
-      <section
-        className="heritage-hero"
-        style={{
-          backgroundImage: `linear-gradient(90deg,rgba(60,34,20,.98),rgba(76,43,24,.86) 47%,rgba(63,35,20,.28)),url(${HERO})`,
-        }}
-      >
+    <main className={`heritage-home ${styles.preview}`}>
+      <section className="heritage-hero">
         <div className="heritage-shell hero-grid">
           <div className="hero-copy">
             <span className="heritage-pill">{customer ? `Chào ${customer.name}` : "Đặc sản và quà biếu từ Huế"}</span>
@@ -34,8 +30,8 @@ export function HomeExperience() {
               Món quà từ Huế<em>Gửi người thương</em>
             </h1>
             <p>
-              Những thức quà mang hương vị mè rang, trà sen và bánh mứt truyền
-              thống. Chọn món quà gửi trao tình cảm, lưu giữ phong vị Huế trong
+              Mè xửng, trà và đặc sản Huế được chuẩn bị cho mỗi ngày và dịp
+              biếu tặng. Chọn món quà gửi trao tình cảm, lưu giữ phong vị Huế trong
               từng khoảnh khắc.
             </p>
             <div className="hero-buttons">
@@ -45,7 +41,7 @@ export function HomeExperience() {
             <dl className="hero-metrics">
               <div>
                 <dt>Tinh tuyển</dt>
-                <dd>Bánh mứt và đặc sản</dd>
+                <dd>Mè xửng, trà và đặc sản</dd>
               </div>
               <div>
                 <dt>Đồng hành</dt>
@@ -64,7 +60,7 @@ export function HomeExperience() {
                 priority
                 src={String(products[0]?.image ?? HERO)}
                 alt="Bộ sưu tập Gói Huế"
-                sizes="(max-width:760px) 100vw,360px"
+                sizes="(max-width:760px) 100vw,55vw"
               />
             </div>
             <header>
@@ -74,7 +70,7 @@ export function HomeExperience() {
               {products[0] && <b>{money(products[0].price)}</b>}
             </header>
             <p>
-              Bộ sưu tập bánh mứt, mè xửng và trà dành cho bạn và người thương.
+              Mè xửng, trà và đặc sản Huế dành cho bạn và người thương.
             </p>
             <Link href="/products">Khám Phá Ngay →</Link>
           </article>
