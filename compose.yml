@@ -4,6 +4,9 @@ services:
     build: ./apps/web
     environment:
       API_UPSTREAM_URL: http://api:8088/api/v1
+      # Extra browser origins allowed to call the store API (e.g. the public
+      # demo tunnel host). Localhost origins are always allowed.
+      APP_PUBLIC_ORIGINS: https://tmt-web.npanhbao.dev
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
@@ -32,7 +35,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?Run setup.ps1 first}
       ADMIN_EMAIL: ${ADMIN_EMAIL:?Run setup.ps1 first}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Run setup.ps1 first}
-      APP_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      APP_ORIGINS: http://localhost:3000,http://127.0.0.1:3000,https://tmt-web.npanhbao.dev
       # Demo VietQR checkout: receiving account shown in the QR payload and
       # the shared secret that signs payment notifications (IPN). Override in
       # .env for anything beyond a local demo.
@@ -42,6 +45,9 @@ services:
       # Literal on purpose: this Compose version rejects ${...:-...} defaults
       # for this variable. Demo-only secret — change it here if needed.
       APP_IPN_SECRET: demoipnsecret
+      # SePay webhook signing secret (HMAC-SHA256). The value itself lives
+      # only in .env (gitignored); see scripts for the Test-mode setup.
+      APP_SEPAY_SECRET: ${APP_SEPAY_SECRET}
       APP_PAYMENT_TTL_MINUTES: ${APP_PAYMENT_TTL_MINUTES:-15}
       APP_PAYMENT_SWEEP_MS: ${APP_PAYMENT_SWEEP_MS:-60000}
     ports:
