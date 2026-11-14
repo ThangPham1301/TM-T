@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { date, label, money, type Row } from "@/lib/store";
 
@@ -12,17 +12,16 @@ import { date, label, money, type Row } from "@/lib/store";
  */
 export function PaymentPanel({ order }: { order: Row }) {
   const payment = (order.payment ?? null) as Row | null;
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [qrUrl, setQrUrl] = useState("");
   const [remain, setRemain] = useState("");
   const payload = payment ? String(payment.payload ?? "") : "";
   const pStatus = payment ? String(payment.status ?? "") : "";
   const expiresAt = payment ? String(payment.expiresAt ?? "") : "";
   useEffect(() => {
-    if (canvasRef.current && payload && pStatus === "PENDING") {
-      void QRCode.toCanvas(canvasRef.current, payload, {
-        width: 216,
-        margin: 1,
-      });
+    if (payload && pStatus === "PENDING") {
+      // Render as a real <img> (not a canvas) so the QR can be dragged
+      // straight into the SePay simulation tab, which parses the image.
+      void QRCode.toDataURL(payload, { width: 432, margin: 1 }).then(setQrUrl);
     }
   }, [payload, pStatus]);
   useEffect(() => {
@@ -55,12 +54,15 @@ export function PaymentPanel({ order }: { order: Row }) {
       </p>
       {pStatus === "PENDING" && (
         <>
-          <canvas
-            ref={canvasRef}
-            width={216}
-            height={216}
-            aria-label="Mã VietQR của đơn hàng"
-          />
+          {qrUrl && (
+            <img
+              src={qrUrl}
+              width={216}
+              height={216}
+              alt="Mã VietQR của đơn hàng"
+              draggable
+            />
+          )}
           <p>
             Quét bằng ứng dụng ngân hàng: <strong>{money(payment.amount)}</strong>
             <br />
