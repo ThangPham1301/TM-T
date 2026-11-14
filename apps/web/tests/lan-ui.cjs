@@ -45,9 +45,25 @@ async function main(){
  await page.setViewportSize({width:390,height:844});
  await page.screenshot({path:path.join(root,'collection-mobile.png'),fullPage:true});
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
- if(process.env.ALL_PAGES){
-  // Detail/admin checks are added with those page milestones.
- }
+ await page.setViewportSize({width:1440,height:1000});
+ await page.goto('http://127.0.0.1:3000/products/mon-qua-0');
+ await page.getByRole('button',{name:'Thêm vào giỏ hàng',exact:true}).waitFor();
+ await page.getByRole('button',{name:'Tăng số lượng',exact:true}).click();
+ await page.getByRole('button',{name:'Thêm vào giỏ hàng',exact:true}).click();
+ await page.getByText('Đã lưu thông tin.',{exact:true}).waitFor();
+ assert.equal(writes.at(-1).action,'cart-set');assert.equal(writes.at(-1).quantity,2);
+ await page.getByRole('tab',{name:'Thông số & Thành phần',exact:true}).click();
+ assert.match(await page.getByRole('tabpanel').innerText(),/Đang cập nhật/);
+ await page.getByRole('button',{name:'Phóng to ảnh sản phẩm',exact:true}).click();
+ await page.getByRole('dialog').waitFor();await page.keyboard.press('Escape');
+ assert.equal(await page.locator('dialog[open]').count(),0);
+ await page.screenshot({path:path.join(root,'detail-desktop.png'),fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
+ await page.screenshot({path:path.join(root,'detail-mobile.png'),fullPage:true});
+ await page.goto('http://127.0.0.1:3000/products/mon-qua-1');
+ await page.getByRole('button',{name:'Tạm hết hàng',exact:true}).waitFor();
+ assert(await page.getByRole('button',{name:'Tạm hết hàng',exact:true}).isDisabled());
  fail=true;await page.goto('http://127.0.0.1:3000/products');await page.getByRole('button',{name:'Thử lại',exact:true}).waitFor();
  fail=false;await page.getByRole('button',{name:'Thử lại',exact:true}).click();await page.locator('.lan-product').first().waitFor();
  empty=true;await page.reload();await page.getByText('Chưa có sản phẩm phù hợp.',{exact:true}).waitFor();empty=false;
