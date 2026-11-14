@@ -2,6 +2,7 @@ package vn.goihue;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -16,6 +17,10 @@ public class CommerceApi {
     final CatalogService catalog;
     final com.fasterxml.jackson.databind.ObjectMapper json;
     public CommerceApi(PlatformApi app,JdbcTemplate db,CatalogService catalog,com.fasterxml.jackson.databind.ObjectMapper json){this.app=app;this.db=db;this.catalog=catalog;this.json=json;}
+    @Value("${APP_BANK_BIN:970422}") String bankBin;
+    @Value("${APP_BANK_ACCOUNT:012345678901}") String bankAccount;
+    @Value("${APP_BANK_NAME:GOI HUE}") String bankName;
+    @Value("${APP_PAYMENT_TTL_MINUTES:15}") long paymentTtlMinutes;
 
     @PostConstruct void seed() throws Exception {
         if(db.queryForObject("SELECT count(*) FROM records WHERE kind='system' AND data->>'code'='catalog-initialized'",Integer.class)>0)return;
@@ -74,9 +79,11 @@ public class CommerceApi {
                 app.permission(a,"order.create");checkCart(uid,b);var shipping=catalog.shipping();app.require(Boolean.TRUE.equals(shipping.get("enabled")),"Cửa hàng đang tạm ngừng nhận đơn.");catalog.revision(shipping,Map.of("revision",app.number(b,"shippingRevision")));
                 var cart=cartOf(uid);app.require(!cart.isEmpty(),"Giỏ hàng đang trống.");var items=new ArrayList<Map<String,Object>>();long subtotal=0;
                 for(var line:cart){var p=product(app.str(line,"productId"));int qty=app.number(line,"quantity");app.require(catalog.visible(p)&&app.number(p,"stock")>=qty,"Sản phẩm không đủ tồn hoặc đã ngừng bán: "+app.str(p,"name"));app.require(app.number(p,"price")==app.number(line,"price"),"Giá đã thay đổi. Cập nhật giỏ hàng trước khi đặt.");subtotal+=(long)app.number(p,"price")*qty;var item=new LinkedHashMap<String,Object>();item.put("productId",p.get("id"));item.put("name",p.get("name"));item.put("slug",p.get("slug"));item.put("quantity",qty);item.put("price",p.get("price"));items.add(item);p.put("stock",app.number(p,"stock")-qty);p.put("revision",app.number(p,"revision")+1);app.save("product",null,p);}
-                app.require(subtotal<=100_000_000,"Đơn vượt hạn mức 100 triệu đồng.");int fee=catalog.shippingFee(subtotal);var order=new LinkedHashMap<String,Object>();order.put("number","GH-"+UUID.randomUUID().toString().substring(0,8).toUpperCase());order.put("items",items);order.put("subtotal",subtotal);order.put("shippingFee",fee);order.put("shippingRevision",shipping.get("revision"));order.put("total",subtotal+fee);order.put("status","PLACED");order.put("paymentMethod","COD");order.put("paymentStatus","UNPAID");recipient(order,app.str(b,"addressId").isEmpty()?b:app.record(app.str(b,"addressId"),"address",a));order.put("history",new ArrayList<>(List.of(Map.of("at",Instant.now().toString(),"status","PLACED","note","Đã tiếp nhận đơn hàng, thanh toán khi nhận hàng"))));result=app.save("order",uid,order);db.update("DELETE FROM records WHERE owner_id=? AND kind='cart'",uid);
+                app.require(subtotal<=100_000_000,"Đơn vượt hạn mức 100 triệu đồng.");int fee=catalog.shippingFee(subtotal);var order=new LinkedHashMap<String,Object>();order.put("number","GH-"+UUID.randomUUID().toString().substring(0,8).toUpperCase());order.put("items",items);order.put("subtotal",subtotal);order.put("shippingFee",fee);order.put("shippingRevision",shipping.get("revision"));order.put("total",subtotal+fee);order.put("status","PLACED");String method=app.str(b,"paymentMethod");if(method.isEmpty())method="COD";app.require(Set.of("COD","VIETQR").contains(method),"Phương thức thanh toán không được hỗ trợ.");order.put("paymentMethod",method);order.put("paymentStatus","UNPAID");recipient(order,app.str(b,"addressId").isEmpty()?b:app.record(app.str(b,"addressId"),"address",a));String firstNote;
+                if(method.equals("VIETQR")){var payment=new LinkedHashMap<String,Object>();long total=subtotal+fee;payment.put("method","VIETQR");payment.put("amount",total);payment.put("content",app.str(order,"number"));payment.put("bankBin",bankBin);payment.put("bankAccount",bankAccount);payment.put("bankName",bankName);payment.put("payload",VietQr.payload(bankBin,bankAccount,bankName,total,app.str(order,"number")));payment.put("status","PENDING");payment.put("expiresAt",Instant.now().plusSeconds(paymentTtlMinutes*60L).toString());order.put("payment",payment);firstNote="Đã tiếp nhận đơn hàng, chờ thanh toán VietQR trong "+paymentTtlMinutes+" phút.";}else firstNote="Đã tiếp nhận đơn hàng, thanh toán khi nhận hàng";
+                order.put("history",new ArrayList<>(List.of(Map.of("at",Instant.now().toString(),"status","PLACED","note",firstNote))));result=app.save("order",uid,order);db.update("DELETE FROM records WHERE owner_id=? AND kind='cart'",uid);
             }
-            case "order-cancel","order-status","order-paid","order-recipient" -> {
+            case "order-cancel","order-status","order-paid","order-recipient","payment-resolve" -> {
                 var order=app.record(app.text(b,"id",50),"order",a);catalog.revision(order,b);String status=app.str(order,"status"),note=app.text(b,"note",2000);
                 if(action.equals("order-cancel")){
                     app.require(Set.of("PLACED","CONFIRMED").contains(status),"Đơn không còn cho phép hủy trực tiếp.");app.require(!app.str(order,"paymentStatus").equals("PAID"),"Đơn đã thu tiền cần liên hệ hỗ trợ để xử lý hoàn.");
@@ -85,7 +92,14 @@ public class CommerceApi {
                     app.require(Set.of("PLACED","CONFIRMED").contains(status),"Chỉ sửa thông tin nhận trước khi đóng gói.");recipient(order,b);
                 }else{
                     app.permission(a,"order.manage");
-                    if(action.equals("order-paid")){app.require(!status.equals("CANCELLED")&&!app.str(order,"paymentStatus").equals("PAID"),"Không thể ghi nhận thu tiền.");order.put("paymentStatus","PAID");order.put("paymentReference",app.text(b,"reference",200));order.put("paidAt",Instant.now().toString());}
+                    if(action.equals("payment-resolve")){
+                        app.require(app.str(order,"paymentStatus").equals("REVIEW"),"Đơn không ở trạng thái đối soát thanh toán.");
+                        String resolution=app.text(b,"resolution",30);var payment=(Map<String,Object>)order.get("payment");
+                        if(resolution.equals("REFUNDED")){order.put("paymentStatus","REFUNDED");if(payment!=null)payment.put("status","REFUNDED");order.put("paymentReference",app.text(b,"reference",200));}
+                        else if(resolution.equals("PAID_RECORDED")){app.require(!status.equals("CANCELLED"),"Đơn đã hủy; chỉ có thể xử lý hoàn tiền.");order.put("paymentStatus","PAID");if(payment!=null)payment.put("status","RESOLVED_PAID");order.put("paymentReference",app.text(b,"reference",200));order.put("paidAt",Instant.now().toString());}
+                        else throw new PlatformApi.Problem(422,"Cách xử lý đối soát không hợp lệ.");
+                    }
+                    else if(action.equals("order-paid")){app.require(!status.equals("CANCELLED")&&!app.str(order,"paymentStatus").equals("PAID"),"Không thể ghi nhận thu tiền.");order.put("paymentStatus","PAID");order.put("paymentReference",app.text(b,"reference",200));order.put("paidAt",Instant.now().toString());var payment=(Map<String,Object>)order.get("payment");if(payment!=null&&app.str(payment,"status").equals("REVIEW"))payment.put("status","RESOLVED_PAID");}
                     else{String next=app.text(b,"status",40);var transitions=Map.of("PLACED","CONFIRMED","CONFIRMED","PACKED","PACKED","SHIPPED","SHIPPED","DELIVERED");app.require(next.equals(transitions.get(status)),"Chuyển trạng thái đơn không hợp lệ.");if(next.equals("SHIPPED"))order.put("trackingReference",app.text(b,"reference",200));if(next.equals("DELIVERED"))order.put("deliveredAt",Instant.now().toString());order.put("status",next);}
                 }
                 ((List<Object>)order.get("history")).add(Map.of("at",Instant.now().toString(),"status",app.str(order,"status"),"note",note,"action",action));order.put("revision",app.number(order,"revision")+1);result=app.save("order",app.owner(app.str(order,"id")),order);

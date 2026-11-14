@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AddressBook, PasswordSettings } from "./account-settings";
+import { PaymentPanel } from "./payment-panel";
 import { WorkspaceNav, Pagination } from "./workspace-nav";
 import {
   api,
@@ -464,7 +465,7 @@ export function Account({
                   {money(current.shippingFee)} ·{" "}
                   <strong>Tổng {money(current.total)}</strong>
                 </p>
-                <p>Thanh toán COD: {label(current.paymentStatus)}</p>
+                <PaymentPanel order={current} />
                 {Boolean(current.paymentReference) && (
                   <p>
                     Biên nhận thu tiền: {String(current.paymentReference)} ·{" "}
@@ -890,6 +891,7 @@ function OrderAction({
     } as Record<string, string>
   )[String(row.status)];
   const actions = [
+    ...(row.paymentStatus === "REVIEW" ? ["payment-resolve"] : []),
     ...(next ? ["order-status"] : []),
     ...(row.paymentStatus !== "PAID" && row.status !== "CANCELLED"
       ? ["order-paid"]
@@ -903,11 +905,13 @@ function OrderAction({
   if (!actions.length)
     return <p>Không còn thao tác xử lý trực tiếp cho đơn này.</p>;
   const title =
-    action === "order-status"
-      ? `Chuyển sang ${label(next)}`
-      : action === "order-paid"
-        ? "Xác nhận đã thu tiền"
-        : "Hủy đơn đủ điều kiện";
+    action === "payment-resolve"
+      ? "Xử lý đối soát thanh toán (REVIEW)"
+      : action === "order-status"
+        ? `Chuyển sang ${label(next)}`
+        : action === "order-paid"
+          ? "Xác nhận đã thu tiền"
+          : "Hủy đơn đủ điều kiện";
   return (
     <form
       className="store-form"
@@ -927,19 +931,39 @@ function OrderAction({
         >
           {actions.map((a) => (
             <option key={a} value={a}>
-              {a === "order-status"
-                ? `Chuyển sang ${label(next)}`
-                : a === "order-paid"
-                  ? "Xác nhận đã thu tiền"
-                  : "Hủy đơn"}
+              {a === "payment-resolve"
+                ? "Đối soát thanh toán (REVIEW)"
+                : a === "order-status"
+                  ? `Chuyển sang ${label(next)}`
+                  : a === "order-paid"
+                    ? "Xác nhận đã thu tiền"
+                    : "Hủy đơn"}
             </option>
           ))}
         </select>
       </label>
+      {action === "payment-resolve" && (
+        <label>
+          Kết quả đối soát
+          <select name="resolution">
+            <option value="PAID_RECORDED">
+              Ghi nhận đã thu tiền — giữ đơn, tiếp tục xử lý
+            </option>
+            <option value="REFUNDED">
+              Hoàn tiền cho khách (qua kênh ngoài hệ thống)
+            </option>
+          </select>
+        </label>
+      )}
       {(action === "order-paid" ||
+        action === "payment-resolve" ||
         (action === "order-status" && next === "SHIPPED")) && (
         <label>
-          {action === "order-paid" ? "Mã chứng từ thu tiền" : "Mã vận đơn"}
+          {action === "order-paid"
+            ? "Mã chứng từ thu tiền"
+            : action === "payment-resolve"
+              ? "Mã chứng từ xử lý (biên nhận hoàn / đối soát)"
+              : "Mã vận đơn"}
           <input name="reference" required maxLength={200} />
         </label>
       )}

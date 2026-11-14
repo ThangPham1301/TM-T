@@ -295,7 +295,17 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
                     />
                   </label>
                   </>}
-                  <div className="store-payment"><strong>Thanh toán khi nhận hàng</strong><p>Trả tiền mặt khi đơn được giao (COD).</p></div>
+                  <fieldset className="store-payment">
+                    <legend><strong>Phương thức thanh toán</strong></legend>
+                    <label>
+                      <input type="radio" name="paymentMethod" value="COD" defaultChecked />
+                      Thanh toán khi nhận hàng (COD) — trả tiền mặt khi đơn được giao.
+                    </label>
+                    <label>
+                      <input type="radio" name="paymentMethod" value="VIETQR" />
+                      Chuyển khoản VietQR — quét mã ngay sau khi đặt; hệ thống chỉ ghi nhận khi thông báo thanh toán (IPN) đã xác minh khớp đúng số tiền (hạn 15 phút).
+                    </label>
+                  </fieldset>
                   <p className="store-subtle">
                     <Link href="/privacy-policy">Chính sách bảo mật</Link> ·{" "}
                     <Link href="/return-policy">Chính sách đổi trả</Link>

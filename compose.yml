@@ -33,6 +33,17 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:?Run setup.ps1 first}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Run setup.ps1 first}
       APP_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      # Demo VietQR checkout: receiving account shown in the QR payload and
+      # the shared secret that signs payment notifications (IPN). Override in
+      # .env for anything beyond a local demo.
+      APP_BANK_BIN: ${APP_BANK_BIN:-970422}
+      APP_BANK_ACCOUNT: ${APP_BANK_ACCOUNT:-012345678901}
+      APP_BANK_NAME: ${APP_BANK_NAME:-GOI HUE}
+      # Literal on purpose: this Compose version rejects ${...:-...} defaults
+      # for this variable. Demo-only secret — change it here if needed.
+      APP_IPN_SECRET: demoipnsecret
+      APP_PAYMENT_TTL_MINUTES: ${APP_PAYMENT_TTL_MINUTES:-15}
+      APP_PAYMENT_SWEEP_MS: ${APP_PAYMENT_SWEEP_MS:-60000}
     ports:
       - "127.0.0.1:8088:8088"
     volumes:
