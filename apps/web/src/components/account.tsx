@@ -2,6 +2,12 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AddressBook, PasswordSettings } from "./account-settings";
+import { AccountProfile } from "./account-profile";
+import { AccountAddresses } from "./account-addresses";
+import { AccountSecurity } from "./account-security";
+import { AccountPrivacy } from "./account-privacy";
+import { AccountOrders } from "./account-orders";
+import { accountNavigation } from "@/shared/layout/navigation";
 import { PaymentPanel } from "./payment-panel";
 import { OrderBadges, OrderTimeline } from "./order-presentation";
 import { ProductImage } from "./product/product-image";
@@ -10,6 +16,7 @@ import { WorkspaceNav, Pagination } from "./workspace-nav";
 import {
   api,
   fields,
+  cleanText,
   date,
   label,
   money,
@@ -24,7 +31,7 @@ export function Account({
   section?: string;
   admin?: boolean;
 }) {
-  const { state, loading, busy, run, mutate } = useStore(),
+  const { state, loading, busy, run, mutate, logout } = useStore(),
     [selected, setSelected] = useState<Row | null>(null),
     [files, setFiles] = useState<File[]>([]),
     [supplementFiles, setSupplementFiles] = useState<File[]>([]),
@@ -99,98 +106,690 @@ export function Account({
     }
     return ids;
   }
+
+  const detailPanel = current ? (
+    <section className="store-card store-detail">
+      <button className="store-close" onClick={() => setSelected(null)}>
+        Đóng chi tiết ×
+      </button>
+      <>
+        <h2>
+          {current.type
+            ? label(current.type)
+            : String(current.number ?? current.orderNumber)}
+        </h2>
+        {current.items != null ? (
+          <OrderBadges order={current} />
+        ) : (
+          <p className="store-badge">{label(current.status)}</p>
+        )}
+        <p>Mã hồ sơ: {current.id}</p>
+        {current.items != null ? (
+          <>
+            <OrderTimeline order={current} />
+            <p>
+              {cleanText(String(current.recipient))} · {String(current.phone)}
+            </p>
+            <p>{cleanText(String(current.address))}</p>
+            {(current.items as Row[]).map((line, i) => (
+              <p key={i} className={styles.detailItem}>
+                <ProductImage
+                  src={String(line.image ?? "")}
+                  alt=""
+                  width={44}
+                  height={44}
+                  className={styles.thumb}
+                />
+                <span>
+                  {line.slug ? (
+                    <Link
+                      href={`/products/${line.slug}`}
+                      style={{ color: "inherit", textDecoration: "underline" }}
+                    >
+                      {cleanText(String(line.name))}
+                    </Link>
+                  ) : (
+                    cleanText(String(line.name))
+                  )}{" "}
+                  · {String(line.quantity)} × {money(line.price)}
+                </span>
+              </p>
+            ))}
+            <p>
+              Tiền hàng {money(current.subtotal)} · Giao hàng{" "}
+              {money(current.shippingFee)} ·{" "}
+              <strong>Tổng {money(current.total)}</strong>
+            </p>
+            <PaymentPanel order={current} />
+            {Boolean(current.paymentReference) && (
+              <p>
+                Biên nhận thu tiền: {String(current.paymentReference)} ·{" "}
+                {date(current.paidAt)}
+              </p>
+            )}
+            {Boolean(current.deliveredAt) && (
+              <p>Giao thành công lúc: {date(current.deliveredAt)}</p>
+            )}
+            {Boolean(current.trackingReference) && (
+              <p>Vận đơn: {String(current.trackingReference)}</p>
+            )}
+            {["PLACED", "CONFIRMED"].includes(String(current.status)) && (
+              <details>
+                <summary>
+                  Sửa thông tin nhận hàng trước khi đóng gói
+                </summary>
+                <form
+                  key={`recipient-${current.revision}`}
+                  className="store-form"
+                  onSubmit={(e) => {
+                    const b = fields(e);
+                    if (
+                      !window.confirm(
+                        "Lưu thông tin nhận hàng mới cho đơn này?",
+                      )
+                    )
+                      return;
+                    void run(async () => {
+                      await mutate("commerce", "order-recipient", {
+                        ...b,
+                        id: current.id,
+                        revision: current.revision,
+                      });
+                    });
+                  }}
+                >
+                  <label>
+                    Người nhận
+                    <input
+                      name="recipient"
+                      defaultValue={String(current.recipient)}
+                      required
+                      maxLength={100}
+                    />
+                  </label>
+                  <label>
+                    Điện thoại
+                    <input
+                      name="phone"
+                      defaultValue={String(current.phone)}
+                      required
+                      maxLength={30}
+                    />
+                  </label>
+                  <label>
+                    Địa chỉ nhận hàng
+                    <textarea
+                      name="address"
+                      defaultValue={String(current.address)}
+                      required
+                      maxLength={400}
+                    />
+                  </label>
+                  <button disabled={busy}>Cập nhật địa chỉ nhận</button>
+                </form>
+              </details>
+            )}
+            {admin && (
+              <OrderAction
+                key={current.id + String(current.revision)}
+                row={current}
+                onSave={(b) =>
+                  void run(async () => {
+                    await mutate("commerce", "order-status", {
+                      ...b,
+                      id: current.id,
+                      revision: current.revision,
+                    });
+                  })
+                }
+                busy={busy}
+              />
+            )}
+            {!admin &&
+              String(current.status) === "DELIVERED" &&
+              (() => {
+                const deliveredAt = current.deliveredAt ? new Date(String(current.deliveredAt)).getTime() : 0;
+                const isAfter7Days = deliveredAt > 0 && Date.now() - deliveredAt > 7 * 24 * 3600 * 1000;
+                return (
+                  <form
+                    className="store-form"
+                    onSubmit={(e) => {
+                      const b = fields(e);
+                      const validLines = returnLines.filter((l) => l.productId && Number(b[`quantity_${l.id}`]) > 0);
+                      if (validLines.length === 0) {
+                        alert("Vui lòng chọn ít nhất một sản phẩm và nhập số lượng hợp lệ.");
+                        return;
+                      }
+                      if (
+                        !window.confirm(
+                          `Gửi yêu cầu đổi trả cho ${validLines.length} dòng hàng?`,
+                        )
+                      )
+                        return;
+                      void run(async () => {
+                        const uploadedEvidence = await upload(files);
+                        const items = validLines.map((l) => ({
+                          lineId: l.productId,
+                          quantity: Number(b[`quantity_${l.id}`]),
+                          reason: b[`reason_${l.id}`] ?? l.reason,
+                          resolution: b[`resolution_${l.id}`] ?? "REFUND",
+                          description: b[`description_${l.id}`] ?? "",
+                        }));
+                        await mutate("command", "return-submit", {
+                          orderId: current.id,
+                          evidenceIds: uploadedEvidence,
+                          items,
+                        });
+                        setFiles([]);
+                        setReturnLines([{ id: 0, productId: "", reason: "DAMAGED" }]);
+                      });
+                    }}
+                  >
+                    <h3>Yêu cầu đổi hoặc trả hàng</h3>
+                    <p className="store-subtle">
+                      Chính sách dự thảo: tiếp nhận trong 7 ngày từ khi giao thành công. Sau 7 ngày, hệ thống vẫn tiếp nhận nếu là lỗi chất lượng hoặc an toàn thực phẩm.
+                    </p>
+                    {returnLines.map((line, idx) => {
+                      const item = orderItems.find((it) => String(it.productId) === line.productId) ?? orderItems[0];
+                      const availableProducts = orderItems.filter(
+                        (it) => String(it.productId) === line.productId || !selectedProducts.includes(String(it.productId)),
+                      );
+                      return (
+                        <div key={line.id} className="store-return-line">
+                          {returnLines.length > 1 && (
+                            <div className="store-return-line-header">
+                              <strong>Dòng hàng #{idx + 1}</strong>
+                              <button
+                                type="button"
+                                className="store-btn-text"
+                                onClick={() => setReturnLines((prev) => prev.filter((l) => l.id !== line.id))}
+                              >
+                                Xóa dòng này ×
+                              </button>
+                            </div>
+                          )}
+                          <label>
+                            Sản phẩm
+                            <select
+                              name={`productId_${line.id}`}
+                              value={line.productId || String(item?.productId ?? "")}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setReturnLines((prev) => prev.map((l) => l.id === line.id ? { ...l, productId: val } : l));
+                              }}
+                            >
+                              {availableProducts.map((it) => (
+                                <option key={String(it.productId)} value={String(it.productId)}>
+                                  {String(it.name)} (đã mua: {String(it.quantity)})
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            Số lượng yêu cầu
+                            <input
+                              type="number"
+                              name={`quantity_${line.id}`}
+                              min={1}
+                              max={Number(item?.quantity ?? 1)}
+                              defaultValue={1}
+                              required
+                            />
+                          </label>
+                          <label>
+                            Lý do
+                            <select
+                              name={`reason_${line.id}`}
+                              value={line.reason}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setReturnLines((prev) => prev.map((l) => l.id === line.id ? { ...l, reason: val } : l));
+                              }}
+                            >
+                              {([
+                                ...(!isAfter7Days ? [
+                                  ["WRONG_ITEM", "Giao sai sản phẩm"],
+                                  ["MISSING_ITEM", "Giao thiếu hàng"],
+                                  ["DAMAGED", "Hư hỏng do vận chuyển"],
+                                  ["NOT_RECEIVED", "Chưa nhận được hàng"],
+                                  ["CHANGE_OF_MIND", "Thay đổi ý định"],
+                                ] : []),
+                                ["UNSAFE", "Nghi ngờ không an toàn thực phẩm"],
+                                ["QUALITY", "Chất lượng không đảm bảo"],
+                              ] as [string, string][]).map(([value, text]) => (
+                                <option key={value} value={value}>
+                                  {text}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            Phương án mong muốn
+                            <select name={`resolution_${line.id}`}>
+                              <option value="REFUND">Hoàn tiền</option>
+                              {["MISSING_ITEM", "NOT_RECEIVED"].includes(line.reason) ? (
+                                <option value="MAKE_UP">Giao bù hàng thiếu</option>
+                              ) : (
+                                <option value="REPLACEMENT">Đổi sản phẩm mới</option>
+                              )}
+                            </select>
+                          </label>
+                          <label>
+                            Mô tả chi tiết lỗi
+                            <textarea
+                              name={`description_${line.id}`}
+                              required
+                              maxLength={2000}
+                              placeholder="Mô tả tình trạng sản phẩm khi nhận..."
+                            />
+                          </label>
+                        </div>
+                      );
+                    })}
+                    {nextProduct && returnLines.length < orderItems.length && (
+                      <button
+                        type="button"
+                        className="store-btn-secondary"
+                        onClick={() => {
+                          const nextId = nextReturnLine.current++;
+                          setReturnLines((prev) => [
+                            ...prev,
+                            { id: nextId, productId: String(nextProduct.productId), reason: "DAMAGED" },
+                          ]);
+                        }}
+                      >
+                        + Thêm sản phẩm khác từ đơn này
+                      </button>
+                    )}
+                    <label>
+                      Ảnh chứng minh PNG/JPEG (tối đa 5 ảnh, 5 MB/ảnh)
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg"
+                        multiple
+                        onChange={(e) => {
+                          const selectedFiles = Array.from(e.target.files ?? []);
+                          if (
+                            selectedFiles.length > 5 ||
+                            selectedFiles.some(
+                              (file) =>
+                                file.size > 5 * 1024 * 1024 ||
+                                !["image/png", "image/jpeg"].includes(file.type),
+                            )
+                          ) {
+                            e.target.value = "";
+                            setFiles([]);
+                          } else setFiles(selectedFiles);
+                        }}
+                      />
+                      <small>
+                        Chụp rõ nhãn mác, hạn sử dụng và phần hư hỏng nếu có.
+                      </small>
+                    </label>
+                    {files.length > 0 && (
+                      <p className="store-subtle">
+                        Đã chọn: {files.map((file) => file.name).join(", ")}
+                      </p>
+                    )}
+                    <button disabled={busy}>Gửi yêu cầu đổi trả</button>
+                  </form>
+                );
+              })()}
+          </>
+        ) : (
+          <>
+            <p>
+              <strong>{String(current.product ?? current.description)}</strong>
+            </p>
+            {Boolean(current.unitPrice) && (
+              <p>
+                Đơn giá: {money(current.unitPrice)} · Số lượng:{" "}
+                {String(current.quantity)}
+              </p>
+            )}
+            {Boolean(current.approvedQuantity) && (
+              <p>Số lượng được duyệt: {String(current.approvedQuantity)}</p>
+            )}
+            {Boolean(current.amount) && (
+              <p>Số tiền: {money(current.amount)}</p>
+            )}
+            <p>{String(current.description)}</p>
+            {Boolean(current.reason) && <p>Lý do: {label(current.reason)}</p>}
+            {Boolean(current.resolution) && (
+              <p>Phương án: {label(current.resolution)}</p>
+            )}
+            {Boolean(current.goods) && (
+              <p>Thu hồi hàng: {label(current.goods)}</p>
+            )}
+            {Boolean(current.fulfillment) && (
+              <p>Thực hiện giải pháp: {label(current.fulfillment)}</p>
+            )}
+            {Boolean(current.refundReference) && (
+              <p>Tham chiếu hoàn tiền: {String(current.refundReference)}</p>
+            )}
+            {Boolean(current.replacementOrderNumber) && (
+              <p>
+                Đơn đổi hàng mới: {String(current.replacementOrderNumber)}
+              </p>
+            )}
+            {Boolean(current.intakeReference) && (
+              <p>Biên bản nhận hàng: {String(current.intakeReference)}</p>
+            )}
+            {Boolean(current.decisionReason) && (
+              <p>Lý do quyết định: {String(current.decisionReason)}</p>
+            )}
+            {Boolean(current.result) && (
+              <div className="store-result">
+                <h4>Kết quả xử lý</h4>
+                <p>{String(current.result)}</p>
+                {Boolean(current.data) && (
+                  <pre>{JSON.stringify(current.data, null, 2)}</pre>
+                )}
+              </div>
+            )}
+            {Boolean(current.downloadUrl) && (
+              <p>
+                <a
+                  href={`/api/store${String(current.downloadUrl)}`}
+                  className="store-link-button"
+                  download
+                >
+                  Tải dữ liệu xuất (JSON)
+                </a>
+              </p>
+            )}
+            {((current.evidenceIds as string[]) ?? []).length > 0 && (
+              <div className="store-evidence-grid">
+                <h4>Ảnh đính kèm</h4>
+                <div className="store-evidence-list">
+                  {((current.evidenceIds as string[]) ?? []).map((id) => (
+                    <a
+                      key={id}
+                      href={`/api/store/evidence/${id}/content`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <img
+                        src={`/api/store/evidence/${id}/content`}
+                        alt="Bằng chứng đính kèm"
+                        className="store-evidence-thumb"
+                      />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+            {!admin &&
+              !["RESOLVED", "REJECTED", "WITHDRAWN"].includes(
+                String(current.status),
+              ) && (
+                <form
+                  className="store-form"
+                  onSubmit={(e) => {
+                    const b = fields(e);
+                    if (
+                      !window.confirm(
+                        "Rút yêu cầu này? Thao tác này sẽ đóng hồ sơ.",
+                      )
+                    )
+                      return;
+                    void run(async () => {
+                      await mutate("command", "return-withdraw", {
+                        id: current.id,
+                        revision: current.revision,
+                        reason: b.reason,
+                      });
+                    });
+                  }}
+                >
+                  <h4>Rút yêu cầu đổi trả</h4>
+                  <label>
+                    Lý do rút yêu cầu
+                    <textarea name="reason" required maxLength={500} />
+                  </label>
+                  <button disabled={busy} className="store-btn-danger">
+                    Xác nhận rút yêu cầu
+                  </button>
+                </form>
+              )}
+            {!["RESOLVED", "REJECTED", "WITHDRAWN"].includes(
+              String(current.status),
+            ) && (
+              <form
+                className="store-form"
+                onSubmit={(e) => {
+                  const b = fields(e);
+                  void run(async () => {
+                    const uploadedEvidence = await upload(supplementFiles);
+                    await mutate(
+                      "command",
+                      current.type
+                        ? "privacy-supplement"
+                        : "return-supplement",
+                      {
+                        id: current.id,
+                        revision: current.revision,
+                        note: b.note,
+                        evidenceIds: uploadedEvidence,
+                      },
+                    );
+                    setSupplementFiles([]);
+                  });
+                }}
+              >
+                <label>
+                  Bổ sung thông tin
+                  <textarea name="note" required maxLength={2000} />
+                </label>
+                {!current.type && (
+                  <label>
+                    Ảnh bổ sung PNG/JPEG (tối đa 5 MB/ảnh)
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg"
+                      multiple
+                      onChange={(e) => {
+                        const selectedFiles = Array.from(
+                          e.target.files ?? [],
+                        );
+                        const alreadyAttached = (
+                          (current.evidenceIds as string[]) ?? []
+                        ).length;
+                        if (
+                          selectedFiles.length + alreadyAttached > 5 ||
+                          selectedFiles.some(
+                            (file) =>
+                              file.size > 5 * 1024 * 1024 ||
+                              !["image/png", "image/jpeg"].includes(
+                                file.type,
+                              ),
+                          )
+                        ) {
+                          e.target.value = "";
+                          setSupplementFiles([]);
+                        } else setSupplementFiles(selectedFiles);
+                      }}
+                    />
+                    <small>
+                      Còn{" "}
+                      {Math.max(
+                        0,
+                        5 -
+                          ((current.evidenceIds as string[]) ?? [])
+                            .length,
+                      )}{" "}
+                      ảnh có thể đính kèm.
+                    </small>
+                  </label>
+                )}
+                {!current.type && supplementFiles.length > 0 && (
+                  <p className="store-subtle">
+                    Đã chọn:{" "}
+                    {supplementFiles.map((file) => file.name).join(", ")}
+                  </p>
+                )}
+                <button disabled={busy}>Gửi bổ sung</button>
+              </form>
+            )}
+            {admin && (
+              <CaseAction
+                key={current.id + String(current.revision)}
+                row={current}
+                paymentStatus={state.orders.find((order) => order.id === current.orderId)?.paymentStatus}
+                onSave={(b) =>
+                  void run(async () => {
+                    await mutate(
+                      "command",
+                      current.type ? "privacy-update" : "return-update",
+                      {
+                        ...b,
+                        id: current.id,
+                        revision: current.revision,
+                      },
+                    );
+                  })
+                }
+                busy={busy}
+              />
+            )}
+          </>
+        )}
+        <h3>Lịch sử xử lý</h3>
+        <ol className="store-timeline">
+          {((current.history as Row[]) ?? []).map((h, i) => (
+            <li key={i}>
+              <strong>{label(h.status)}</strong>
+              <small>{date(h.at)}</small>
+              <p>{String(h.note)}</p>
+            </li>
+          ))}
+        </ol>
+      </>
+    </section>
+  ) : null;
+
+  if (!admin) {
+    return (
+      <div className="account-screen-wrapper">
+        <div className="account-main-layout">
+          <aside className="account-sidebar-aside">
+            <div>
+              <div className="account-sidebar-header">
+                <span className="account-sidebar-eyebrow">Quản lý tài khoản</span>
+                <h2 className="account-sidebar-title">Tài Khoản Của Tôi</h2>
+              </div>
+              <nav className="account-sidebar-nav" aria-label="Quản lý tài khoản">
+                {accountNavigation.map((item) => (
+                  <Link
+                    key={item.key}
+                    href={item.href}
+                    className={`account-sidebar-link ${section === item.key ? "active" : ""}`}
+                    aria-current={section === item.key ? "page" : undefined}
+                  >
+                    <span className="material-symbols-outlined">{item.icon || "circle"}</span>
+                    <span>{item.label}</span>
+                  </Link>
+                ))}
+              </nav>
+            </div>
+            <div className="account-sidebar-logout-wrapper">
+              <button
+                type="button"
+                className="account-sidebar-logout"
+                onClick={() => void logout()}
+              >
+                <span className="material-symbols-outlined">logout</span>
+                <span>Đăng xuất</span>
+              </button>
+            </div>
+          </aside>
+
+          <main className="account-content-pane">
+            {section === "profile" && <AccountProfile />}
+            {section === "addresses" && <AccountAddresses />}
+            {section === "security" && <AccountSecurity />}
+            {section === "privacy" && <AccountPrivacy />}
+            {section === "orders" && (
+              <AccountOrders onSelectOrder={setSelected} />
+            )}
+            {section === "returns" && (
+              <section className="store-card">
+                <h2>Yêu cầu đổi trả</h2>
+                {!state.returns.length && (
+                  <div className="store-empty">
+                    <p>Chưa có yêu cầu đổi trả.</p>
+                    <Link href="/account/orders">Mở đơn đã giao để gửi yêu cầu</Link>
+                  </div>
+                )}
+                {state.returns
+                  .filter(
+                    (r, i, rows) =>
+                      !r.caseId || rows.findIndex((row) => row.caseId === r.caseId) === i,
+                  )
+                  .map((r) => {
+                    const lines = r.caseId
+                      ? state.returns.filter((row) => row.caseId === r.caseId)
+                      : [r];
+                    const closed = lines.every((row) =>
+                      ["RESOLVED", "REJECTED", "WITHDRAWN"].includes(String(row.status)),
+                    );
+                    const fulfilled = lines.filter((row) => row.status === "RESOLVED");
+                    const partial =
+                      fulfilled.length > 0 &&
+                      (fulfilled.length < lines.length ||
+                        fulfilled.some(
+                          (row) =>
+                            Number(row.approvedQuantity ?? row.quantity) <
+                            Number(row.quantity),
+                        ));
+                    return (
+                      <button
+                        key={r.id}
+                        className="store-row"
+                        onClick={() => setSelected(r)}
+                      >
+                        <strong>
+                          {String(r.orderNumber)} ·{" "}
+                          {lines.length > 1
+                            ? `${lines.length} dòng hàng`
+                            : String(r.product)}
+                        </strong>
+                        <span>
+                          {label(r.reason)} · {String(r.quantity)} sản phẩm
+                        </span>
+                        <span className="store-status-chip">
+                          {closed && partial
+                            ? "Hoàn tất một phần"
+                            : lines.length === 1
+                            ? label(r.status)
+                            : closed
+                            ? "Đã đóng hồ sơ"
+                            : "Đang xử lý"}
+                        </span>
+                        <small>{date(r.createdAt)}</small>
+                      </button>
+                    );
+                  })}
+              </section>
+            )}
+            {section !== "orders" && detailPanel}
+          </main>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <main className="store-page">
       <div className="store-heading">
-        <span className="eyebrow">
-          {admin ? "Không gian quản trị" : "Tri kỷ Gói Huế"}
-        </span>
-        <h1>{admin ? "Quản lý cửa hàng" : "Tài khoản của tôi"}</h1>
+        <span className="eyebrow">Không gian quản trị</span>
+        <h1>Quản lý cửa hàng</h1>
         <p>
           {String(state.user.name)} · {String(state.user.email)}
         </p>
       </div>
       <WorkspaceNav admin={admin} section={section} />
-      {section === "addresses" && state.user.role === "CUSTOMER" && <AddressBook />}
-      {section === "security" && <PasswordSettings />}
-      {section === "profile" && state.user.role === "CUSTOMER" && (
-        <div className="store-two">
-          <section className="store-card">
-            <div className="store-profile-heading">
-              <span aria-hidden="true">{String(state.user.name).charAt(0).toLocaleUpperCase("vi")}</span>
-              <div><h2>Thông tin cá nhân</h2><p>{String(state.user.email)}</p></div>
-            </div>
-            <form
-              className="store-form"
-              onSubmit={(e) => {
-                const b = fields(e);
-                void run(async () => {
-                  await mutate("command", "profile", b);
-                });
-              }}
-            >
-              <label>
-                Họ tên
-                <input
-                  name="name"
-                  defaultValue={String(state.user.name)}
-                  required
-                  maxLength={100}
-                />
-              </label>
-              <label>
-                Điện thoại
-                <input
-                  name="phone"
-                  defaultValue={String(state.user.phone)}
-                  maxLength={30}
-                />
-              </label>
-              <label>
-                Địa chỉ
-                <textarea
-                  name="address"
-                  defaultValue={String(state.user.address)}
-                  maxLength={400}
-                />
-              </label>
-              <button disabled={busy}>Lưu thông tin</button>
-            </form>
-          </section>
-          <section className="store-card">
-            <h2>Lựa chọn tiếp thị</h2>
-            <label className="store-check">
-              <input
-                type="checkbox"
-                checked={Boolean(state.user.marketing)}
-                disabled={busy}
-                onChange={(e) =>
-                  void run(async () => {
-                    await mutate("command", "consent", {
-                      granted: e.target.checked,
-                    });
-                  })
-                }
-              />
-              Tôi đồng ý nhận ưu đãi qua email
-            </label>
-            <p>
-              Có thể rút lại bất cứ lúc nào. Hệ thống ghi nhận lựa chọn; dịch vụ
-              gửi email đang chờ kết nối.
-            </p>
-            <details>
-              <summary>Lịch sử lựa chọn</summary>
-              {state.consents.map((c) => (
-                <p key={c.id}>
-                  {date(c.createdAt)} · {c.granted ? "Đồng ý" : "Rút đồng ý"} ·{" "}
-                  {String(c.policyVersion)}
-                </p>
-              ))}
-            </details>
-          </section>
-        </div>
-      )}
-      {section === "profile" && state.user.role === "ADMIN" && <PasswordSettings />}
+      {section === "profile" && <PasswordSettings />}
       {section === "privacy" && (
         <div className="store-two">
           {!admin && (
@@ -480,454 +1079,7 @@ export function Account({
           ))}
         </section>
       )}
-      {current && (
-        <section className="store-card store-detail">
-          <button className="store-close" onClick={() => setSelected(null)}>
-            Đóng chi tiết ×
-          </button>
-          <>
-            <h2>
-              {current.type
-                ? label(current.type)
-                : String(current.number ?? current.orderNumber)}
-            </h2>
-            {current.items != null ? (
-              <OrderBadges order={current} />
-            ) : (
-              <p className="store-badge">{label(current.status)}</p>
-            )}
-            <p>Mã hồ sơ: {current.id}</p>
-            {current.items != null ? (
-              <>
-                <OrderTimeline order={current} />
-                <p>
-                  {String(current.recipient)} · {String(current.phone)}
-                </p>
-                <p>{String(current.address)}</p>
-                {(current.items as Row[]).map((line, i) => (
-                  <p key={i} className={styles.detailItem}>
-                    <ProductImage
-                      src={String(line.image ?? "")}
-                      alt=""
-                      width={44}
-                      height={44}
-                      className={styles.thumb}
-                    />
-                    <span>
-                      {String(line.name)} · {String(line.quantity)} ×{" "}
-                      {money(line.price)}
-                    </span>
-                  </p>
-                ))}
-                <p>
-                  Tiền hàng {money(current.subtotal)} · Giao hàng{" "}
-                  {money(current.shippingFee)} ·{" "}
-                  <strong>Tổng {money(current.total)}</strong>
-                </p>
-                <PaymentPanel order={current} />
-                {Boolean(current.paymentReference) && (
-                  <p>
-                    Biên nhận thu tiền: {String(current.paymentReference)} ·{" "}
-                    {date(current.paidAt)}
-                  </p>
-                )}
-                {Boolean(current.deliveredAt) && (
-                  <p>Giao thành công lúc: {date(current.deliveredAt)}</p>
-                )}
-                {Boolean(current.trackingReference) && (
-                  <p>Vận đơn: {String(current.trackingReference)}</p>
-                )}
-                {["PLACED", "CONFIRMED"].includes(String(current.status)) && (
-                  <details>
-                    <summary>
-                      Sửa thông tin nhận hàng trước khi đóng gói
-                    </summary>
-                    <form
-                      key={`recipient-${current.revision}`}
-                      className="store-form"
-                      onSubmit={(e) => {
-                        const b = fields(e);
-                        if (
-                          !window.confirm(
-                            "Lưu thông tin nhận hàng mới cho đơn này?",
-                          )
-                        )
-                          return;
-                        void run(async () => {
-                          await mutate("commerce", "order-recipient", {
-                            ...b,
-                            id: current.id,
-                            revision: current.revision,
-                          });
-                        });
-                      }}
-                    >
-                      <label>
-                        Người nhận
-                        <input
-                          name="recipient"
-                          defaultValue={String(current.recipient)}
-                          required
-                          maxLength={100}
-                        />
-                      </label>
-                      <label>
-                        Điện thoại
-                        <input
-                          name="phone"
-                          defaultValue={String(current.phone)}
-                          required
-                          maxLength={30}
-                        />
-                      </label>
-                      <label>
-                        Địa chỉ
-                        <textarea
-                          name="address"
-                          defaultValue={String(current.address)}
-                          required
-                          maxLength={400}
-                        />
-                      </label>
-                      <label>
-                        Lý do thay đổi
-                        <input name="note" required maxLength={2000} />
-                      </label>
-                      <button disabled={busy}>Lưu thông tin nhận</button>
-                    </form>
-                  </details>
-                )}
-                {!admin &&
-                  ["PLACED", "CONFIRMED"].includes(String(current.status)) &&
-                  current.paymentStatus !== "PAID" && (
-                    <form
-                      className="store-form"
-                      onSubmit={(e) => {
-                        const b = fields(e);
-                        if (
-                          !window.confirm(
-                            `Hủy đơn ${current.number}? Tồn kho sẽ được hoàn lại khi hủy thành công.`,
-                          )
-                        )
-                          return;
-                        void run(async () => {
-                          await mutate("commerce", "order-cancel", {
-                            ...b,
-                            id: current.id,
-                            revision: current.revision,
-                          });
-                        });
-                      }}
-                    >
-                      <label>
-                        Lý do hủy
-                        <input name="note" required maxLength={2000} />
-                      </label>
-                      <button disabled={busy}>Hủy đơn hàng</button>
-                    </form>
-                  )}
-                {admin && (
-                  <OrderAction
-                    key={current.id + String(current.revision)}
-                    row={current}
-                    busy={busy}
-                    onSave={(b) =>
-                      void run(async () => {
-                        await mutate("commerce", String(b.action), {
-                          ...b,
-                          id: current.id,
-                          revision: current.revision,
-                        });
-                      })
-                    }
-                  />
-                )}
-                {!admin && current.status === "DELIVERED" && (
-                  <form key={current.id}
-                    className="store-form store-return-form"
-                    onSubmit={(e) => {
-                      const b = fields(e);
-                      void run(async () => {
-                        const evidenceIds = await upload(files);
-                        const r = await mutate("command", "return-submit", {
-                          orderId: current.id,
-                          items: returnLines.map(({ id: i }) => ({ lineId: b[`lineId-${i}`], quantity: Number(b[`quantity-${i}`]), reason: b[`reason-${i}`], resolution: b[`resolution-${i}`], description: b[`description-${i}`] })),
-                          evidenceIds,
-                        });
-                        setSelected(r);
-                        setFiles([]);
-                        setReturnLines([{ id: 0, productId: "", reason: "DAMAGED" }]);
-                      });
-                    }}
-                  >
-                    <div><h3>Yêu cầu đổi trả</h3><p className="store-subtle">Chọn sản phẩm trong đơn và mô tả vấn đề để cửa hàng xem xét.</p></div>
-                    {returnLines.map(({ id: line, reason }, index) => <fieldset className="store-return-line" key={line}>
-                    <legend>Món cần xử lý</legend>
-                    <label>
-                      Sản phẩm
-                      <select name={`lineId-${line}`} value={selectedProducts[index]} required onChange={(event) => {
-                        const productId = event.target.value;
-                        setReturnLines(returnLines.map((row) => row.id === line ? { ...row, productId } : row));
-                      }}>
-                        {orderItems.filter((item) => String(item.productId) === selectedProducts[index] || !selectedProducts.includes(String(item.productId))).map((l, i) => (
-                          <option key={i} value={String(l.productId)}>
-                            {String(l.name)} (đã mua {String(l.quantity)})
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      Số lượng
-                      <input
-                        name={`quantity-${line}`}
-                        type="number"
-                        min={1}
-                        max={Number(orderItems.find((item) => String(item.productId) === selectedProducts[index])?.quantity ?? 1)}
-                        defaultValue={1}
-                        required
-                      />
-                    </label>
-                    <label>
-                      Lý do
-                      <select name={`reason-${line}`} value={reason} onChange={(event) => {
-                        const reason = event.target.value;
-                        setReturnLines(returnLines.map((row) => row.id === line ? { ...row, reason } : row));
-                      }}>
-                        {[
-                          "DAMAGED",
-                          "WRONG_ITEM",
-                          "MISSING_ITEM",
-                          "UNSAFE",
-                          "QUALITY",
-                          "NOT_RECEIVED",
-                          "CHANGE_OF_MIND",
-                        ].map((s) => (
-                          <option key={s} value={s}>
-                            {label(s)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      Mong muốn
-                      <select key={missingReturnItem(reason) ? "missing" : "received"} name={`resolution-${line}`}>
-                        <option value={missingReturnItem(reason) ? "MAKE_UP" : "REPLACEMENT"}>{missingReturnItem(reason) ? "Giao bù" : "Đổi hàng"}</option>
-                        <option value="REFUND">Hoàn tiền</option>
-                      </select>
-                    </label>
-                    <label>
-                      Nội dung
-                      <textarea name={`description-${line}`} required maxLength={2000} />
-                    </label>
-                    {returnLines.length > 1 && <button type="button" onClick={() => setReturnLines(returnLines.filter((row) => row.id !== line))}>Bỏ dòng</button>}
-                    </fieldset>)}
-                    <button type="button" disabled={!nextProduct || returnLines.length >= 50} onClick={() => {
-                      if (nextProduct) setReturnLines([...returnLines, { id: nextReturnLine.current++, productId: String(nextProduct.productId), reason: "DAMAGED" }]);
-                    }}>Thêm dòng sản phẩm</button>
-                    <label>
-                      Ảnh PNG/JPEG (tối đa 5 ảnh, 5 MB/ảnh)
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg"
-                        multiple
-                        onChange={(e) => {
-                          const f = Array.from(e.target.files ?? []);
-                          if (
-                            f.length > 5 ||
-                            f.some((x) => x.size > 5 * 1024 * 1024)
-                          ) {
-                            e.target.value = "";
-                            setFiles([]);
-                          } else setFiles(f);
-                        }}
-                      />
-                    </label>
-                    {files.length > 0 && <p className="store-subtle">{files.map((file) => file.name).join(", ")}</p>}
-                    <button className="primary-button" disabled={busy}>Gửi yêu cầu đổi trả</button>
-                  </form>
-                )}
-              </>
-            ) : (
-              <>
-                <p>{String(current.description ?? "")}</p>
-                {Boolean(current.result) && (
-                  <p className="store-warning">{String(current.result)}</p>
-                )}
-                {!current.type && (
-                  <>
-                    {Boolean(current.caseId) && <div className="store-row-actions" aria-label="Các món trong hồ sơ">{state.returns.filter((row) => row.caseId === current.caseId).map((row) => <button key={row.id} onClick={() => setSelected(row)} aria-pressed={row.id === current.id}>{String(row.product)} · {label(row.status)}</button>)}</div>}
-                    {Boolean(current.replacementTracking) && <p>Vận đơn hàng thay thế: {String(current.replacementTracking)}</p>}
-                    {current.receivedQuantity != null && <p>Đã nhận hàng trả: {String(current.receivedQuantity)}</p>}
-                    {current.status === "CUSTOMER_CONFIRMATION" && <p>Phương án đề xuất: {label(current.resolution)} cho {String(current.proposedQuantity)} sản phẩm.</p>}
-                    {!admin && ["REQUESTED","REVIEWING","EVIDENCE_REQUIRED","CUSTOMER_CONFIRMATION"].includes(String(current.status)) && <div className="store-row-actions">{(current.status === "CUSTOMER_CONFIRMATION" ? ["return-confirm","return-withdraw"] : ["return-withdraw"]).map((action) => <button key={action} disabled={busy} onClick={() => { const note = action === "return-confirm" ? "Khách đồng ý phương án." : "Khách rút yêu cầu."; if (window.confirm(note)) void run(async () => { await mutate("command", action, {id: current.id, revision: current.revision, note}); }); }}>{action === "return-confirm" ? "Đồng ý phương án" : "Rút yêu cầu cho món này"}</button>)}</div>}
-                    <p>
-                      Sản phẩm: {String(current.product)} · Yêu cầu{" "}
-                      {String(current.quantity)} · Duyệt{" "}
-                      {String(current.approvedQuantity ?? "Chưa duyệt")}
-                    </p>
-                    <p>
-                      {label(current.resolution)} · {money(current.amount)} ·{" "}
-                      {label(current.fulfillment)}
-                    </p>
-                    <p>Hàng trả: {label(current.goods)}</p>
-                    {Boolean(current.operationReference) && (
-                      <p>
-                        Chứng từ/vận đơn kết quả:{" "}
-                        {String(current.operationReference)}
-                      </p>
-                    )}
-                    {((current.evidenceIds as string[]) ?? []).length > 0 && (
-                      <div
-                        className="store-evidence-gallery"
-                        aria-label="Ảnh bằng chứng"
-                      >
-                        {((current.evidenceIds as string[]) ?? []).map(
-                          (id, index) => (
-                            <a
-                              key={id}
-                              href={`/api/store/evidence/${id}/content`}
-                              target="_blank"
-                              rel="noreferrer"
-                              title={`Xem ảnh bằng chứng ${index + 1}`}
-                            >
-                              <img
-                                src={`/api/store/evidence/${id}/content`}
-                                alt={`Ảnh bằng chứng ${index + 1}`}
-                              />
-                              <span>Xem ảnh {index + 1}</span>
-                            </a>
-                          ),
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
-                {current.export != null && (
-                  <a
-                    className="store-file"
-                    href={`/api/store/privacy/${current.id}/export`}
-                  >
-                    Tải dữ liệu của tôi (JSON)
-                  </a>
-                )}
-                {!admin &&
-                  (current.type
-                    ? !["COMPLETED", "RESOLVED", "REJECTED", "WITHDRAWN"].includes(String(current.status))
-                    : current.status === "EVIDENCE_REQUIRED") && (
-                    <form
-                      className="store-form"
-                      onSubmit={(e) => {
-                        const b = fields(e);
-                        void run(async () => {
-                          const evidenceIds = current.type
-                            ? []
-                            : await upload(supplementFiles);
-                          await mutate(
-                            "command",
-                            current.type
-                              ? "privacy-supplement"
-                              : "return-supplement",
-                            {
-                              ...b,
-                              id: current.id,
-                              revision: current.revision,
-                              evidenceIds,
-                            },
-                          );
-                          setSupplementFiles([]);
-                        });
-                      }}
-                    >
-                      <label>
-                        Bổ sung thông tin
-                        <textarea name="note" required maxLength={2000} />
-                      </label>
-                      {!current.type && (
-                        <label>
-                          Ảnh bổ sung PNG/JPEG (tối đa 5 MB/ảnh)
-                          <input
-                            type="file"
-                            accept="image/png,image/jpeg"
-                            multiple
-                            onChange={(e) => {
-                              const selectedFiles = Array.from(
-                                e.target.files ?? [],
-                              );
-                              const alreadyAttached = (
-                                (current.evidenceIds as string[]) ?? []
-                              ).length;
-                              if (
-                                selectedFiles.length + alreadyAttached > 5 ||
-                                selectedFiles.some(
-                                  (file) =>
-                                    file.size > 5 * 1024 * 1024 ||
-                                    !["image/png", "image/jpeg"].includes(
-                                      file.type,
-                                    ),
-                                )
-                              ) {
-                                e.target.value = "";
-                                setSupplementFiles([]);
-                              } else setSupplementFiles(selectedFiles);
-                            }}
-                          />
-                          <small>
-                            Còn{" "}
-                            {Math.max(
-                              0,
-                              5 -
-                                ((current.evidenceIds as string[]) ?? [])
-                                  .length,
-                            )}{" "}
-                            ảnh có thể đính kèm.
-                          </small>
-                        </label>
-                      )}
-                      {!current.type && supplementFiles.length > 0 && (
-                        <p className="store-subtle">
-                          Đã chọn:{" "}
-                          {supplementFiles.map((file) => file.name).join(", ")}
-                        </p>
-                      )}
-                      <button disabled={busy}>Gửi bổ sung</button>
-                    </form>
-                  )}
-                {admin && (
-                  <CaseAction
-                    key={current.id + String(current.revision)}
-                    row={current}
-                    paymentStatus={state.orders.find((order) => order.id === current.orderId)?.paymentStatus}
-                    onSave={(b) =>
-                      void run(async () => {
-                        await mutate(
-                          "command",
-                          current.type ? "privacy-update" : "return-update",
-                          {
-                            ...b,
-                            id: current.id,
-                            revision: current.revision,
-                          },
-                        );
-                      })
-                    }
-                    busy={busy}
-                  />
-                )}
-              </>
-            )}
-            <h3>Lịch sử xử lý</h3>
-            <ol className="store-timeline">
-              {((current.history as Row[]) ?? []).map((h, i) => (
-                <li key={i}>
-                  <strong>{label(h.status)}</strong>
-                  <small>{date(h.at)}</small>
-                  <p>{String(h.note)}</p>
-                </li>
-              ))}
-            </ol>
-          </>
-        </section>
-      )}
+      {detailPanel}
     </main>
   );
 }

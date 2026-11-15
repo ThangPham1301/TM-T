@@ -89,6 +89,55 @@ export const money = (x: unknown) =>
   );
 export const date = (x: unknown) =>
   x ? new Date(String(x)).toLocaleString("vi-VN") : "";
+
+const windows1252Map: Record<number, number> = {
+  0x80: 0x20ac, 0x82: 0x201a, 0x83: 0x0192, 0x84: 0x201e, 0x85: 0x2026,
+  0x86: 0x2020, 0x87: 0x2021, 0x88: 0x02c6, 0x89: 0x2030, 0x8a: 0x0160,
+  0x8b: 0x2039, 0x8c: 0x0152, 0x8e: 0x017d, 0x91: 0x2018, 0x92: 0x2019,
+  0x93: 0x201c, 0x94: 0x201d, 0x95: 0x2022, 0x96: 0x2013, 0x97: 0x2014,
+  0x98: 0x02dc, 0x99: 0x2122, 0x9a: 0x0161, 0x9b: 0x203a, 0x9c: 0x0153,
+  0x9e: 0x017e, 0x9f: 0x0178,
+};
+const cp1252RevMap: Record<number, number> = {};
+for (const [k, v] of Object.entries(windows1252Map)) {
+  cp1252RevMap[v] = Number(k);
+}
+
+export function cleanText(str: unknown): string {
+  if (typeof str !== "string" || !str) return String(str ?? "");
+  if (!/[\u00C0-\u00FF\u0100-\u017E\u2010-\u203A]/.test(str)) return str;
+  try {
+    const bytes: number[] = [];
+    for (let i = 0; i < str.length; i++) {
+      const code = str.charCodeAt(i);
+      if (cp1252RevMap[code] !== undefined) {
+        bytes.push(cp1252RevMap[code]);
+      } else if (code <= 0xff) {
+        bytes.push(code);
+      } else {
+        return str;
+      }
+    }
+    return new TextDecoder("utf-8", { fatal: true }).decode(
+      new Uint8Array(bytes),
+    );
+  } catch {
+    return str;
+  }
+}
+
+export function sanitizeData<T>(obj: T): T {
+  if (typeof obj === "string") return cleanText(obj) as unknown as T;
+  if (Array.isArray(obj)) return obj.map(sanitizeData) as unknown as T;
+  if (obj && typeof obj === "object") {
+    const res: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      res[k] = sanitizeData(v);
+    }
+    return res as unknown as T;
+  }
+  return obj;
+}
 export const fields = (e: React.FormEvent<HTMLFormElement>) => {
   e.preventDefault();
   return Object.fromEntries(new FormData(e.currentTarget).entries());
@@ -156,7 +205,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const version = ++reloadVersion.current;
     try {
       const snapshot = await api("state");
-      if (version === reloadVersion.current) setState(snapshot);
+      if (version === reloadVersion.current) setState(sanitizeData(snapshot));
     } catch (e) {
       if (version !== reloadVersion.current) return;
       if (e instanceof ApiError && e.status === 401) setState(null);

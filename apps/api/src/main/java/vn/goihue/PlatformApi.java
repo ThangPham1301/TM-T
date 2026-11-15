@@ -88,6 +88,87 @@ public class PlatformApi {
         if(db.queryForObject("SELECT count(*) FROM records WHERE kind='policy'",Integer.class)==0) {
             var p=new LinkedHashMap<String,Object>();p.put("title","Chính sách bảo mật Gói Huế");p.put("version","1.0-draft");p.put("content",POLICY);p.put("status","DRAFT");save("policy",null,p);
         }
+        String customerEmail = "customer@goihue.local";
+        UUID customerId;
+        var existing = db.queryForList("SELECT id FROM customers WHERE email=?", customerEmail);
+        if (existing.isEmpty()) {
+            customerId = UUID.randomUUID();
+            db.update("INSERT INTO customers(id,email,password_hash,role,name,phone,address,marketing) VALUES(?,?,?,'CUSTOMER',?,?,?,?)",
+                customerId, customerEmail, passwords.encode("Customer@123456"), "Nguyễn Văn An", "0905 123 456", "Số 12 đường Lê Lợi, Phường Phú Nhuận, Thành phố Huế, Thừa Thiên Huế", true);
+        } else {
+            customerId = (UUID) existing.getFirst().get("id");
+        }
+
+        if(db.queryForObject("SELECT count(*) FROM records WHERE kind='address' AND owner_id=?", Integer.class, customerId) == 0) {
+            var addr1 = new LinkedHashMap<String,Object>();
+            addr1.put("id", UUID.randomUUID().toString());
+            addr1.put("label", "Nhà riêng");
+            addr1.put("recipient", "Nguyễn Văn An");
+            addr1.put("phone", "0905 123 456");
+            addr1.put("address", "Số 12 đường Lê Lợi, Phường Phú Nhuận, Thành phố Huế, Thừa Thiên Huế");
+            addr1.put("isDefault", true);
+            addr1.put("revision", 1);
+            addr1.put("createdAt", Instant.now().toString());
+            save("address", customerId, addr1);
+
+            var addr2 = new LinkedHashMap<String,Object>();
+            addr2.put("id", UUID.randomUUID().toString());
+            addr2.put("label", "Văn phòng");
+            addr2.put("recipient", "Nguyễn Văn An (Công ty)");
+            addr2.put("phone", "0905 123 456");
+            addr2.put("address", "Tầng 3, Toà nhà VietinBank, 02 Hùng Vương, Phường Phú Hội, Thành phố Huế");
+            addr2.put("isDefault", false);
+            addr2.put("revision", 1);
+            addr2.put("createdAt", Instant.now().toString());
+            save("address", customerId, addr2);
+        }
+
+        if(db.queryForObject("SELECT count(*) FROM records WHERE kind='privacy' AND owner_id=?", Integer.class, customerId) == 0) {
+            var pr1 = new LinkedHashMap<String,Object>();
+            String pr1Id = UUID.randomUUID().toString();
+            pr1.put("id", pr1Id);
+            pr1.put("code", "#PR-1092");
+            pr1.put("type", "EXPORT");
+            pr1.put("description", "Xuất toàn bộ lịch sử đơn hàng và thông tin cá nhân theo Nghị định 13/2023/NĐ-CP.");
+            pr1.put("status", "COMPLETED");
+            pr1.put("result", "Dữ liệu định dạng JSON chuẩn đã được trích xuất thành công và sẵn sàng để tải xuống.");
+            pr1.put("downloadUrl", "/privacy/" + pr1Id + "/export");
+            pr1.put("export", export(customerId));
+            pr1.put("data", Map.of(
+                "customer", Map.of("name", "Nguyễn Văn An", "email", customerEmail, "phone", "0905 123 456"),
+                "exportTimestamp", Instant.now().toString(),
+                "addressesCount", 2
+            ));
+            pr1.put("createdAt", Instant.now().minus(Duration.ofDays(3)).toString());
+            pr1.put("history", List.of(
+                Map.of("at", Instant.now().minus(Duration.ofDays(3)).toString(), "status", "SUBMITTED", "note", "Đã tiếp nhận yêu cầu xuất dữ liệu"),
+                Map.of("at", Instant.now().minus(Duration.ofDays(2)).toString(), "status", "COMPLETED", "note", "Đã xuất dữ liệu định dạng JSON chuẩn")
+            ));
+            save("privacy", customerId, pr1);
+
+            var pr2 = new LinkedHashMap<String,Object>();
+            pr2.put("id", UUID.randomUUID().toString());
+            pr2.put("code", "#PR-0941");
+            pr2.put("type", "RESTRICT");
+            pr2.put("description", "Hạn chế xử lý dữ liệu hành vi tìm kiếm cho mục đích gợi ý sản phẩm.");
+            pr2.put("status", "COMPLETED");
+            pr2.put("result", "Đã cập nhật tùy chọn không thu thập hành vi tìm kiếm cá nhân hóa trên toàn hệ thống.");
+            pr2.put("createdAt", Instant.now().minus(Duration.ofDays(10)).toString());
+            pr2.put("history", List.of(
+                Map.of("at", Instant.now().minus(Duration.ofDays(10)).toString(), "status", "SUBMITTED", "note", "Đã tiếp nhận yêu cầu hạn chế"),
+                Map.of("at", Instant.now().minus(Duration.ofDays(8)).toString(), "status", "COMPLETED", "note", "Đã thiết lập cờ hạn chế dữ liệu cá nhân hóa")
+            ));
+            save("privacy", customerId, pr2);
+        }
+
+        if(db.queryForObject("SELECT count(*) FROM records WHERE kind='consent' AND owner_id=?", Integer.class, customerId) == 0) {
+            var consent = new LinkedHashMap<String,Object>();
+            consent.put("id", UUID.randomUUID().toString());
+            consent.put("granted", true);
+            consent.put("policyVersion", "v1.0.4-DRAFT");
+            consent.put("createdAt", Instant.now().minus(Duration.ofDays(15)).toString());
+            save("consent", customerId, consent);
+        }
     }
     static final String POLICY="""
         CHÍNH SÁCH BẢO MẬT GÓI HUẾ – DỰ THẢO CHỜ PHÊ DUYỆT
@@ -164,7 +245,16 @@ public class PlatformApi {
             throw new Problem(409,"Địa chỉ vừa thay đổi. Hãy tải lại.");
         if (action.equals("address-delete")) {
             if (id.isEmpty()) throw new Problem(404,"Không tìm thấy địa chỉ.");
+            boolean wasDefault = Boolean.TRUE.equals(row.get("isDefault"));
             db.update("DELETE FROM records WHERE id=? AND owner_id=? AND kind='address'",uuid(id),owner);
+            if (wasDefault) {
+                var remaining = list("address", a);
+                if (!remaining.isEmpty()) {
+                    var first = remaining.getFirst();
+                    first.put("isDefault", true);
+                    save("address", owner, first);
+                }
+            }
             return Map.of("id",id,"deleted",true);
         }
         if (id.isEmpty()) require(list("address",a).size()<20,"Bạn có thể lưu tối đa 20 địa chỉ.");
@@ -175,6 +265,18 @@ public class PlatformApi {
                 "Số điện thoại không hợp lệ.");
         row.put("phone",phone);
         row.put("address",text(body,"address",400));
+        boolean isDefault = Boolean.TRUE.equals(body.get("isDefault")) || "true".equalsIgnoreCase(String.valueOf(body.get("isDefault")));
+        if (isDefault) {
+            for (var addr : list("address", a)) {
+                if (!str(addr, "id").equals(id) && Boolean.TRUE.equals(addr.get("isDefault"))) {
+                    addr.put("isDefault", false);
+                    save("address", owner, addr);
+                }
+            }
+        } else if (list("address", a).stream().noneMatch(addr -> !str(addr, "id").equals(id) && Boolean.TRUE.equals(addr.get("isDefault")))) {
+            isDefault = true;
+        }
+        row.put("isDefault", isDefault);
         if (!id.isEmpty()) row.put("revision",number(row,"revision")+1);
         return save("address",owner,row);
     }
