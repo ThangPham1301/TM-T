@@ -558,8 +558,13 @@ export function Account({
                   </button>
                 </form>
               )}
-            {!["RESOLVED", "REJECTED", "WITHDRAWN"].includes(
-              String(current.status),
+            {admin && !current.type && current.status === "EVIDENCE_REQUIRED" && (
+              <p className="store-subtle">Đang chờ khách hàng gửi bổ sung.</p>
+            )}
+            {!admin && (
+              current.type
+                ? !["RESOLVED", "COMPLETED", "REJECTED", "WITHDRAWN"].includes(String(current.status))
+                : current.status === "EVIDENCE_REQUIRED"
             ) && (
               <form
                 className="store-form"
