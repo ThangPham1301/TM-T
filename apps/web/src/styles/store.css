@@ -663,3 +663,28 @@ button:disabled {
     flex-wrap: wrap;
   }
 }
+
+.operations-list {
+  margin-top: 1rem;
+}
+
+.operations-table {
+  overflow-x: auto;
+}
+
+.operations-table table {
+  width: 100%;
+  text-align: left;
+  border-collapse: collapse;
+}
+
+.operations-table th,
+.operations-table td {
+  padding: .75rem;
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+
+.operations-table th {
+  background: var(--surface-low);
+}

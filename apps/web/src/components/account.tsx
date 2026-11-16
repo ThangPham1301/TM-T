@@ -13,6 +13,7 @@ import { OrderBadges, OrderTimeline } from "./order-presentation";
 import { ProductImage } from "./product/product-image";
 import styles from "./journey.module.css";
 import { WorkspaceNav, Pagination } from "./workspace-nav";
+import { ReturnQueue, PolicyEditor, AuditLog } from "./operations";
 import {
   api,
   fields,
@@ -108,7 +109,7 @@ export function Account({
   }
 
   const detailPanel = current ? (
-    <section className="store-card store-detail">
+    <section key={current.id} className="store-card store-detail">
       <button className="store-close" onClick={() => setSelected(null)}>
         Đóng chi tiết ×
       </button>
@@ -255,7 +256,11 @@ export function Account({
                     className="store-form"
                     onSubmit={(e) => {
                       const b = fields(e);
-                      const validLines = returnLines.filter((l) => l.productId && Number(b[`quantity_${l.id}`]) > 0);
+                      const validLines = returnLines.filter(
+                        (line) =>
+                          b[`productId_${line.id}`] &&
+                          Number(b[`quantity_${line.id}`]) > 0,
+                      );
                       if (validLines.length === 0) {
                         alert("Vui lòng chọn ít nhất một sản phẩm và nhập số lượng hợp lệ.");
                         return;
@@ -269,7 +274,7 @@ export function Account({
                       void run(async () => {
                         const uploadedEvidence = await upload(files);
                         const items = validLines.map((l) => ({
-                          lineId: l.productId,
+                          lineId: b[`productId_${l.id}`],
                           quantity: Number(b[`quantity_${l.id}`]),
                           reason: b[`reason_${l.id}`] ?? l.reason,
                           resolution: b[`resolution_${l.id}`] ?? "REFUND",
@@ -282,6 +287,7 @@ export function Account({
                         });
                         setFiles([]);
                         setReturnLines([{ id: 0, productId: "", reason: "DAMAGED" }]);
+                        if (section === "returns") setSelected(null);
                       });
                     }}
                   >
@@ -292,7 +298,7 @@ export function Account({
                     {returnLines.map((line, idx) => {
                       const item = orderItems.find((it) => String(it.productId) === line.productId) ?? orderItems[0];
                       const availableProducts = orderItems.filter(
-                        (it) => String(it.productId) === line.productId || !selectedProducts.includes(String(it.productId)),
+                        (it) => String(it.productId) === String(item?.productId) || !selectedProducts.includes(String(it.productId)),
                       );
                       return (
                         <div key={line.id} className="store-return-line">
@@ -340,7 +346,7 @@ export function Account({
                             Lý do
                             <select
                               name={`reason_${line.id}`}
-                              value={line.reason}
+                              value={isAfter7Days && !["UNSAFE", "QUALITY"].includes(line.reason) ? "QUALITY" : line.reason}
                               onChange={(e) => {
                                 const val = e.target.value;
                                 setReturnLines((prev) => prev.map((l) => l.id === line.id ? { ...l, reason: val } : l));
@@ -714,62 +720,34 @@ export function Account({
             )}
             {section === "returns" && (
               <section className="store-card">
-                <h2>Yêu cầu đổi trả</h2>
-                {!state.returns.length && (
-                  <div className="store-empty">
-                    <p>Chưa có yêu cầu đổi trả.</p>
-                    <Link href="/account/orders">Mở đơn đã giao để gửi yêu cầu</Link>
-                  </div>
-                )}
-                {state.returns
-                  .filter(
-                    (r, i, rows) =>
-                      !r.caseId || rows.findIndex((row) => row.caseId === r.caseId) === i,
-                  )
-                  .map((r) => {
-                    const lines = r.caseId
-                      ? state.returns.filter((row) => row.caseId === r.caseId)
-                      : [r];
-                    const closed = lines.every((row) =>
-                      ["RESOLVED", "REJECTED", "WITHDRAWN"].includes(String(row.status)),
-                    );
-                    const fulfilled = lines.filter((row) => row.status === "RESOLVED");
-                    const partial =
-                      fulfilled.length > 0 &&
-                      (fulfilled.length < lines.length ||
-                        fulfilled.some(
-                          (row) =>
-                            Number(row.approvedQuantity ?? row.quantity) <
-                            Number(row.quantity),
-                        ));
-                    return (
-                      <button
-                        key={r.id}
-                        className="store-row"
-                        onClick={() => setSelected(r)}
-                      >
-                        <strong>
-                          {String(r.orderNumber)} ·{" "}
-                          {lines.length > 1
-                            ? `${lines.length} dòng hàng`
-                            : String(r.product)}
-                        </strong>
-                        <span>
-                          {label(r.reason)} · {String(r.quantity)} sản phẩm
-                        </span>
-                        <span className="store-status-chip">
-                          {closed && partial
-                            ? "Hoàn tất một phần"
-                            : lines.length === 1
-                            ? label(r.status)
-                            : closed
-                            ? "Đã đóng hồ sơ"
-                            : "Đang xử lý"}
-                        </span>
-                        <small>{date(r.createdAt)}</small>
-                      </button>
-                    );
-                  })}
+                <h2>Yêu cầu đổi trả &amp; hoàn tiền</h2>
+                <div className="store-form">
+                  <label>
+                    Tạo yêu cầu từ đơn đã giao
+                    <select
+                      value={current?.items ? current.id : ""}
+                      onChange={(event) => {
+                        setFiles([]);
+                        setReturnLines([{ id: 0, productId: "", reason: "DAMAGED" }]);
+                        setSelected(
+                          state.orders.find((order) => order.id === event.target.value) ?? null,
+                        );
+                      }}
+                    >
+                      <option value="">Chọn đơn hàng</option>
+                      {state.orders.filter((order) => order.status === "DELIVERED").map((order) => (
+                        <option key={order.id} value={order.id}>
+                          {String(order.number)} · {date(order.deliveredAt)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {!state.orders.some((order) => order.status === "DELIVERED") && (
+                    <p className="store-subtle">Bạn chưa có đơn đã giao.</p>
+                  )}
+                  <Link href="/account/orders">Xem đơn hàng của tôi</Link>
+                </div>
+                <ReturnQueue rows={state.returns} onSelect={setSelected} />
               </section>
             )}
             {section !== "orders" && detailPanel}
@@ -985,100 +963,23 @@ export function Account({
       )}
       {section === "returns" && (
         <section className="store-card">
-          <h2>Yêu cầu đổi trả</h2>
-          {!state.returns.length && (
-            <div className="store-empty">
-              <p>Chưa có yêu cầu đổi trả.</p>
-              {!admin && <Link href="/account/orders">Mở đơn đã giao để gửi yêu cầu</Link>}
-            </div>
-          )}
-          {state.returns.filter((r, i, rows) => !r.caseId || rows.findIndex((row) => row.caseId === r.caseId) === i).map((r) => {
-            const lines = r.caseId ? state.returns.filter((row) => row.caseId === r.caseId) : [r];
-            const closed = lines.every((row) => ["RESOLVED", "REJECTED", "WITHDRAWN"].includes(String(row.status)));
-            const fulfilled = lines.filter((row) => row.status === "RESOLVED");
-            const partial = fulfilled.length > 0 && (fulfilled.length < lines.length || fulfilled.some((row) => Number(row.approvedQuantity ?? row.quantity) < Number(row.quantity)));
-            return (
-            <button
-              key={r.id}
-              className="store-row"
-              onClick={() => setSelected(r)}
-            >
-              <strong>
-                {String(r.orderNumber)} · {lines.length > 1 ? `${lines.length} dòng hàng` : String(r.product)}
-              </strong>
-              <span>
-                {label(r.reason)} · {String(r.quantity)} sản phẩm
-              </span>
-              <span className="store-status-chip">{closed && partial ? "Hoàn tất một phần" : lines.length === 1 ? label(r.status) : closed ? "Đã đóng hồ sơ" : "Đang xử lý"}</span>
-              <small>{date(r.createdAt)}</small>
-            </button>
-            );
-          })}
+          <h2>Xử lý yêu cầu đổi trả</h2>
+          <ReturnQueue rows={state.returns} onSelect={setSelected} admin />
         </section>
       )}
       {section === "policies" && admin && (
-        <section className="store-card">
-          <h2>Chính sách bảo mật</h2>
-          <p className="store-warning">
-            Phiên bản dự thảo chờ phê duyệt; lưu phiên bản mới không tự biến
-            thành chính sách có hiệu lực.
-          </p>
-          <form
-            className="store-form"
-            onSubmit={(e) => {
-              const b = fields(e);
-              void run(async () => {
-                await mutate("command", "policy", b);
-              });
-            }}
-          >
-            <label>
-              Phiên bản
-              <input
-                name="version"
-                placeholder="1.1-draft"
-                required
-                maxLength={40}
-              />
-            </label>
-            <label>
-              Nội dung
-              <textarea
-                name="content"
-                rows={18}
-                defaultValue={String(state.policy.content)}
-                required
-                maxLength={16000}
-              />
-            </label>
-            <button disabled={busy}>Lưu phiên bản mới</button>
-          </form>
-          <details>
-            <summary>Lịch sử phiên bản</summary>
-            {state.policyVersions?.map((p) => (
-              <details key={p.id}>
-                <summary>
-                  {String(p.version)} · {date(p.createdAt)}
-                </summary>
-                <div className="store-policy">{String(p.content)}</div>
-              </details>
-            ))}
-          </details>
-        </section>
+        <PolicyEditor
+          policy={state.policy}
+          versions={state.policyVersions ?? []}
+          busy={busy}
+          onSave={(draft) => {
+            void run(async () => {
+              await mutate("command", "policy", draft);
+            });
+          }}
+        />
       )}
-      {section === "audit" && admin && (
-        <section className="store-card">
-          <h2>Nhật ký thao tác</h2>
-          {state.audit?.map((a, i) => (
-            <div className="store-row" key={String(a.id ?? i)}>
-              <strong>{String(a.action)}</strong>
-              <small>
-                {date(a.at)} · {String(a.subject)}
-              </small>
-            </div>
-          ))}
-        </section>
-      )}
+      {section === "audit" && admin && <AuditLog rows={state.audit ?? []} />}
       {detailPanel}
     </main>
   );

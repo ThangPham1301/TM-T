@@ -216,7 +216,7 @@ public class PlatformApi {
     @GetMapping("/state") public Object state(HttpServletRequest req) {
         var a=actor(req);var out=new LinkedHashMap<String,Object>();out.put("user",safe(a));out.put("addresses",admin(a)?List.of():list("address",a));out.put("orders",list("order",a));out.put("privacy",list("privacy",a));out.put("returns",list("return",a));out.put("consents",list("consent",a));out.put("policy",policy());out.put("retention",Map.of("status","PENDING_APPROVAL","automaticDeletion",false));
         out.put("cartCount",admin(a)?0:db.queryForObject("SELECT COALESCE(sum((data->>'quantity')::int),0) FROM records WHERE kind='cart' AND owner_id=?",Integer.class,a.get("id")));
-        if(admin(a)){out.put("audit",db.queryForList("SELECT id,subject,action,at FROM audit ORDER BY id DESC LIMIT 200"));out.put("policyVersions",list("policy",a));}return out;
+        if(admin(a)){out.put("audit",db.queryForList("SELECT a.id,a.subject,a.action,a.at,c.name AS \"actorName\",c.role AS \"actorRole\" FROM audit a LEFT JOIN customers c ON c.id=a.actor_id ORDER BY a.id DESC LIMIT 200"));out.put("policyVersions",list("policy",a));}return out;
     }
     @PostMapping("/password") @Transactional
     public Object changePassword(@RequestBody Map<String,Object> body,HttpServletRequest req) {

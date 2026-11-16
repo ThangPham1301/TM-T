@@ -111,7 +111,7 @@ export function CatalogAdmin({
         <span className="eyebrow">Quản trị cửa hàng</span>
         <h1>
           {section === "settings"
-            ? "Cấu hình phí giao hàng"
+            ? "Cấu hình bán hàng & vận chuyển"
             : isProduct
               ? "Sản phẩm & tồn kho"
               : "Danh mục sản phẩm"}
@@ -122,7 +122,7 @@ export function CatalogAdmin({
       {section === "settings" ? (
         shipping && (
           <section className="store-card">
-            <h2>Phí giao hàng chung</h2>
+            <h2>Cấu hình vận chuyển tiêu chuẩn</h2>
             <form
               key={String(shipping.revision)}
               className="store-form"
@@ -166,6 +166,10 @@ export function CatalogAdmin({
                   defaultValue={Number(shipping.freeShippingThreshold)}
                 />
               </label>
+              <h3>Trạng thái tiếp nhận đơn hàng</h3>
+              <p className="store-status-chip">
+                {shipping.enabled ? "Đang nhận đơn" : "Tạm ngừng nhận đơn"}
+              </p>
               <label className="store-check">
                 <input
                   name="enabled"

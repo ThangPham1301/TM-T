@@ -115,3 +115,5 @@ Error từ backend gồm code, message, requestId. BFF có thể trả message r
 - Approved cases can pause in WAITING_STOCK, PAYMENT_REVIEW or EXCEPTION and resume their previous state. RECEIVED takes receivedQuantity; INSPECTED takes inspectedQuantity and disposition. Multi-item replacement/make-up requires REPLACEMENT_SENT with a reference before RESOLVED.
 - For missing or undelivered goods, offer make-up delivery or refund and disallow pickup. For other reasons, offer replacement or refund. Only staff may propose adjustment of the amount due. Stock holds apply to outbound shipments and payment review applies to financial resolutions. A pickup with no units received can be retried after resuming.
 - Refund processing and confirmation require confirmed payment. Adjustment of amount due requires unpaid status. These are manual records with references.
+
+Trang nhật ký ADMIN hiển thị tối đa 200 sự kiện gần nhất. Có thể lọc theo hành động và tìm theo tác nhân hoặc đối tượng. Nếu không còn bản ghi tác nhân, giao diện hiện dấu gạch ngang. Danh sách rỗng và bộ lọc không có kết quả có thông báo riêng.
