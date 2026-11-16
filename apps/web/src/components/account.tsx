@@ -34,6 +34,7 @@ export function Account({
 }) {
   const { state, loading, busy, run, mutate, logout } = useStore(),
     [selected, setSelected] = useState<Row | null>(null),
+    [returnOrderId, setReturnOrderId] = useState(""),
     [files, setFiles] = useState<File[]>([]),
     [supplementFiles, setSupplementFiles] = useState<File[]>([]),
     [orderQuery, setOrderQuery] = useState(""),
@@ -71,7 +72,10 @@ export function Account({
         (r) => r.id === selected.id,
       ) ?? selected)
     : null;
-  const orderItems = (current?.items as Row[] | undefined) ?? [];
+  const returnOrder = section === "returns"
+    ? state.orders.find((order) => order.id === returnOrderId)
+    : current;
+  const orderItems = (returnOrder?.items as Row[] | undefined) ?? [];
   const selectedProducts = returnLines.map((line) => line.productId || String(orderItems[0]?.productId ?? ""));
   const nextProduct = orderItems.find((item) => !selectedProducts.includes(String(item.productId)));
   const orderCount = (s: string) =>
@@ -107,6 +111,204 @@ export function Account({
     }
     return ids;
   }
+
+  const returnForm = (
+    !admin &&
+    returnOrder?.status === "DELIVERED" &&
+    (() => {
+      const deliveredAt = returnOrder.deliveredAt ? new Date(String(returnOrder.deliveredAt)).getTime() : 0;
+      const isAfter7Days = deliveredAt > 0 && Date.now() - deliveredAt > 7 * 24 * 3600 * 1000;
+      return (
+        <form
+          className="store-form"
+          onSubmit={(e) => {
+            const b = fields(e);
+            const validLines = returnLines.filter(
+              (line) =>
+                b[`productId_${line.id}`] &&
+                Number(b[`quantity_${line.id}`]) > 0,
+            );
+            if (validLines.length === 0) {
+              alert("Vui lòng chọn ít nhất một sản phẩm và nhập số lượng hợp lệ.");
+              return;
+            }
+            if (
+              !window.confirm(
+                `Gửi yêu cầu đổi trả cho ${validLines.length} dòng hàng?`,
+              )
+            )
+              return;
+            void run(async () => {
+              const uploadedEvidence = await upload(files);
+              const items = validLines.map((l) => ({
+                lineId: b[`productId_${l.id}`],
+                quantity: Number(b[`quantity_${l.id}`]),
+                reason: b[`reason_${l.id}`] ?? l.reason,
+                resolution: b[`resolution_${l.id}`] ?? "REFUND",
+                description: b[`description_${l.id}`] ?? "",
+              }));
+              await mutate("command", "return-submit", {
+                orderId: returnOrder.id,
+                evidenceIds: uploadedEvidence,
+                items,
+              });
+              setFiles([]);
+              setReturnLines([{ id: 0, productId: "", reason: "DAMAGED" }]);
+              if (section === "returns") setReturnOrderId("");
+            });
+          }}
+        >
+          {section !== "returns" && <h3>Yêu cầu đổi hoặc trả hàng</h3>}
+          <p className="store-subtle">
+            Chính sách dự thảo: tiếp nhận trong 7 ngày từ khi giao thành công. Sau 7 ngày, hệ thống vẫn tiếp nhận nếu là lỗi chất lượng hoặc an toàn thực phẩm.
+          </p>
+          {returnLines.map((line, idx) => {
+            const item = orderItems.find((it) => String(it.productId) === line.productId) ?? orderItems[0];
+            const availableProducts = orderItems.filter(
+              (it) => String(it.productId) === String(item?.productId) || !selectedProducts.includes(String(it.productId)),
+            );
+            return (
+              <div key={line.id} className="store-return-line">
+                {returnLines.length > 1 && (
+                  <div className="store-return-line-header">
+                    <strong>Dòng hàng #{idx + 1}</strong>
+                    <button
+                      type="button"
+                      className="store-btn-text"
+                      onClick={() => setReturnLines((prev) => prev.filter((l) => l.id !== line.id))}
+                    >
+                      Xóa dòng này ×
+                    </button>
+                  </div>
+                )}
+                <label>
+                  Sản phẩm
+                  <select
+                    name={`productId_${line.id}`}
+                    value={line.productId || String(item?.productId ?? "")}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setReturnLines((prev) => prev.map((l) => l.id === line.id ? { ...l, productId: val } : l));
+                    }}
+                  >
+                    {availableProducts.map((it) => (
+                      <option key={String(it.productId)} value={String(it.productId)}>
+                        {String(it.name)} (đã mua: {String(it.quantity)})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Số lượng yêu cầu
+                  <input
+                    type="number"
+                    name={`quantity_${line.id}`}
+                    min={1}
+                    max={Number(item?.quantity ?? 1)}
+                    defaultValue={1}
+                    required
+                  />
+                </label>
+                <label>
+                  Lý do
+                  <select
+                    name={`reason_${line.id}`}
+                    value={isAfter7Days && !["UNSAFE", "QUALITY"].includes(line.reason) ? "QUALITY" : line.reason}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setReturnLines((prev) => prev.map((l) => l.id === line.id ? { ...l, reason: val } : l));
+                    }}
+                  >
+                    {([
+                      ...(!isAfter7Days ? [
+                        ["WRONG_ITEM", "Giao sai sản phẩm"],
+                        ["MISSING_ITEM", "Giao thiếu hàng"],
+                        ["DAMAGED", "Hư hỏng do vận chuyển"],
+                        ["NOT_RECEIVED", "Chưa nhận được hàng"],
+                        ["CHANGE_OF_MIND", "Thay đổi ý định"],
+                      ] : []),
+                      ["UNSAFE", "Nghi ngờ không an toàn thực phẩm"],
+                      ["QUALITY", "Chất lượng không đảm bảo"],
+                    ] as [string, string][]).map(([value, text]) => (
+                      <option key={value} value={value}>
+                        {text}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Phương án mong muốn
+                  <select name={`resolution_${line.id}`}>
+                    <option value="REFUND">Hoàn tiền</option>
+                    {["MISSING_ITEM", "NOT_RECEIVED"].includes(line.reason) ? (
+                      <option value="MAKE_UP">Giao bù hàng thiếu</option>
+                    ) : (
+                      <option value="REPLACEMENT">Đổi sản phẩm mới</option>
+                    )}
+                  </select>
+                </label>
+                <label>
+                  Mô tả chi tiết lỗi
+                  <textarea
+                    name={`description_${line.id}`}
+                    required
+                    maxLength={2000}
+                    placeholder="Mô tả tình trạng sản phẩm khi nhận..."
+                  />
+                </label>
+              </div>
+            );
+          })}
+          {nextProduct && returnLines.length < orderItems.length && (
+            <button
+              type="button"
+              className="store-btn-secondary"
+              onClick={() => {
+                const nextId = nextReturnLine.current++;
+                setReturnLines((prev) => [
+                  ...prev,
+                  { id: nextId, productId: String(nextProduct.productId), reason: "DAMAGED" },
+                ]);
+              }}
+            >
+              + Thêm sản phẩm khác từ đơn này
+            </button>
+          )}
+          <label>
+            Ảnh chứng minh PNG/JPEG (tối đa 5 ảnh, 5 MB/ảnh)
+            <input
+              type="file"
+              accept="image/png,image/jpeg"
+              multiple
+              onChange={(e) => {
+                const selectedFiles = Array.from(e.target.files ?? []);
+                if (
+                  selectedFiles.length > 5 ||
+                  selectedFiles.some(
+                    (file) =>
+                      file.size > 5 * 1024 * 1024 ||
+                      !["image/png", "image/jpeg"].includes(file.type),
+                  )
+                ) {
+                  e.target.value = "";
+                  setFiles([]);
+                } else setFiles(selectedFiles);
+              }}
+            />
+            <small>
+              Chụp rõ nhãn mác, hạn sử dụng và phần hư hỏng nếu có.
+            </small>
+          </label>
+          {files.length > 0 && (
+            <p className="store-subtle">
+              Đã chọn: {files.map((file) => file.name).join(", ")}
+            </p>
+          )}
+          <button disabled={busy}>Gửi yêu cầu đổi trả</button>
+        </form>
+      );
+    })()
+  );
 
   const detailPanel = current ? (
     <section key={current.id} className="store-card store-detail">
@@ -246,201 +448,7 @@ export function Account({
                 busy={busy}
               />
             )}
-            {!admin &&
-              String(current.status) === "DELIVERED" &&
-              (() => {
-                const deliveredAt = current.deliveredAt ? new Date(String(current.deliveredAt)).getTime() : 0;
-                const isAfter7Days = deliveredAt > 0 && Date.now() - deliveredAt > 7 * 24 * 3600 * 1000;
-                return (
-                  <form
-                    className="store-form"
-                    onSubmit={(e) => {
-                      const b = fields(e);
-                      const validLines = returnLines.filter(
-                        (line) =>
-                          b[`productId_${line.id}`] &&
-                          Number(b[`quantity_${line.id}`]) > 0,
-                      );
-                      if (validLines.length === 0) {
-                        alert("Vui lòng chọn ít nhất một sản phẩm và nhập số lượng hợp lệ.");
-                        return;
-                      }
-                      if (
-                        !window.confirm(
-                          `Gửi yêu cầu đổi trả cho ${validLines.length} dòng hàng?`,
-                        )
-                      )
-                        return;
-                      void run(async () => {
-                        const uploadedEvidence = await upload(files);
-                        const items = validLines.map((l) => ({
-                          lineId: b[`productId_${l.id}`],
-                          quantity: Number(b[`quantity_${l.id}`]),
-                          reason: b[`reason_${l.id}`] ?? l.reason,
-                          resolution: b[`resolution_${l.id}`] ?? "REFUND",
-                          description: b[`description_${l.id}`] ?? "",
-                        }));
-                        await mutate("command", "return-submit", {
-                          orderId: current.id,
-                          evidenceIds: uploadedEvidence,
-                          items,
-                        });
-                        setFiles([]);
-                        setReturnLines([{ id: 0, productId: "", reason: "DAMAGED" }]);
-                        if (section === "returns") setSelected(null);
-                      });
-                    }}
-                  >
-                    <h3>Yêu cầu đổi hoặc trả hàng</h3>
-                    <p className="store-subtle">
-                      Chính sách dự thảo: tiếp nhận trong 7 ngày từ khi giao thành công. Sau 7 ngày, hệ thống vẫn tiếp nhận nếu là lỗi chất lượng hoặc an toàn thực phẩm.
-                    </p>
-                    {returnLines.map((line, idx) => {
-                      const item = orderItems.find((it) => String(it.productId) === line.productId) ?? orderItems[0];
-                      const availableProducts = orderItems.filter(
-                        (it) => String(it.productId) === String(item?.productId) || !selectedProducts.includes(String(it.productId)),
-                      );
-                      return (
-                        <div key={line.id} className="store-return-line">
-                          {returnLines.length > 1 && (
-                            <div className="store-return-line-header">
-                              <strong>Dòng hàng #{idx + 1}</strong>
-                              <button
-                                type="button"
-                                className="store-btn-text"
-                                onClick={() => setReturnLines((prev) => prev.filter((l) => l.id !== line.id))}
-                              >
-                                Xóa dòng này ×
-                              </button>
-                            </div>
-                          )}
-                          <label>
-                            Sản phẩm
-                            <select
-                              name={`productId_${line.id}`}
-                              value={line.productId || String(item?.productId ?? "")}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setReturnLines((prev) => prev.map((l) => l.id === line.id ? { ...l, productId: val } : l));
-                              }}
-                            >
-                              {availableProducts.map((it) => (
-                                <option key={String(it.productId)} value={String(it.productId)}>
-                                  {String(it.name)} (đã mua: {String(it.quantity)})
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label>
-                            Số lượng yêu cầu
-                            <input
-                              type="number"
-                              name={`quantity_${line.id}`}
-                              min={1}
-                              max={Number(item?.quantity ?? 1)}
-                              defaultValue={1}
-                              required
-                            />
-                          </label>
-                          <label>
-                            Lý do
-                            <select
-                              name={`reason_${line.id}`}
-                              value={isAfter7Days && !["UNSAFE", "QUALITY"].includes(line.reason) ? "QUALITY" : line.reason}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setReturnLines((prev) => prev.map((l) => l.id === line.id ? { ...l, reason: val } : l));
-                              }}
-                            >
-                              {([
-                                ...(!isAfter7Days ? [
-                                  ["WRONG_ITEM", "Giao sai sản phẩm"],
-                                  ["MISSING_ITEM", "Giao thiếu hàng"],
-                                  ["DAMAGED", "Hư hỏng do vận chuyển"],
-                                  ["NOT_RECEIVED", "Chưa nhận được hàng"],
-                                  ["CHANGE_OF_MIND", "Thay đổi ý định"],
-                                ] : []),
-                                ["UNSAFE", "Nghi ngờ không an toàn thực phẩm"],
-                                ["QUALITY", "Chất lượng không đảm bảo"],
-                              ] as [string, string][]).map(([value, text]) => (
-                                <option key={value} value={value}>
-                                  {text}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label>
-                            Phương án mong muốn
-                            <select name={`resolution_${line.id}`}>
-                              <option value="REFUND">Hoàn tiền</option>
-                              {["MISSING_ITEM", "NOT_RECEIVED"].includes(line.reason) ? (
-                                <option value="MAKE_UP">Giao bù hàng thiếu</option>
-                              ) : (
-                                <option value="REPLACEMENT">Đổi sản phẩm mới</option>
-                              )}
-                            </select>
-                          </label>
-                          <label>
-                            Mô tả chi tiết lỗi
-                            <textarea
-                              name={`description_${line.id}`}
-                              required
-                              maxLength={2000}
-                              placeholder="Mô tả tình trạng sản phẩm khi nhận..."
-                            />
-                          </label>
-                        </div>
-                      );
-                    })}
-                    {nextProduct && returnLines.length < orderItems.length && (
-                      <button
-                        type="button"
-                        className="store-btn-secondary"
-                        onClick={() => {
-                          const nextId = nextReturnLine.current++;
-                          setReturnLines((prev) => [
-                            ...prev,
-                            { id: nextId, productId: String(nextProduct.productId), reason: "DAMAGED" },
-                          ]);
-                        }}
-                      >
-                        + Thêm sản phẩm khác từ đơn này
-                      </button>
-                    )}
-                    <label>
-                      Ảnh chứng minh PNG/JPEG (tối đa 5 ảnh, 5 MB/ảnh)
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg"
-                        multiple
-                        onChange={(e) => {
-                          const selectedFiles = Array.from(e.target.files ?? []);
-                          if (
-                            selectedFiles.length > 5 ||
-                            selectedFiles.some(
-                              (file) =>
-                                file.size > 5 * 1024 * 1024 ||
-                                !["image/png", "image/jpeg"].includes(file.type),
-                            )
-                          ) {
-                            e.target.value = "";
-                            setFiles([]);
-                          } else setFiles(selectedFiles);
-                        }}
-                      />
-                      <small>
-                        Chụp rõ nhãn mác, hạn sử dụng và phần hư hỏng nếu có.
-                      </small>
-                    </label>
-                    {files.length > 0 && (
-                      <p className="store-subtle">
-                        Đã chọn: {files.map((file) => file.name).join(", ")}
-                      </p>
-                    )}
-                    <button disabled={busy}>Gửi yêu cầu đổi trả</button>
-                  </form>
-                );
-              })()}
+            {section !== "returns" && returnForm}
           </>
         ) : (
           <>
@@ -507,7 +515,7 @@ export function Account({
             {((current.evidenceIds as string[]) ?? []).length > 0 && (
               <div className="store-evidence-grid">
                 <h4>Ảnh đính kèm</h4>
-                <div className="store-evidence-list">
+                <div className="store-evidence-list returns-evidence-list">
                   {((current.evidenceIds as string[]) ?? []).map((id) => (
                     <a
                       key={id}
@@ -725,40 +733,92 @@ export function Account({
               <AccountOrders onSelectOrder={setSelected} />
             )}
             {section === "returns" && (
-              <section className="store-card">
-                <h2>Yêu cầu đổi trả &amp; hoàn tiền</h2>
-                <div className="store-form">
-                  <label>
-                    Tạo yêu cầu từ đơn đã giao
-                    <select
-                      value={current?.items ? current.id : ""}
-                      onChange={(event) => {
-                        setFiles([]);
-                        setReturnLines([{ id: 0, productId: "", reason: "DAMAGED" }]);
-                        setSelected(
-                          state.orders.find((order) => order.id === event.target.value) ?? null,
-                        );
-                      }}
-                    >
-                      <option value="">Chọn đơn hàng</option>
-                      {state.orders.filter((order) => order.status === "DELIVERED").map((order) => (
-                        <option key={order.id} value={order.id}>
-                          {String(order.number)} · {date(order.deliveredAt)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {!state.orders.some((order) => order.status === "DELIVERED") && (
-                    <p className="store-subtle">Bạn chưa có đơn đã giao.</p>
-                  )}
-                  <Link href="/account/orders">Xem đơn hàng của tôi</Link>
+              <div className="customer-returns">
+                <header className="returns-heading">
+                  <div>
+                    <h1>Yêu cầu đổi trả &amp; hoàn tiền</h1>
+                    <Link href="/return-policy">Xem chính sách đổi trả →</Link>
+                  </div>
+                  <a className="returns-primary" href="#new-return">+ Tạo yêu cầu đổi trả mới</a>
+                </header>
+                <div className="returns-layout returns-customer-layout">
+                  <section aria-label="Hồ sơ đổi trả">
+                    <h2 className="returns-section-title">Hồ sơ khiếu nại hiện hành</h2>
+                    <ReturnQueue rows={state.returns} onSelect={(row) => {
+                      setSupplementFiles([]);
+                      setSelected(row);
+                    }} />
+                    {detailPanel}
+                  </section>
+                  <section className="store-card returns-create" id="new-return">
+                    <h2>Tạo yêu cầu đổi trả mới</h2>
+                    <div className="store-form">
+                      <label>
+                        Chọn đơn hàng đã giao
+                        <select
+                          value={returnOrderId}
+                          onChange={(event) => {
+                            setFiles([]);
+                            setReturnLines([{ id: 0, productId: "", reason: "DAMAGED" }]);
+                            setReturnOrderId(event.target.value);
+                          }}
+                        >
+                          <option value="">Chọn đơn hàng</option>
+                          {state.orders.filter((order) => order.status === "DELIVERED").map((order) => (
+                            <option key={order.id} value={order.id}>
+                              {String(order.number)} · {date(order.deliveredAt)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {!state.orders.some((order) => order.status === "DELIVERED") && (
+                        <p className="store-subtle">Bạn chưa có đơn đã giao. <Link href="/account/orders">Xem đơn hàng</Link></p>
+                      )}
+                    </div>
+                    <div key={returnOrderId}>{returnForm}</div>
+                  </section>
                 </div>
-                <ReturnQueue rows={state.returns} onSelect={setSelected} />
-              </section>
+              </div>
             )}
-            {section !== "orders" && detailPanel}
+            {section !== "orders" && section !== "returns" && detailPanel}
           </main>
         </div>
+      </div>
+    );
+  }
+
+  if (section === "returns") {
+    return (
+      <div className="admin-returns">
+        <aside className="returns-admin-sidebar">
+          <header>
+            <strong>Quản trị Gói Huế</strong>
+            <small>{String(state.user.name)}</small>
+          </header>
+          <WorkspaceNav admin section={section} />
+          <div className="returns-admin-links">
+            <Link href="/">Xem cửa hàng →</Link>
+            <button type="button" onClick={() => void logout()}>Đăng xuất</button>
+          </div>
+        </aside>
+        <main className="returns-admin-main">
+          <div className="returns-admin-topbar">
+            <span>Quản trị › Chăm sóc khách hàng › Đổi trả</span>
+            <Link href="/">Xem cửa hàng</Link>
+          </div>
+          <header className="returns-heading returns-admin-heading">
+            <div>
+              <h1>Xử lý yêu cầu đổi trả</h1>
+              <p>Xem bằng chứng, thẩm định và cập nhật tiến độ từng yêu cầu.</p>
+            </div>
+          </header>
+          <div className="returns-layout returns-admin-layout">
+            <ReturnQueue rows={state.returns} orders={state.orders} onSelect={setSelected} admin />
+            <aside className="returns-admin-detail" aria-label="Chi tiết yêu cầu">
+              {detailPanel ?? <p className="store-empty">Chọn một yêu cầu để xem chi tiết và xử lý.</p>}
+            </aside>
+          </div>
+        </main>
       </div>
     );
   }
@@ -967,12 +1027,6 @@ export function Account({
           />
         </section>
       )}
-      {section === "returns" && (
-        <section className="store-card">
-          <h2>Xử lý yêu cầu đổi trả</h2>
-          <ReturnQueue rows={state.returns} onSelect={setSelected} admin />
-        </section>
-      )}
       {section === "policies" && admin && (
         <PolicyEditor
           policy={state.policy}
@@ -1166,7 +1220,8 @@ function CaseAction({
     !(refundAwaitingPayment && resumeNeedsPayment && step === "RESUME"),
   );
   const [selection, setTarget] = useState("");
-  const target = next.includes(selection) ? selection : next[0];
+  const reviewingReturn = !row.type && row.status === "REVIEWING";
+  const target = next.includes(selection) ? selection : reviewingReturn ? "" : next[0];
   const refundNotice = refundAwaitingPayment && (
     <div className="store-warning">
       <p>Chưa thể tiếp tục hoàn tiền vì đơn hàng chưa được xác nhận đã thu tiền.</p>
@@ -1199,22 +1254,38 @@ function CaseAction({
       {paymentBlocked && !refundAwaitingPayment && (
         <p className="store-warning">Đơn đã thu tiền. Cần chuyển sang phương án hoàn tiền.</p>
       )}
-      <label>
-        Bước tiếp theo
-        <select
-          name="status"
-          value={target}
-          onChange={(e) => setTarget(e.target.value)}
-        >
-          {next.map((s) => (
-            <option key={s} value={s}>
-              {s === "RESUME" && row.resumeStatus
-                ? `Tiếp tục xử lý → ${label(row.resumeStatus)}`
-                : label(s)}
-            </option>
+      {reviewingReturn ? (
+        <fieldset className="returns-decisions">
+          <legend>Quyết định nghiệp vụ</legend>
+          <input type="hidden" name="status" value={selection} />
+          {[
+            ["APPROVED", "Chấp thuận đổi trả"],
+            ["EVIDENCE_REQUIRED", "Yêu cầu bổ sung"],
+            ["REJECTED", "Từ chối yêu cầu"],
+          ].filter(([step]) => next.includes(step)).map(([step, title]) => (
+            <button type="button" key={step} aria-pressed={selection === step} onClick={() => setTarget(step)}>
+              {title}
+            </button>
           ))}
-        </select>
-      </label>
+        </fieldset>
+      ) : (
+        <label>
+          Bước tiếp theo
+          <select
+            name="status"
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+          >
+            {next.map((s) => (
+              <option key={s} value={s}>
+                {s === "RESUME" && row.resumeStatus
+                  ? `Tiếp tục xử lý → ${label(row.resumeStatus)}`
+                  : label(s)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {target === "APPROVED" && (
         <>
           <label>
@@ -1273,7 +1344,7 @@ function CaseAction({
         Lý do/kết quả
         <textarea name="note" required maxLength={2000} />
       </label>
-      <button disabled={busy}>Xác nhận xử lý</button>
+      <button disabled={busy || !target}>Xác nhận xử lý</button>
     </form>
   );
 }

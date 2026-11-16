@@ -6,13 +6,29 @@ import { Pagination } from "./workspace-nav";
 
 const pageSize = 8;
 
+const returnFilters = [
+  { id: "review", label: "Chờ duyệt", statuses: ["REQUESTED", "REVIEWING"] },
+  { id: "evidence", label: "Cần bổ sung bằng chứng", statuses: ["EVIDENCE_REQUIRED"] },
+  { id: "approved", label: "Đã duyệt", statuses: ["APPROVED"] },
+  { id: "progress", label: "Đang hoàn hàng", statuses: ["RECEIVED", "INSPECTED", "PROCESSING", "REPLACEMENT_SENT"] },
+  { id: "hold", label: "Đang chờ", statuses: ["CUSTOMER_CONFIRMATION", "WAITING_STOCK", "PAYMENT_REVIEW", "EXCEPTION"] },
+  { id: "complete", label: "Đã hoàn tất", statuses: ["RESOLVED"] },
+  { id: "closed", label: "Đã từ chối / đã rút", statuses: ["REJECTED", "WITHDRAWN"] },
+];
+
+function matchesReturnFilter(group: Row[], statuses: string[]) {
+  return group.some((row) => statuses.includes(String(row.status)));
+}
+
 export function ReturnQueue({
   rows,
   onSelect,
+  orders = [],
   admin = false,
 }: {
   rows: Row[];
   onSelect: (row: Row) => void;
+  orders?: Row[];
   admin?: boolean;
 }) {
   const [query, setQuery] = useState("");
@@ -25,12 +41,19 @@ export function ReturnQueue({
     if (group) group.push(row);
     else groups.set(key, [row]);
   }
-  const cases = [...groups.values()].filter((group) =>
+  const allCases = [...groups.values()];
+  const orderById = new Map(orders.map((order) => [order.id, order]));
+  const filters = returnFilters.map((filter) => ({
+    ...filter,
+    count: allCases.filter((group) => matchesReturnFilter(group, filter.statuses)).length,
+  }));
+  const currentFilter = filters.find((filter) => filter.id === status);
+  const cases = allCases.filter((group) =>
     group.some((row) =>
-      [row.orderNumber, row.product, row.caseId, row.id].some((value) =>
+      [row.orderNumber, row.product, row.caseId, row.id, orderById.get(String(row.orderId))?.recipient].some((value) =>
         String(value ?? "").toLocaleLowerCase("vi").includes(query.trim().toLocaleLowerCase("vi")),
       ),
-    ) && (!status || group.some((row) => row.status === status)),
+    ) && (!currentFilter || matchesReturnFilter(group, currentFilter.statuses)),
   );
   const currentPage = Math.min(page, Math.max(1, Math.ceil(cases.length / pageSize)));
   const visibleCases = cases
@@ -62,29 +85,46 @@ export function ReturnQueue({
 
 
   return (
-    <div className="operations-list">
-      {!admin && <h3>Hồ sơ đổi trả của tôi</h3>}
+    <div className={admin ? "returns-queue-admin" : "operations-list"}>
+      {admin && (
+        <div className="returns-summary" aria-label="Tổng quan yêu cầu đổi trả">
+          {filters.slice(0, 3).map((filter) => (
+            <button type="button" key={filter.id} onClick={() => {
+              setStatus(filter.id);
+              setPage(1);
+            }}>
+              <small>{filter.label}</small>
+              <strong>{filter.count}</strong>
+            </button>
+          ))}
+        </div>
+      )}
       {rows.length > 0 && (
-        <div className="store-filters">
+        <div className="returns-filters">
           <label>
             Tìm yêu cầu
-            <input value={query} placeholder="Mã đơn, mã yêu cầu hoặc sản phẩm" onChange={(event) => {
+            <input type="search" value={query} placeholder="Mã đơn, mã yêu cầu hoặc sản phẩm" onChange={(event) => {
               setQuery(event.target.value);
               setPage(1);
             }} />
           </label>
-          <label>
-            Trạng thái dòng hàng
-            <select value={status} onChange={(event) => {
-              setStatus(event.target.value);
-              setPage(1);
-            }}>
-              <option value="">Tất cả trạng thái</option>
-              {[...new Set(rows.map((row) => String(row.status)))].map((value) => (
-                <option value={value} key={value}>{label(value)}</option>
+          {admin && (
+            <div className="returns-filter-buttons" role="group" aria-label="Trạng thái yêu cầu">
+              {[{ id: "", label: "Tất cả", count: allCases.length }, ...filters].map((filter) => (
+                <button
+                  type="button"
+                  key={filter.id}
+                  aria-pressed={status === filter.id}
+                  onClick={() => {
+                    setStatus(filter.id);
+                    setPage(1);
+                  }}
+                >
+                  {filter.label} ({filter.count})
+                </button>
               ))}
-            </select>
-          </label>
+            </div>
+          )}
         </div>
       )}
       {!cases.length && (
@@ -95,7 +135,8 @@ export function ReturnQueue({
           <table>
             <thead>
               <tr>
-                <th scope="col">Đơn hàng</th>
+                <th scope="col">Mã yêu cầu / đơn gốc</th>
+                <th scope="col">Người nhận</th>
                 <th scope="col">Sản phẩm và lý do</th>
                 <th scope="col">Bằng chứng</th>
                 <th scope="col">Trạng thái</th>
@@ -105,7 +146,11 @@ export function ReturnQueue({
             <tbody>
               {visibleCases.map(({ row, products, reasons, quantity, evidenceCount, caseStatus }) => (
                 <tr key={row.id}>
-                  <td><strong>{String(row.orderNumber)}</strong><br /><small>{date(row.createdAt)}</small></td>
+                  <td>
+                    <strong>#{String(row.caseId || row.id).slice(0, 8)}</strong><br />
+                    {String(row.orderNumber)}<br /><small>{date(row.createdAt)}</small>
+                  </td>
+                  <td>{String(orderById.get(String(row.orderId))?.recipient ?? "—")}</td>
                   <td>{products} · {quantity} sản phẩm<br /><small>{reasons}</small></td>
                   <td>{evidenceCount} ảnh</td>
                   <td><span className="store-status-chip">{caseStatus}</span></td>
@@ -126,7 +171,7 @@ export function ReturnQueue({
         </div>
       )}
       {!admin && visibleCases.map(({ row, products, reasons, quantity, caseStatus }) => (
-        <button type="button" className="store-row" key={row.id} onClick={() => onSelect(row)}>
+        <button type="button" className="store-row returns-customer-row" key={row.id} onClick={() => onSelect(row)}>
           <strong>{String(row.orderNumber)} · {products}</strong>
           <span>{reasons} · {quantity} sản phẩm</span>
           <span className="store-status-chip">{caseStatus}</span>
