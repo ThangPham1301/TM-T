@@ -1,8 +1,53 @@
 "use client";
 
-import { useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { useState, type ReactNode } from "react";
 import { date, fields, label, type Row } from "@/lib/store";
-import { Pagination } from "./workspace-nav";
+import { Pagination, WorkspaceNav } from "./workspace-nav";
+
+export function OperationsWorkspace({
+  section,
+  title,
+  description,
+  userName,
+  onLogout,
+  children,
+}: {
+  section: string;
+  title: string;
+  description: string;
+  userName: string;
+  onLogout: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="admin-returns">
+      <aside className="returns-admin-sidebar">
+        <header>
+          <Image className="operations-brand-mark" src="/images/stitch/asset-08.png" width={48} height={38} alt="" />
+          <div><strong>Quản trị Gói Huế</strong><small>Quản lý cửa hàng</small></div>
+        </header>
+        <WorkspaceNav admin section={section} />
+        <div className="returns-admin-links">
+          <Link href="/">Xem cửa hàng →</Link>
+          <small>{userName}</small>
+          <button type="button" onClick={onLogout}>Đăng xuất</button>
+        </div>
+      </aside>
+      <main className="returns-admin-main">
+        <div className="returns-admin-topbar">
+          <span>Quản trị › {title}</span>
+          <Link href="/">Xem cửa hàng</Link>
+        </div>
+        <header className="returns-heading returns-admin-heading">
+          <div><h1>{title}</h1><p>{description}</p></div>
+        </header>
+        {children}
+      </main>
+    </div>
+  );
+}
 
 const pageSize = 8;
 
@@ -196,92 +241,151 @@ export function PolicyEditor({
 }) {
   const [version, setVersion] = useState("");
   const [content, setContent] = useState(String(policy.content ?? ""));
+  const [viewedId, setViewedId] = useState("");
+  const viewed = versions.find((entry) => entry.id === viewedId);
   return (
-    <div className="store-two">
-      <section className="store-card">
-        <h2>Quản lý chính sách bảo mật</h2>
-        <form className="store-form" onSubmit={(event) => onSave(fields(event))}>
-          <label>
-            Mã phiên bản
-            <input name="version" placeholder="1.1-draft" required maxLength={40} value={version} onChange={(event) => setVersion(event.target.value)} />
-          </label>
-          <label>
-            Nội dung
-            <textarea name="content" rows={16} required maxLength={16000} value={content} onChange={(event) => setContent(event.target.value)} />
-          </label>
-          <small>{content.length}/16.000 ký tự</small>
-          <button disabled={busy}>Lưu bản thảo mới</button>
-        </form>
-        <h3>Lịch sử phiên bản</h3>
-        {versions.map((entry) => (
-          <details key={entry.id}>
-            <summary>{String(entry.version)} · {date(entry.createdAt)}</summary>
-            <div className="store-policy">{String(entry.content)}</div>
-          </details>
-        ))}
-      </section>
-      <section className="store-card">
-        <h2>Xem trước chính sách</h2>
-        <p className="store-status-chip">Dự thảo{version.trim() && ` · ${version.trim()}`}</p>
-        <h3>{String(policy.title)}</h3>
-        <div className="store-policy">{content || "Nhập nội dung để xem trước."}</div>
-      </section>
-    </div>
+    <>
+      <aside className="operations-notice">
+        <span className="operations-notice-mark" aria-hidden="true">!</span>
+        <div><h2>Chế độ bản thảo</h2><p>Phiên bản lưu trong hệ thống đang ở trạng thái dự thảo. Xem trước nội dung trước khi lưu phiên bản mới.</p></div>
+      </aside>
+      <div className="operations-policy-grid">
+        <section className="store-card operations-history">
+          <div className="store-list-heading">
+            <h2>Lịch sử phiên bản chính sách</h2>
+            <span className="store-status-chip">{versions.length} bản ghi</span>
+          </div>
+          {!versions.length && <p className="store-empty">Chưa có phiên bản đã lưu.</p>}
+          {versions.map((entry) => (
+            <div className="operations-history-item" key={entry.id}>
+              <strong>{String(entry.version)}</strong>
+              <span className="store-status-chip">Dự thảo</span>
+              <small>{date(entry.createdAt)}</small>
+              <button type="button" aria-pressed={viewedId === entry.id} onClick={() => setViewedId(entry.id)}>Xem nội dung</button>
+            </div>
+          ))}
+        </section>
+        <section className="store-card operations-editor">
+          <h2>Trình biên tập nội dung</h2>
+          <form className="store-form" id="policy-editor" onSubmit={(event) => onSave(fields(event))}>
+            <label>
+              Mã phiên bản
+              <input name="version" placeholder="1.1-draft" required maxLength={40} value={version} onChange={(event) => setVersion(event.target.value)} />
+            </label>
+            <label>
+              Tiêu đề chính sách
+              <input value={String(policy.title ?? "Chính sách bảo mật Gói Huế")} readOnly />
+            </label>
+            <label>
+              Nội dung
+              <textarea name="content" rows={16} required maxLength={16000} value={content} onChange={(event) => {
+                setContent(event.target.value);
+                setViewedId("");
+              }} />
+            </label>
+            <small>{content.length}/16.000 ký tự</small>
+            <button disabled={busy}>Lưu bản thảo mới</button>
+          </form>
+        </section>
+        <section className="store-card operations-preview">
+          <div className="store-list-heading">
+            <h2>Khung xem trước chính sách</h2>
+            <Link href="/privacy-policy">Xem trang cửa hàng ↗</Link>
+          </div>
+          <article>
+            <p className="store-status-chip">Dự thảo{(viewed?.version || version.trim()) && ` · ${String(viewed?.version || version.trim())}`}</p>
+            <h3>{String(viewed?.title ?? policy.title)}</h3>
+            <div className="store-policy">{String(viewed?.content ?? content) || "Nhập nội dung để xem trước."}</div>
+          </article>
+          {viewed && <button type="button" className="store-btn-secondary" onClick={() => setViewedId("")}>Quay lại bản đang soạn</button>}
+        </section>
+      </div>
+    </>
   );
 }
 
 export function AuditLog({ rows }: { rows: Row[] }) {
   const [query, setQuery] = useState("");
   const [action, setAction] = useState("");
+  const [actor, setActor] = useState("");
+  const [from, setFrom] = useState("");
+  const actors = [...new Set(rows.flatMap((row) => typeof row.actorName === "string" ? [row.actorName] : []))].sort();
   const [page, setPage] = useState(1);
   const filtered = rows.filter((row) =>
     (!action || row.action === action) &&
+    (!actor || row.actorName === actor) &&
+    (!from || new Date(String(row.at)).getTime() >= new Date(`${from}T00:00:00`).getTime()) &&
     [row.subject, row.action, row.actorName].some((value) => String(value ?? "").toLowerCase().includes(query.trim().toLowerCase())),
   );
   const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)));
 
   return (
-    <section className="store-card">
-      <h2>Nhật ký hoạt động quản trị</h2>
-      <div className="store-filters">
-        <label>
-          Tìm theo tác nhân, hành động hoặc đối tượng
-          <input type="search" value={query} onChange={(event) => {
-            setQuery(event.target.value);
-            setPage(1);
-          }} />
-        </label>
-        <label>
-          Hành động
-          <select value={action} onChange={(event) => {
-            setAction(event.target.value);
-            setPage(1);
-          }}>
-            <option value="">Tất cả hành động</option>
-            {[...new Set(rows.map((row) => String(row.action)))].sort().map((value) => (
-              <option key={value} value={value}>{value}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-      {filtered.length ? (
-        <div className="operations-table">
-          <table>
-            <thead><tr><th scope="col">Thời gian</th><th scope="col">Tác nhân</th><th scope="col">Hành động</th><th scope="col">Đối tượng</th></tr></thead>
-            <tbody>
-              {filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((row) => (
-                <tr key={row.id}>
-                  <td>{date(row.at)}</td>
-                  <td>{String(row.actorName ?? "—")}{row.actorRole ? ` · ${String(row.actorRole)}` : ""}</td>
-                  <td><span className="store-status-chip">{String(row.action)}</span></td>
-                  <td>{String(row.subject || "—")}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <div className="operations-audit">
+      <aside className="operations-notice">
+        <span className="operations-notice-mark" aria-hidden="true">i</span>
+        <div><h2>Bản ghi kiểm toán chỉ đọc</h2><p>Tra cứu các hoạt động gần nhất theo thời gian, tác nhân và đối tượng.</p></div>
+      </aside>
+      <section className="store-card operations-audit-filters">
+        <div className="store-list-heading">
+          <h2>Bộ lọc truy vết sự kiện</h2>
+          <button type="button" onClick={() => {
+            setQuery(""); setActor(""); setAction(""); setFrom(""); setPage(1);
+          }}>Đặt lại tiêu chí</button>
         </div>
-      ) : <p className="store-empty">{rows.length ? "Không tìm thấy sự kiện phù hợp." : "Chưa có hoạt động."}</p>}
-      {filtered.length > pageSize && <Pagination page={currentPage} total={filtered.length} pageSize={pageSize} onChange={setPage} />}
-    </section>
+        <div className="store-filters">
+          <label>
+            Tìm theo tác nhân, hành động hoặc đối tượng
+            <input type="search" value={query} onChange={(event) => {
+              setQuery(event.target.value);
+              setPage(1);
+            }} />
+          </label>
+          <label>
+            Hành động
+            <select value={action} onChange={(event) => {
+              setAction(event.target.value);
+              setPage(1);
+            }}>
+              <option value="">Tất cả hành động</option>
+              {[...new Set(rows.map((row) => String(row.action)))].sort().map((value) => (
+                <option key={value} value={value}>{value}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Tác nhân
+            <select value={actor} onChange={(event) => { setActor(event.target.value); setPage(1); }}>
+              <option value="">Tất cả tác nhân</option>
+              {actors.map((name) => <option key={name}>{name}</option>)}
+            </select>
+          </label>
+          <label>
+            Từ ngày
+            <input type="date" value={from} onChange={(event) => { setFrom(event.target.value); setPage(1); }} />
+          </label>
+        </div>
+      </section>
+      <section className="store-card operations-audit-stream">
+        <div className="store-list-heading"><h2>Sổ bản ghi kiểm toán hệ thống</h2><span className="store-status-chip">{filtered.length} bản ghi</span></div>
+        {filtered.length ? (
+          <div className="operations-table">
+            <table>
+              <thead><tr><th scope="col">Thời gian</th><th scope="col">Tác nhân</th><th scope="col">Hành động</th><th scope="col">Đối tượng</th></tr></thead>
+              <tbody>
+                {filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((row) => (
+                  <tr key={row.id}>
+                    <td>{date(row.at)}</td>
+                    <td>{String(row.actorName ?? "—")}{row.actorRole ? ` · ${String(row.actorRole)}` : ""}</td>
+                    <td><span className="store-status-chip">{String(row.action)}</span></td>
+                    <td>{String(row.subject || "—")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <p className="store-empty">{rows.length ? "Không tìm thấy sự kiện phù hợp." : "Chưa có hoạt động."}</p>}
+        {filtered.length > pageSize && <Pagination page={currentPage} total={filtered.length} pageSize={pageSize} onChange={setPage} />}
+      </section>
+    </div>
   );
 }

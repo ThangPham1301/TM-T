@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { api, fields, money, type Row, useStore } from "@/lib/store";
 import { WorkspaceNav, Pagination } from "./workspace-nav";
+import { OperationsWorkspace } from "./operations";
 import { ProductImage } from "./product/product-image";
 
 export function CatalogAdmin({
@@ -10,7 +11,7 @@ export function CatalogAdmin({
 }: {
   section: "products" | "categories" | "settings";
 }) {
-  const { state, loading, busy, run, mutate } = useStore();
+  const { state, loading, busy, run, mutate, logout } = useStore();
   const [products, setProducts] = useState<Row[]>([]),
     [categories, setCategories] = useState<Row[]>([]),
     [shipping, setShipping] = useState<Row | null>(null),
@@ -105,88 +106,80 @@ export function CatalogAdmin({
     uploaded.current = { file, id: intent.id };
     return intent.id;
   }
+  if (section === "settings") {
+    return (
+      <OperationsWorkspace
+        section={section}
+        title="Cấu hình bán hàng & vận chuyển"
+        description="Quản lý phí giao hàng và trạng thái tiếp nhận đơn mới."
+        userName={String(state.user.name)}
+        onLogout={() => void logout()}
+      >
+        <aside className="operations-notice">
+          <span className="operations-notice-mark" aria-hidden="true">!</span>
+          <div><h2>Lưu ý nghiệp vụ quan trọng</h2><p>Mức phí mới có hiệu lực với đơn đặt sau khi lưu. Các đơn đã đặt giữ mức phí cũ.</p></div>
+          {shipping && <span className="store-status-chip">Phiên bản {String(shipping.revision)}</span>}
+        </aside>
+        {loadError && <p className="store-error">{loadError}</p>}
+        {!shipping && !loadError && <p className="store-empty">Đang tải cấu hình…</p>}
+        {shipping && (
+          <form className="store-form operations-settings" key={String(shipping.revision)} onSubmit={(event) => {
+            const b = fields(event);
+            if (!window.confirm("Lưu cấu hình phí giao hàng mới? Đơn đã đặt vẫn giữ phí cũ.")) return;
+            void run(async () => {
+              await mutate("commerce", "shipping-save", {
+                revision: shipping.revision,
+                baseFee: Number(b.baseFee),
+                freeShippingThreshold: Number(b.freeShippingThreshold),
+                enabled: b.enabled === "yes",
+              });
+            });
+          }}>
+            <div className="operations-settings-grid">
+              <section className="store-card operations-shipping">
+                <h2>Cấu hình vận chuyển tiêu chuẩn</h2>
+                <label>
+                  Phí vận chuyển cơ bản (VND)
+                  <input name="baseFee" type="number" required min={0} max={1000000} defaultValue={Number(shipping.baseFee)} />
+                </label>
+                <label>
+                  Ngưỡng miễn phí vận chuyển (VND)
+                  <input name="freeShippingThreshold" type="number" required min={0} max={100000000} defaultValue={Number(shipping.freeShippingThreshold)} />
+                </label>
+                <p className="store-subtle">Nhập 0 để tắt miễn phí. Hệ thống tính theo tổng tiền hàng khi thanh toán.</p>
+              </section>
+              <section className="store-card operations-order-intake">
+                <h2>Trạng thái tiếp nhận đơn hàng</h2>
+                <label>
+                  <input type="radio" name="enabled" value="yes" defaultChecked={Boolean(shipping.enabled)} />
+                  <span><strong>Đang tiếp nhận đơn bình thường</strong><small>Khách có thể đặt đơn mới tại cửa hàng.</small></span>
+                </label>
+                <label>
+                  <input type="radio" name="enabled" value="no" defaultChecked={!shipping.enabled} />
+                  <span><strong>Tạm ngừng tiếp nhận đơn mới</strong><small>Khách vẫn có thể xem sản phẩm và giỏ hàng.</small></span>
+                </label>
+              </section>
+            </div>
+            <footer className="operations-savebar">
+              <span>Cấu hình có hiệu lực sau khi bạn lưu thay đổi.</span>
+              <button type="reset" className="store-btn-secondary" disabled={busy}>Khôi phục giá trị đã lưu</button>
+              <button disabled={busy}>Lưu thay đổi cấu hình</button>
+            </footer>
+          </form>
+        )}
+      </OperationsWorkspace>
+    );
+  }
   return (
     <main className="store-page">
       <header className="store-heading">
         <span className="eyebrow">Quản trị cửa hàng</span>
         <h1>
-          {section === "settings"
-            ? "Cấu hình bán hàng & vận chuyển"
-            : isProduct
-              ? "Sản phẩm & tồn kho"
-              : "Danh mục sản phẩm"}
+          {isProduct ? "Sản phẩm & tồn kho" : "Danh mục sản phẩm"}
         </h1>
       </header>
       <WorkspaceNav admin section={section} />
       {loadError && <p className="store-error">{loadError}</p>}
-      {section === "settings" ? (
-        shipping && (
-          <section className="store-card">
-            <h2>Cấu hình vận chuyển tiêu chuẩn</h2>
-            <form
-              key={String(shipping.revision)}
-              className="store-form"
-              onSubmit={(e) => {
-                const b = fields(e);
-                if (
-                  !window.confirm(
-                    "Lưu cấu hình phí giao hàng mới? Đơn đã đặt vẫn giữ phí cũ.",
-                  )
-                )
-                  return;
-                void run(async () => {
-                  await mutate("commerce", "shipping-save", {
-                    revision: shipping.revision,
-                    baseFee: Number(b.baseFee),
-                    freeShippingThreshold: Number(b.freeShippingThreshold),
-                    enabled: b.enabled === "on",
-                  });
-                });
-              }}
-            >
-              <label>
-                Phí cơ bản (VND)
-                <input
-                  name="baseFee"
-                  type="number"
-                  required
-                  min={0}
-                  max={1000000}
-                  defaultValue={Number(shipping.baseFee)}
-                />
-              </label>
-              <label>
-                Miễn phí từ tiền hàng (VND; 0 = không áp dụng)
-                <input
-                  name="freeShippingThreshold"
-                  type="number"
-                  required
-                  min={0}
-                  max={100000000}
-                  defaultValue={Number(shipping.freeShippingThreshold)}
-                />
-              </label>
-              <h3>Trạng thái tiếp nhận đơn hàng</h3>
-              <p className="store-status-chip">
-                {shipping.enabled ? "Đang nhận đơn" : "Tạm ngừng nhận đơn"}
-              </p>
-              <label className="store-check">
-                <input
-                  name="enabled"
-                  type="checkbox"
-                  defaultChecked={Boolean(shipping.enabled)}
-                />
-                Cho phép nhận đơn hàng mới
-              </label>
-              <p className="store-subtle">
-                Áp dụng tại checkout; máy chủ tính phí và lưu snapshot vào đơn.
-                Phí đơn cũ không thay đổi.
-              </p>
-              <button disabled={busy}>Lưu cấu hình</button>
-            </form>
-          </section>
-        )
-      ) : (
         <>
           <section className="store-card">
             <div className="store-list-heading">
@@ -510,7 +503,6 @@ export function CatalogAdmin({
             </section>
           )}
         </>
-      )}
     </main>
   );
 }

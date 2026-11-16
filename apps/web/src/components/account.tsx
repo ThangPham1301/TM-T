@@ -13,7 +13,7 @@ import { OrderBadges, OrderTimeline } from "./order-presentation";
 import { ProductImage } from "./product/product-image";
 import styles from "./journey.module.css";
 import { WorkspaceNav, Pagination } from "./workspace-nav";
-import { ReturnQueue, PolicyEditor, AuditLog } from "./operations";
+import { ReturnQueue, PolicyEditor, AuditLog, OperationsWorkspace } from "./operations";
 import {
   api,
   fields,
@@ -848,39 +848,33 @@ export function Account({
     );
   }
 
-  if (section === "returns") {
+  if (["returns", "policies", "audit"].includes(section)) {
+    const operationsSections = {
+      returns: ["Xử lý yêu cầu đổi trả", "Xem bằng chứng, thẩm định và cập nhật tiến độ từng yêu cầu."],
+      policies: ["Quản lý chính sách bảo mật", "Soạn thảo, xem trước và tra cứu các phiên bản đã lưu."],
+      audit: ["Nhật ký hoạt động quản trị", "Theo dõi lịch sử thao tác và đối tượng được cập nhật."],
+    } as const;
+    const [title, description] = operationsSections[section as keyof typeof operationsSections];
     return (
-      <div className="admin-returns">
-        <aside className="returns-admin-sidebar">
-          <header>
-            <strong>Quản trị Gói Huế</strong>
-            <small>{String(state.user.name)}</small>
-          </header>
-          <WorkspaceNav admin section={section} />
-          <div className="returns-admin-links">
-            <Link href="/">Xem cửa hàng →</Link>
-            <button type="button" onClick={() => void logout()}>Đăng xuất</button>
-          </div>
-        </aside>
-        <main className="returns-admin-main">
-          <div className="returns-admin-topbar">
-            <span>Quản trị › Chăm sóc khách hàng › Đổi trả</span>
-            <Link href="/">Xem cửa hàng</Link>
-          </div>
-          <header className="returns-heading returns-admin-heading">
-            <div>
-              <h1>Xử lý yêu cầu đổi trả</h1>
-              <p>Xem bằng chứng, thẩm định và cập nhật tiến độ từng yêu cầu.</p>
-            </div>
-          </header>
+      <OperationsWorkspace section={section} title={title} description={description}
+        userName={String(state.user.name)} onLogout={() => void logout()}>
+        {section === "returns" && (
           <div className="returns-layout returns-admin-layout">
             <ReturnQueue rows={state.returns} orders={state.orders} onSelect={setSelected} admin />
             <aside className="returns-admin-detail" aria-label="Chi tiết yêu cầu">
               {detailPanel ?? <p className="store-empty">Chọn một yêu cầu để xem chi tiết và xử lý.</p>}
             </aside>
           </div>
-        </main>
-      </div>
+        )}
+        {section === "policies" && (
+          <PolicyEditor policy={state.policy} versions={state.policyVersions ?? []} busy={busy}
+            onSave={(draft) => {
+              void run(async () => { await mutate("command", "policy", draft); });
+            }}
+          />
+        )}
+        {section === "audit" && <AuditLog rows={state.audit ?? []} />}
+      </OperationsWorkspace>
     );
   }
 
@@ -1088,19 +1082,6 @@ export function Account({
           />
         </section>
       )}
-      {section === "policies" && admin && (
-        <PolicyEditor
-          policy={state.policy}
-          versions={state.policyVersions ?? []}
-          busy={busy}
-          onSave={(draft) => {
-            void run(async () => {
-              await mutate("command", "policy", draft);
-            });
-          }}
-        />
-      )}
-      {section === "audit" && admin && <AuditLog rows={state.audit ?? []} />}
       {detailPanel}
     </main>
   );
