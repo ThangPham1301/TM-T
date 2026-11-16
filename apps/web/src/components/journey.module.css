@@ -1,0 +1,323 @@
+/* Goi Hue — journey presentation (cart, checkout, orders).
+   Presentation only; tokens from src/styles/tokens.css (--gh-*). */
+
+.badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--gh-space-2);
+  align-items: center;
+}
+
+/* --- cart lines --- */
+.lineImg {
+  border-radius: var(--gh-radius-md);
+  object-fit: cover;
+}
+.lineSide {
+  display: grid;
+  gap: var(--gh-space-2);
+  justify-items: end;
+  align-content: start;
+}
+.lineTotal {
+  margin: 0;
+  font-weight: 700;
+  color: var(--gh-text);
+  white-space: nowrap;
+}
+.stepper {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-sm);
+  overflow: hidden;
+  background: var(--gh-background);
+}
+.stepper input {
+  width: 3.2rem;
+  text-align: center;
+  border: 0;
+  min-height: 44px;
+  font: inherit;
+  background: transparent;
+  color: var(--gh-text);
+}
+.stepBtn {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  background: var(--gh-surface);
+  color: var(--gh-primary);
+  font-size: 1.15rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.stepBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.stepBtn:focus-visible,
+.stepper input:focus-visible {
+  outline: var(--gh-focus-width) solid var(--gh-focus);
+  outline-offset: -3px;
+}
+
+/* --- free-shipping progress --- */
+.shipProgress {
+  display: grid;
+  gap: var(--gh-space-2);
+}
+.shipText {
+  margin: 0;
+  color: var(--gh-text-muted);
+  font-size: var(--gh-text-sm);
+}
+.shipOk {
+  margin: 0;
+  color: var(--gh-success);
+  font-size: var(--gh-text-sm);
+  font-weight: 600;
+}
+.shipBar {
+  height: 6px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-surface);
+  overflow: hidden;
+}
+.shipFill {
+  height: 100%;
+  background: var(--gh-accent);
+  border-radius: var(--gh-radius-pill);
+}
+
+/* --- checkout payment radio cards --- */
+.payCards {
+  display: grid;
+  gap: var(--gh-space-3);
+}
+.payCard {
+  display: flex;
+  gap: var(--gh-space-3);
+  align-items: flex-start;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-md);
+  padding: var(--gh-space-3) var(--gh-space-4);
+  background: var(--gh-background);
+  cursor: pointer;
+}
+.payCard:has(input:checked) {
+  border-color: var(--gh-primary);
+  box-shadow: inset 0 0 0 1px var(--gh-primary);
+  background: var(--gh-surface);
+}
+.payCard input {
+  margin-top: 0.3rem;
+  accent-color: var(--gh-primary);
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: none;
+}
+.payCardBody {
+  display: grid;
+  gap: 0.15rem;
+}
+.payCardTitle {
+  font-weight: 700;
+  color: var(--gh-text);
+}
+.payCardDesc {
+  color: var(--gh-text-muted);
+  font-size: var(--gh-text-sm);
+}
+
+/* --- mobile summary bar (cart only) --- */
+.mobileBar {
+  display: none;
+}
+@media (max-width: 760px) {
+  .mobileBar {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: var(--gh-z-navigation);
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--gh-space-3);
+    padding: var(--gh-space-3) var(--gh-space-4);
+    padding-bottom: max(var(--gh-space-3), env(safe-area-inset-bottom));
+    background: var(--gh-background);
+    border-top: 1px solid var(--gh-border);
+    box-shadow: 0 -8px 24px rgb(53 41 31 / 10%);
+  }
+  .hasMobileBar {
+    padding-bottom: 96px;
+  }
+}
+.mobileBar small {
+  display: block;
+  color: var(--gh-text-muted);
+}
+.mobileBar strong {
+  font-size: var(--gh-text-lg);
+  color: var(--gh-text);
+}
+
+/* --- order rows & detail --- */
+.thumbRow {
+  display: flex;
+  gap: var(--gh-space-2);
+}
+.thumb {
+  border-radius: var(--gh-radius-sm);
+  object-fit: cover;
+  border: 1px solid var(--gh-border);
+}
+.detailItem {
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-3);
+}
+
+/* --- hybrid order timeline --- */
+.timelineWrap {
+  margin: var(--gh-space-4) 0;
+}
+.timeline {
+  display: flex;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tlStep {
+  flex: 1;
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: var(--gh-space-2);
+  text-align: center;
+}
+.tlStep::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: calc(-50% + 10px);
+  right: calc(50% + 10px);
+  height: 2px;
+  background: var(--gh-border);
+}
+.tlStep:first-child::before {
+  display: none;
+}
+.tlDone::before,
+.tlCurrent::before {
+  background: var(--gh-primary);
+}
+.tlDot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--gh-border);
+  background: var(--gh-background);
+  z-index: 1;
+}
+.tlDone .tlDot {
+  background: var(--gh-primary);
+  border-color: var(--gh-primary);
+}
+.tlCurrent .tlDot {
+  background: var(--gh-accent);
+  border-color: var(--gh-primary);
+  box-shadow: 0 0 0 4px var(--gh-surface);
+}
+.tlLabel {
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-muted);
+}
+.tlDone .tlLabel,
+.tlCurrent .tlLabel {
+  color: var(--gh-text);
+  font-weight: 600;
+}
+.tlCaption {
+  margin: var(--gh-space-2) 0 0;
+  color: var(--gh-text-muted);
+  font-size: var(--gh-text-sm);
+}
+.exception {
+  margin: var(--gh-space-4) 0;
+  padding: var(--gh-space-4);
+  background: var(--gh-surface);
+  border-left: 4px solid var(--gh-accent);
+  border-radius: var(--gh-radius-sm);
+}
+.exception p {
+  margin: 0;
+  color: var(--gh-text);
+}
+
+/* --- admin KPI grid --- */
+.kpiHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gh-space-4);
+  flex-wrap: wrap;
+}
+.kpiScopeNote {
+  color: var(--gh-text-muted);
+  font-size: var(--gh-text-sm);
+}
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: var(--gh-space-3) 0 var(--gh-space-4);
+}
+.kpiCell {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 2px;
+  padding: 12px 8px;
+}
+.kpiCell + .kpiCell {
+  border-left: 1px solid var(--gh-border);
+}
+.kpiLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--gh-text-muted);
+}
+.kpiValue {
+  font-family: var(--gh-font-display);
+  font-size: 1.75rem;
+  color: var(--gh-text);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.kpiCellTotal .kpiValue {
+  font-size: 2rem;
+  font-weight: 700;
+}
+@media (max-width: 767px) {
+  .kpiGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .kpiCell:nth-child(odd) {
+    border-left: none;
+  }
+  .kpiCell:last-child {
+    grid-column: 1 / -1;
+    border-left: none;
+  }
+}
+
+/* --- payment panel --- */
+.qrFrame {
+  display: inline-block;
+  padding: var(--gh-space-3);
+  background: #fff;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-md);
+}

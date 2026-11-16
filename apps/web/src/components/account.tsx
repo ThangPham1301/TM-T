@@ -2,6 +2,10 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AddressBook, PasswordSettings } from "./account-settings";
+import { PaymentPanel } from "./payment-panel";
+import { OrderBadges, OrderTimeline } from "./order-presentation";
+import { ProductImage } from "./product/product-image";
+import styles from "./journey.module.css";
 import { WorkspaceNav, Pagination } from "./workspace-nav";
 import {
   api,
@@ -62,6 +66,8 @@ export function Account({
   const orderItems = (current?.items as Row[] | undefined) ?? [];
   const selectedProducts = returnLines.map((line) => line.productId || String(orderItems[0]?.productId ?? ""));
   const nextProduct = orderItems.find((item) => !selectedProducts.includes(String(item.productId)));
+  const orderCount = (s: string) =>
+    state.orders.filter((o) => o.status === s).length;
   const filteredOrders = state.orders.filter(
     (o) =>
       (!orderQuery ||
@@ -249,7 +255,31 @@ export function Account({
       )}
       {section === "orders" && (
         <section className="store-card">
-          <h2>{admin ? "Đơn hàng cửa hàng" : "Đơn hàng của tôi"}</h2>
+          <div className={styles.kpiHeader}>
+            <h2>{admin ? "Đơn hàng cửa hàng" : "Đơn hàng của tôi"}</h2>
+            {admin && state.orders.length > 0 && (
+              <span className={styles.kpiScopeNote}>Toàn bộ đơn</span>
+            )}
+          </div>
+          {admin && state.orders.length > 0 && (
+            <div className={styles.kpiGrid} aria-label="Tình hình đơn hàng">
+              {[
+                ["Tổng đơn", state.orders.length],
+                ["Chờ xác nhận", orderCount("PLACED")],
+                ["Đang đóng gói", orderCount("PACKED")],
+                ["Đang giao", orderCount("SHIPPED")],
+                ["Đã giao", orderCount("DELIVERED")],
+              ].map(([labelText, value], i) => (
+                <span
+                  className={`${styles.kpiCell} ${i === 0 ? styles.kpiCellTotal : ""}`}
+                  key={labelText}
+                >
+                  <span className={styles.kpiLabel}>{labelText}</span>
+                  <span className={styles.kpiValue}>{value}</span>
+                </span>
+              ))}
+            </div>
+          )}
           <div className="store-filters">
             <label>
               Tìm mã đơn/người nhận/điện thoại
@@ -277,6 +307,8 @@ export function Account({
                   "PACKED",
                   "SHIPPED",
                   "DELIVERED",
+                  "DELIVERY_FAILED",
+                  "RETURNED",
                   "CANCELLED",
                 ].map((s) => (
                   <option value={s} key={s}>
@@ -318,12 +350,26 @@ export function Account({
                   setSelected(o);
                 }}
               >
+                {((o.items as Row[] | undefined) ?? []).length > 0 && (
+                  <span className={styles.thumbRow}>
+                    {((o.items as Row[] | undefined) ?? [])
+                      .slice(0, 3)
+                      .map((line, i) => (
+                        <ProductImage
+                          key={i}
+                          src={String(line.image ?? "")}
+                          alt=""
+                          width={40}
+                          height={40}
+                          className={styles.thumb}
+                        />
+                      ))}
+                  </span>
+                )}
                 <strong>
                   {String(o.number)} · {money(o.total)}
                 </strong>
-                <span>
-                  {label(o.status)} · {label(o.paymentStatus)}
-                </span>
+                <OrderBadges order={o} />
                 <small>{date(o.createdAt)}</small>
               </button>
             ))}
@@ -445,18 +491,32 @@ export function Account({
                 ? label(current.type)
                 : String(current.number ?? current.orderNumber)}
             </h2>
-            <p className="store-badge">{label(current.status)}</p>
+            {current.items != null ? (
+              <OrderBadges order={current} />
+            ) : (
+              <p className="store-badge">{label(current.status)}</p>
+            )}
             <p>Mã hồ sơ: {current.id}</p>
             {current.items != null ? (
               <>
+                <OrderTimeline order={current} />
                 <p>
                   {String(current.recipient)} · {String(current.phone)}
                 </p>
                 <p>{String(current.address)}</p>
                 {(current.items as Row[]).map((line, i) => (
-                  <p key={i}>
-                    {String(line.name)} · {String(line.quantity)} ×{" "}
-                    {money(line.price)}
+                  <p key={i} className={styles.detailItem}>
+                    <ProductImage
+                      src={String(line.image ?? "")}
+                      alt=""
+                      width={44}
+                      height={44}
+                      className={styles.thumb}
+                    />
+                    <span>
+                      {String(line.name)} · {String(line.quantity)} ×{" "}
+                      {money(line.price)}
+                    </span>
                   </p>
                 ))}
                 <p>
@@ -464,7 +524,7 @@ export function Account({
                   {money(current.shippingFee)} ·{" "}
                   <strong>Tổng {money(current.total)}</strong>
                 </p>
-                <p>Thanh toán COD: {label(current.paymentStatus)}</p>
+                <PaymentPanel order={current} />
                 {Boolean(current.paymentReference) && (
                   <p>
                     Biên nhận thu tiền: {String(current.paymentReference)} ·{" "}
@@ -881,16 +941,18 @@ function OrderAction({
   busy: boolean;
   onSave: (b: Record<string, unknown>) => void;
 }) {
-  const next = (
+  const nextOptions = (
     {
-      PLACED: "CONFIRMED",
-      CONFIRMED: "PACKED",
-      PACKED: "SHIPPED",
-      SHIPPED: "DELIVERED",
-    } as Record<string, string>
-  )[String(row.status)];
+      PLACED: ["CONFIRMED"],
+      CONFIRMED: ["PACKED"],
+      PACKED: ["SHIPPED"],
+      SHIPPED: ["DELIVERED", "DELIVERY_FAILED"],
+      DELIVERY_FAILED: ["SHIPPED", "RETURNED"],
+    } as Record<string, string[]>
+  )[String(row.status)] ?? [];
   const actions = [
-    ...(next ? ["order-status"] : []),
+    ...(row.paymentStatus === "REVIEW" ? ["payment-resolve"] : []),
+    ...(nextOptions.length ? ["order-status"] : []),
     ...(row.paymentStatus !== "PAID" && row.status !== "CANCELLED"
       ? ["order-paid"]
       : []),
@@ -900,21 +962,27 @@ function OrderAction({
       : []),
   ];
   const [action, setAction] = useState(actions[0] ?? "");
+  const [next, setNext] = useState(nextOptions[0] ?? "");
+  const nextValue = nextOptions.includes(next)
+    ? next
+    : (nextOptions[0] ?? "");
   if (!actions.length)
     return <p>Không còn thao tác xử lý trực tiếp cho đơn này.</p>;
   const title =
-    action === "order-status"
-      ? `Chuyển sang ${label(next)}`
-      : action === "order-paid"
-        ? "Xác nhận đã thu tiền"
-        : "Hủy đơn đủ điều kiện";
+    action === "payment-resolve"
+      ? "Xử lý đối soát thanh toán (REVIEW)"
+      : action === "order-status"
+        ? `Chuyển sang ${label(nextValue)}`
+        : action === "order-paid"
+          ? "Xác nhận đã thu tiền"
+          : "Hủy đơn đủ điều kiện";
   return (
     <form
       className="store-form"
       onSubmit={(e) => {
         const b = fields(e);
         if (window.confirm(`${title} cho đơn ${row.number}?`))
-          onSave({ ...b, status: next });
+          onSave({ ...b, status: nextValue });
       }}
     >
       <h3>Xử lý đơn hàng</h3>
@@ -927,19 +995,54 @@ function OrderAction({
         >
           {actions.map((a) => (
             <option key={a} value={a}>
-              {a === "order-status"
-                ? `Chuyển sang ${label(next)}`
-                : a === "order-paid"
-                  ? "Xác nhận đã thu tiền"
-                  : "Hủy đơn"}
+              {a === "payment-resolve"
+                ? "Đối soát thanh toán (REVIEW)"
+                : a === "order-status"
+                  ? `Chuyển sang ${label(nextValue)}`
+                  : a === "order-paid"
+                    ? "Xác nhận đã thu tiền"
+                    : "Hủy đơn"}
             </option>
           ))}
         </select>
       </label>
-      {(action === "order-paid" ||
-        (action === "order-status" && next === "SHIPPED")) && (
+      {action === "order-status" && nextOptions.length > 1 && (
         <label>
-          {action === "order-paid" ? "Mã chứng từ thu tiền" : "Mã vận đơn"}
+          Trạng thái tiếp theo
+          <select
+            value={nextValue}
+            onChange={(e) => setNext(e.target.value)}
+          >
+            {nextOptions.map((s) => (
+              <option value={s} key={s}>
+                {label(s)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {action === "payment-resolve" && (
+        <label>
+          Kết quả đối soát
+          <select name="resolution">
+            <option value="PAID_RECORDED">
+              Ghi nhận đã thu tiền — giữ đơn, tiếp tục xử lý
+            </option>
+            <option value="REFUNDED">
+              Hoàn tiền cho khách (qua kênh ngoài hệ thống)
+            </option>
+          </select>
+        </label>
+      )}
+      {(action === "order-paid" ||
+        action === "payment-resolve" ||
+        (action === "order-status" && nextValue === "SHIPPED")) && (
+        <label>
+          {action === "order-paid"
+            ? "Mã chứng từ thu tiền"
+            : action === "payment-resolve"
+              ? "Mã chứng từ xử lý (biên nhận hoàn / đối soát)"
+              : "Mã vận đơn"}
           <input name="reference" required maxLength={200} />
         </label>
       )}

@@ -44,7 +44,9 @@ POST commerce/command bắt buộc `Idempotency-Key` 16–80 chữ/số/gạch n
 | --- | --- | --- |
 | cart-set | cartToken, productId UUID, quantity 0..100 | 0 xóa dòng; kiểm tra active của sản phẩm/danh mục và tồn; giá lấy server; một dòng/product/customer |
 | cart-clear / cart-refresh | cartToken | Xóa toàn giỏ / chủ động nhận snapshot giá mới; không tự giảm số lượng |
-| checkout | cartToken, shippingRevision, recipient ≤100, phone 8..30, address ≤400 | Giỏ không rỗng; kiểm tra giá/tồn/catalog và cấu hình phí mới nhất; phí lấy shipping, COD/UNPAID; giảm tồn và xóa giỏ atomically; hạn mức tiền hàng 100 triệu |
+| checkout | cartToken, shippingRevision, recipient ≤100, phone 8..30, address ≤400, paymentMethod tùy chọn COD/VIETQR | Kiểm tra giỏ, giá/tồn và phí; mặc định COD. VietQR demo tạo thông tin thanh toán PENDING, có hạn; giảm tồn và xóa giỏ atomically. |
+
+VietQR/IPN là luồng demo chưa xác nhận phù hợp giao thức nhà cung cấp; không dùng để xác nhận thanh toán thật. IPN demo bị tắt nếu chưa cấu hình secret riêng; thông báo sai số tiền, đến muộn hoặc đến sau hủy được đưa vào REVIEW. Bộ quét không hoàn tồn lần nữa cho đơn đã hủy/hoàn về/giao thành công. Admin có thể thực hiện payment-resolve (REFUNDED hoặc PAID_RECORDED, có reference, revision và note). Giao thất bại: SHIPPED → DELIVERY_FAILED → SHIPPED hoặc RETURNED; kiểm tra điều kiện thanh toán và hoàn tồn khi RETURNED. Các trạng thái này cần kiểm thử tích hợp.
 | order-cancel | id, revision, note ≤2000 | Owner hoặc ADMIN; PLACED/CONFIRMED và chưa PAID; trả tồn đúng một lần |
 | order-recipient | id, revision, recipient, phone, address, note | Owner hoặc ADMIN; PLACED/CONFIRMED; không đổi giá/phí/items |
 | order-status | id, revision, status, note, reference khi SHIPPED | ADMIN; PLACED→CONFIRMED→PACKED→SHIPPED→DELIVERED; lưu deliveredAt bằng thời gian server |

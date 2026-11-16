@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Goi Hue Unified Store API
   version: 1.1.0-draft
-  description: Unified persistence API. See goihue-state-matrix.md for payload limits, permissions and transitions. Payment/shipping are recorded manually, not provider operations.
+  description: Unified persistence API. VietQR/IPN operations are experimental demo flows; shipping and refunds are recorded manually. See goihue-state-matrix.md.
 servers:
   - url: /api/store
 security:
@@ -137,7 +137,8 @@ paths:
                 - type: object
                   properties:
                     addressId: {type: string, format: uuid, description: Optional saved CUSTOMER destination for checkout in place of manual recipient fields}
-                    action: {type: string, enum: [cart-set, cart-clear, cart-refresh, checkout, order-cancel, order-status, order-paid, order-recipient, product-save, product-delete, category-save, category-delete, catalog-toggle, shipping-save, catalog-image-intent]}
+                    paymentMethod: {type: string, enum: [COD, VIETQR], description: Optional; defaults to COD. VietQR is a demo integration.}
+                    action: {type: string, enum: [cart-set, cart-clear, cart-refresh, checkout, order-cancel, order-status, order-paid, order-recipient, payment-resolve, product-save, product-delete, category-save, category-delete, catalog-toggle, shipping-save, catalog-image-intent]}
       responses:
         '200': {description: Persisted record or acknowledgement}
         '401': {$ref: '#/components/responses/Error'}
@@ -145,6 +146,44 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
         '422': {$ref: '#/components/responses/Error'}
+  /payments/ipn:
+    post:
+      operationId: demoPaymentNotification
+      security: []
+      description: Direct backend endpoint for a signed demo notification, not proxied through /api/store. Disabled without APP_IPN_SECRET.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderNumber, amount, transactionId, signature]
+              properties:
+                orderNumber: {type: string}
+                amount: {type: integer, format: int64}
+                transactionId: {type: string}
+                signature: {type: string, description: HMAC-SHA256 hex of orderNumber pipe amount pipe transactionId}
+      responses:
+        '200': {description: PAID, DUPLICATE_IGNORED, REVIEW_AMOUNT, REVIEW_LATE, REVIEW_DOUBLE or ALREADY_REVIEW}
+        '401': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /payments/sepay/webhook:
+    post:
+      operationId: sepayWebhook
+      security: []
+      description: Experimental direct backend endpoint; requires configured signing secret, timestamp and signature. Provider compatibility is not yet independently verified.
+      parameters:
+        - {in: header, name: X-SePay-Signature, required: true, schema: {type: string}}
+        - {in: header, name: X-SePay-Timestamp, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: true}
+      responses:
+        '200': {description: Notification acknowledged}
+        '401': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
   /password:
     post:
       operationId: changePassword

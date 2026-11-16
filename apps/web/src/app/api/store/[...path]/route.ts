@@ -17,8 +17,13 @@ async function proxy(
   const publicOrigins = new Set([
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    ...(process.env.APP_PUBLIC_ORIGINS ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
   ]);
-  const sameHost = origin === `http://${req.headers.get("host") ?? ""}`;
+  const proto = req.headers.get("x-forwarded-proto") ?? "http";
+  const sameHost = origin === `${proto}://${req.headers.get("host") ?? ""}`;
   // Compare the browser-facing Host, not Docker's internal server hostname.
   if (write && (!origin || !publicOrigins.has(origin) || !sameHost))
     return Response.json(
