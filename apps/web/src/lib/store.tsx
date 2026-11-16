@@ -83,6 +83,9 @@ export const labels: Record<string, string> = {
   MANUAL_CONFIRMED: "Đã xác nhận kết quả thủ công",
 };
 export const label = (x: unknown) => labels[String(x)] ?? String(x ?? "");
+export const shippingPauseMessage = (shipping: Row) =>
+  String(shipping.pauseMessage ?? "").trim() || "Cửa hàng đang tạm ngừng nhận đơn mới.";
+
 export const money = (x: unknown) =>
   new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(
     Number(x ?? 0),
@@ -209,7 +212,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const version = ++reloadVersion.current;
     try {
       const snapshot = await api("state");
-      if (version === reloadVersion.current) setState(sanitizeData(snapshot));
+      if (version === reloadVersion.current) setState(snapshot);
     } catch (e) {
       if (version !== reloadVersion.current) return;
       if (e instanceof ApiError && e.status === 401) setState(null);

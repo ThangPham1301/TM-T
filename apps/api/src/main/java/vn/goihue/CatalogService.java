@@ -52,7 +52,7 @@ public class CatalogService {
                 String kind=app.text(b,"kind",20);app.require(Set.of("category","product").contains(kind),"Loại dữ liệu không hợp lệ.");var v=get(app.text(b,"id",50),kind);revision(v,b);v.put("active",Boolean.TRUE.equals(b.get("active")));v.put("revision",app.number(v,"revision")+1);return app.save(kind,null,v);
             }
             case "shipping-save" -> {
-                app.permission(a,"order.manage");var s=shipping();revision(s,b);int fee=app.number(b,"baseFee"),threshold=app.number(b,"freeShippingThreshold");app.require(fee>=0&&fee<=1_000_000&&threshold>=0&&threshold<=100_000_000,"Mức phí hoặc ngưỡng miễn phí không hợp lệ.");s.put("baseFee",fee);s.put("freeShippingThreshold",threshold);s.put("enabled",Boolean.TRUE.equals(b.get("enabled")));s.put("revision",app.number(s,"revision")+1);return app.save("settings",null,s);
+                app.permission(a,"order.manage");var s=shipping();revision(s,b);int fee=app.number(b,"baseFee"),threshold=app.number(b,"freeShippingThreshold");app.require(fee>=0&&fee<=1_000_000&&threshold>=0&&threshold<=100_000_000,"Mức phí hoặc ngưỡng miễn phí không hợp lệ.");s.put("baseFee",fee);s.put("freeShippingThreshold",threshold);s.put("enabled",Boolean.TRUE.equals(b.get("enabled")));if(b.containsKey("pauseMessage"))s.put("pauseMessage",app.bounded(b,"pauseMessage",250));s.put("revision",app.number(s,"revision")+1);return app.save("settings",null,s);
             }
             case "catalog-image-intent" -> {
                 var file=new LinkedHashMap<String,Object>();file.put("name",app.text(b,"name",120));file.put("status","UPLOADING");return app.save("catalog-image",(UUID)a.get("id"),file);

@@ -25,7 +25,7 @@ paths:
       operationId: shippingSettings
       security: []
       responses:
-        '200': {description: id/code/baseFee/freeShippingThreshold/enabled/revision; threshold zero disables free shipping}
+        '200': {description: id/code/baseFee/freeShippingThreshold/enabled/revision and optional pauseMessage; threshold zero disables free shipping}
   /cart/summary:
     get:
       operationId: cartQuote
@@ -85,7 +85,7 @@ paths:
     get:
       operationId: accountState
       responses:
-        '200': {description: User and role-scoped collections including saved addresses for CUSTOMER and audit/policy versions for ADMIN}
+        '200': {description: User and role-scoped collections including saved addresses for CUSTOMER and audit/policy versions for ADMIN. Each ADMIN audit entry includes id, subject, action, at, and nullable actorName, actorRole, subjectKind and subjectLabel.}
         '401': {$ref: '#/components/responses/Error'}
   /cart:
     get:
@@ -136,6 +136,7 @@ paths:
                 - {$ref: '#/components/schemas/Mutation'}
                 - type: object
                   properties:
+                    pauseMessage: {type: string, maxLength: 250, description: Optional customer-facing notice for shipping-save when new orders are paused}
                     addressId: {type: string, format: uuid, description: Optional saved CUSTOMER destination for checkout in place of manual recipient fields}
                     paymentMethod: {type: string, enum: [COD, VIETQR], description: Optional; defaults to COD. VietQR is a demo integration.}
                     action: {type: string, enum: [cart-set, cart-clear, cart-refresh, checkout, order-cancel, order-status, order-paid, order-recipient, payment-resolve, product-save, product-delete, category-save, category-delete, catalog-toggle, shipping-save, catalog-image-intent]}
@@ -206,7 +207,7 @@ paths:
   /command:
     post:
       operationId: platformMutation
-      description: Profile, consent, privacy, policy and return actions. Each case update requires current revision. Full fields are in state matrix.
+      description: Profile, consent, privacy, policy and return actions. Each case update requires current revision. Resuming a refund past a payment hold requires confirmed payment. Successful resumes record transition RESUME in history. Full fields are in state matrix.
       parameters:
         - {$ref: '#/components/parameters/Idempotency'}
       requestBody:
@@ -219,6 +220,7 @@ paths:
                 - type: object
                   properties:
                     action: {type: string, enum: [profile, address-save, address-delete, consent, policy, privacy-create, privacy-update, privacy-supplement, return-create, return-submit, return-update, return-supplement, return-confirm, return-withdraw]}
+                    isDefault: {type: boolean, description: Optional address-save flag; updates to other default addresses increment their revisions.}
       responses:
         '200': {description: Persisted record or acknowledgement}
         '401': {$ref: '#/components/responses/Error'}

@@ -19,7 +19,7 @@ Mọi thao tác ghi yêu cầu Origin tin cậy. BFF chỉ chấp nhận same-or
 | GET products/{slug} | Slug | Chi tiết public hoặc 404 |
 | GET admin/products | Không | Toàn bộ sản phẩm, catalog.manage |
 | GET categories / admin/categories | Không | Danh mục active public / toàn bộ danh mục cho catalog.manage |
-| GET shipping | Không | Phí cơ bản, ngưỡng miễn phí, enabled và revision; public |
+| GET shipping | Không | Phí cơ bản, ngưỡng miễn phí, enabled, revision và pauseMessage nếu đã lưu; public |
 | GET cart/summary | Không | CUSTOMER: items, cartToken, subtotal, shippingFee, total, shipping |
 | PUT catalog/images/{id}/content | Binary PNG/JPEG ≤5MB | ADMIN; intent từ catalog-image-intent; decode/re-encode PNG |
 | GET catalog/images/{id} | Không | Public khi gắn catalog active; còn lại chỉ ADMIN |
@@ -54,7 +54,7 @@ VietQR/IPN là luồng demo chưa xác nhận phù hợp giao thức nhà cung c
 | product-save | id/revision khi sửa, name≤150, slug≤120, category≤120, description≤4000, imageId tùy chọn, price 1..10.000.000, stock 0..1.000.000, active boolean | ADMIN; category active, slug duy nhất; imageId READY hoặc rỗng để gỡ ảnh; không nhận URL ảnh mới; sửa stock tuyệt đối có audit |
 | category-save / category-delete | id/revision khi sửa/xóa; code/name/description/sortOrder/active/imageId khi lưu | ADMIN; code duy nhất; đổi code cập nhật mapping product; chỉ xóa khi không có product |
 | product-delete / catalog-toggle | id/revision; kind/active khi toggle | ADMIN; chỉ xóa product chưa có cart/order tham chiếu; còn lại dùng ẩn |
-| shipping-save | revision, baseFee, freeShippingThreshold, enabled | ADMIN catalog.manage+order.manage; không thay phí đơn cũ |
+| shipping-save | revision, baseFee, freeShippingThreshold, enabled, optional pauseMessage (250 characters) | ADMIN catalog.manage+order.manage; không thay phí đơn cũ |
 | catalog-image-intent | name≤120 | ADMIN; fileId để upload, idempotency bắt buộc |
 
 Không có voucher, loyalty, phí thanh toán online hay API carrier. Giá đơn hàng là snapshot, không bị đổi theo catalog sau khi đặt.
@@ -97,7 +97,7 @@ Return: REQUESTED→REVIEWING→EVIDENCE_REQUIRED/APPROVED/REJECTED. Nếu cần
 | 422 | Lỗi điều kiện nghiệp vụ an toàn |
 | 503 BFF | Backend chưa kết nối, thông báo thử lại |
 | Policy | Dự thảo chờ phê duyệt, không có ngày hiệu lực bịa đặt |
-| Evidence | Ảnh private, xem trực tiếp khi click; chưa có antivirus |
+| Evidence | Ảnh private, xem trực tiếp khi click; trả 404 nếu thiếu tệp và giao diện hiển thị trạng thái không có ảnh; chưa có antivirus |
 
 Error từ backend gồm code, message, requestId. BFF có thể trả message riêng khi route/origin/size/upstream lỗi. Không chạy test nghiệp vụ trong lần chuyển khung theo yêu cầu người dùng.
 
@@ -105,15 +105,17 @@ Error từ backend gồm code, message, requestId. BFF có thể trả message r
 
 | Operation | Success | Error |
 | --- | --- | --- |
-| CUSTOMER address-save | Save label, recipient, phone and address. Supply id and revision when editing. | 401 expired session, 403 wrong role, 404 unknown or other customer's id, 409 stale revision, 422 invalid fields or over 20 addresses. |
-| CUSTOMER address-delete | Supply id and revision. Existing order snapshots retain recipient details. | 401/403/404/409 as above. |
+| CUSTOMER address-save | Save label, recipient, phone, address and optional isDefault. Supply id and revision when editing. Selecting a default clears it on other saved addresses and increments affected revisions; the first address becomes default when none remains. | 401 expired session, 403 wrong role, 404 unknown or other customer's id, 409 stale revision, 422 invalid fields or over 20 addresses. |
+| CUSTOMER address-delete | Supply id and revision. If the default is deleted, another remaining address becomes default. Existing order snapshots retain recipient details. | 401/403/404/409 as above. |
 | Checkout | Send owned addressId or manual recipient, phone and address. Server snapshots destination. | 404 for unowned or removed address. Existing cart/pricing rules still apply. |
 | Password | Send currentPassword and newPassword. Current session survives; other sessions are revoked. | 401 expired session, 403 bad origin, 422 wrong current password or invalid replacement. |
 | WebSocket | Connect at :8088/api/store/live with valid session cookie and a configured storefront Origin. After commit, order and return invalidations reach the owner and admins. Fetch GET /state for the latest records. | Upgrade denied for invalid sessions/origins. Clients reconnect and refresh state after opening. |
 
 ### Multi-item returns
 - CUSTOMER return-submit takes orderId, items (1–50 rows of lineId, quantity, reason, resolution and description), and optional shared evidenceIds. Each product can occur only once per submission (422 otherwise). The submission is atomic and returns id (first row), caseId and items. Legacy return-create remains supported.
-- Each row uses its own id and revision for return-update, return-supplement, return-confirm and return-withdraw. Customers can supplement returns only in EVIDENCE_REQUIRED. A successful submission moves the row to REVIEWING; other open states reject the action with 409. A changed resolution moves to CUSTOMER_CONFIRMATION until the customer accepts. Withdrawal before approval releases the reserved quantity.
+- Each row uses its own id and revision for return-update, return-supplement, return-confirm and return-withdraw. Customers can supplement returns only in EVIDENCE_REQUIRED. A successful submission moves the row to REVIEWING; other open states reject the action with 409. A changed resolution moves to CUSTOMER_CONFIRMATION until the customer accepts. CUSTOMER return-withdraw takes a non-blank reason in note (up to 2,000 characters) and is available in REQUESTED, REVIEWING, EVIDENCE_REQUIRED and CUSTOMER_CONFIRMATION. The row moves to WITHDRAWN, the reason goes into history and the reserved quantity is released.
 - Approved cases can pause in WAITING_STOCK, PAYMENT_REVIEW or EXCEPTION and resume their previous state. RECEIVED takes receivedQuantity; INSPECTED takes inspectedQuantity and disposition. Multi-item replacement/make-up requires REPLACEMENT_SENT with a reference before RESOLVED.
 - For missing or undelivered goods, offer make-up delivery or refund and disallow pickup. For other reasons, offer replacement or refund. Only staff may propose adjustment of the amount due. Stock holds apply to outbound shipments and payment review applies to financial resolutions. A pickup with no units received can be retried after resuming.
-- Refund processing and confirmation require confirmed payment. Adjustment of amount due requires unpaid status. These are manual records with references.
+- Refund processing and confirmation require confirmed payment. Resuming a refund from PAYMENT_REVIEW, or from EXCEPTION back to INSPECTED or PROCESSING, returns 422 until payment is confirmed. Successful resumes add transition=RESUME to the history entry. Adjustment of amount due requires unpaid status. These are manual records with references.
+
+Trang nhật ký ADMIN hiển thị tối đa 200 sự kiện gần nhất. Có thể lọc theo phân hệ, hành động, tác nhân và ngày. Nếu tìm được bản ghi đối tượng, API trả subjectKind và subjectLabel để giao diện dùng tên hoặc mã nghiệp vụ; chi tiết giữ mã gốc. Nếu không còn bản ghi tác nhân, giao diện hiện dấu gạch ngang. Danh sách rỗng và bộ lọc không có kết quả có thông báo riêng.

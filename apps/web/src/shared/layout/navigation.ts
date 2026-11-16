@@ -8,13 +8,13 @@ export const accountNavigation: readonly NavigationItem[] = [
   { key: "privacy", href: "/account/privacy", label: "Quyền riêng tư", icon: "shield" },
 ];
 export const adminNavigation: readonly NavigationItem[] = [
-  { key: "orders", href: "/admin/orders", label: "Đơn hàng" },
-  { key: "products", href: "/admin/products", label: "Sản phẩm" },
-  { key: "categories", href: "/admin/categories", label: "Danh mục" },
-  { key: "settings", href: "/admin/settings", label: "Phí giao hàng" },
-  { key: "returns", href: "/admin/returns", label: "Đổi trả" },
-  { key: "privacy", href: "/admin/privacy", label: "Quyền dữ liệu" },
-  { key: "policies", href: "/admin/policies", label: "Chính sách" },
-  { key: "audit", href: "/admin/audit", label: "Nhật ký" },
+  { key: "orders", href: "/admin/orders", label: "Đơn hàng", icon: "receipt_long" },
+  { key: "products", href: "/admin/products", label: "Sản phẩm", icon: "inventory_2" },
+  { key: "categories", href: "/admin/categories", label: "Danh mục", icon: "category" },
+  { key: "settings", href: "/admin/settings", label: "Cấu hình bán hàng", icon: "tune" },
+  { key: "returns", href: "/admin/returns", label: "Đổi trả", icon: "assignment_return" },
+  { key: "privacy", href: "/admin/privacy", label: "Quyền riêng tư & dữ liệu", icon: "shield" },
+  { key: "policies", href: "/admin/policies", label: "Chính sách", icon: "article" },
+  { key: "audit", href: "/admin/audit", label: "Nhật ký", icon: "history" },
 ];
 

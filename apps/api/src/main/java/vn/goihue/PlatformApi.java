@@ -135,7 +135,27 @@ public class PlatformApi {
     @GetMapping("/state") public Object state(HttpServletRequest req) {
         var a=actor(req);var out=new LinkedHashMap<String,Object>();out.put("user",safe(a));out.put("addresses",admin(a)?List.of():list("address",a));out.put("orders",list("order",a));out.put("privacy",list("privacy",a));out.put("returns",list("return",a));out.put("consents",list("consent",a));out.put("policy",policy());out.put("retention",Map.of("status","PENDING_APPROVAL","automaticDeletion",false));
         out.put("cartCount",admin(a)?0:db.queryForObject("SELECT COALESCE(sum((data->>'quantity')::int),0) FROM records WHERE kind='cart' AND owner_id=?",Integer.class,a.get("id")));
-        if(admin(a)){out.put("audit",db.queryForList("SELECT id,subject,action,at FROM audit ORDER BY id DESC LIMIT 200"));out.put("policyVersions",list("policy",a));}return out;
+        if(admin(a)){
+            out.put("audit",db.queryForList("""
+                SELECT a.id,a.subject,a.action,a.at,c.name AS "actorName",c.role AS "actorRole",
+                       r.kind AS "subjectKind",
+                       CASE r.kind
+                           WHEN 'order' THEN r.data->>'number'
+                           WHEN 'return' THEN r.data->>'orderNumber'
+                           WHEN 'product' THEN r.data->>'name'
+                           WHEN 'category' THEN r.data->>'name'
+                           WHEN 'policy' THEN r.data->>'version'
+                       END AS "subjectLabel"
+                FROM (SELECT * FROM audit ORDER BY id DESC LIMIT 200) a
+                LEFT JOIN customers c ON c.id=a.actor_id
+                LEFT JOIN records r ON r.id=CASE
+                    WHEN a.subject ~ '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' THEN a.subject::uuid
+                END
+                ORDER BY a.id DESC
+                """));
+            out.put("policyVersions",list("policy",a));
+        }
+        return out;
     }
     @PostMapping("/password") @Transactional
     public Object changePassword(@RequestBody Map<String,Object> body,HttpServletRequest req) {
@@ -171,6 +191,7 @@ public class PlatformApi {
                 if (!remaining.isEmpty()) {
                     var first = remaining.getFirst();
                     first.put("isDefault", true);
+                    first.put("revision", number(first,"revision")+1);
                     save("address", owner, first);
                 }
             }
@@ -189,6 +210,7 @@ public class PlatformApi {
             for (var addr : list("address", a)) {
                 if (!str(addr, "id").equals(id) && Boolean.TRUE.equals(addr.get("isDefault"))) {
                     addr.put("isDefault", false);
+                    addr.put("revision", number(addr,"revision")+1);
                     save("address", owner, addr);
                 }
             }
@@ -262,7 +284,7 @@ public class PlatformApi {
         }
         boolean privacy=action.startsWith("privacy-");String kind=privacy?"privacy":"return";var r=record(text(b,"id",50),kind,a);UUID owner=owner(str(r,"id"));
         if(number(b,"revision")!=number(r,"revision"))throw new Problem(409,"Hồ sơ vừa thay đổi. Hãy tải lại.");
-        String status=str(r,"status"),note=text(b,"note",2000);
+        String status=str(r,"status"),note=text(b,"note",2000);boolean resumed=false;
         if(action.equals("return-confirm") || action.equals("return-withdraw")) {
             permission(a,"return.create");
             if(action.equals("return-confirm")) {
@@ -323,7 +345,13 @@ public class PlatformApi {
                     }
                     case "RESUME" -> {
                         require(Set.of("WAITING_STOCK","PAYMENT_REVIEW","EXCEPTION").contains(status),"Hồ sơ không ở trạng thái chờ.");
-                        next=str(r,"resumeStatus");r.remove("resumeStatus");
+                        next=str(r,"resumeStatus");
+                        if(str(r,"resolution").equals("REFUND") && (status.equals("PAYMENT_REVIEW")
+                                || status.equals("EXCEPTION") && Set.of("INSPECTED","PROCESSING").contains(next))) {
+                            validateReturnPayment(r,a);
+                        }
+                        r.remove("resumeStatus");
+                        resumed=true;
                     }
                     case "APPROVED" -> {
                         require(status.equals("REVIEWING")||(Set.of("WAITING_STOCK","PAYMENT_REVIEW").contains(status)&&str(r,"resumeStatus").equals("APPROVED")&&str(r,"goods").equals("NOT_REQUIRED")),"Cần xem xét trước khi duyệt.");r.remove("resumeStatus");int q=number(b,"approvedQuantity");require(q>0&&q<=number(r,"quantity"),"Số lượng duyệt không hợp lệ.");if(r.containsKey("approvedQuantity"))require(q<=number(r,"approvedQuantity"),"Không thể tăng số lượng đã duyệt.");String previousResolution=str(r,"resolution");r.put("approvedQuantity",q);r.put("amount",number(r,"unitPrice")*q);r.put("resolution",text(b,"resolution",30));validateReturnResolution(str(r,"reason"),str(r,"resolution"),true);require(!Boolean.TRUE.equals(b.get("returnRequired"))||!missingReturnItem(str(r,"reason")),"Không thể thu hồi hàng chưa nhận.");r.put("goods",Boolean.TRUE.equals(b.get("returnRequired"))?"AWAITING_PICKUP":"NOT_REQUIRED");r.put("feeBearer","Gói Huế");if(!str(r,"resolution").equals(previousResolution)){r.put("proposedQuantity",r.remove("approvedQuantity"));next="CUSTOMER_CONFIRMATION";}
@@ -338,7 +366,7 @@ public class PlatformApi {
             }
             r.put("status",next);
         }
-        var history=(List<Object>)r.getOrDefault("history",new ArrayList<>());history.add(Map.of("at",Instant.now().toString(),"status",str(r,"status"),"note",note,"role",str(a,"role")));r.put("history",history);r.put("revision",number(r,"revision")+1);return save(kind,owner,r);
+        var history=(List<Object>)r.getOrDefault("history",new ArrayList<>());var entry=new LinkedHashMap<String,Object>(Map.of("at",Instant.now().toString(),"status",str(r,"status"),"note",note,"role",str(a,"role")));if(resumed)entry.put("transition","RESUME");history.add(entry);r.put("history",history);r.put("revision",number(r,"revision")+1);return save(kind,owner,r);
     }
     String bounded(Map<String,Object> b,String key,int max){String s=str(b,key);require(s.length()<=max,"Thông tin quá dài: "+key);return s;}
     Map<String,Object> export(UUID owner) {
@@ -354,6 +382,22 @@ public class PlatformApi {
         boolean png=bytes.length>8&&HexFormat.of().formatHex(Arrays.copyOf(bytes,8)).equals("89504e470d0a1a0a"),jpg=bytes.length>3&&(bytes[0]&255)==255&&(bytes[1]&255)==216&&(bytes[2]&255)==255;require(png||jpg,"Chỉ chấp nhận nội dung PNG/JPEG.");
         Files.createDirectories(storage);Files.write(storage.resolve(id),bytes,StandardOpenOption.CREATE_NEW);e.put("status","STORED_UNSCANNED");e.put("mime",png?"image/png":"image/jpeg");e.put("scan","NOT_CONFIGURED");save("evidence",owner(id),e);audit(a,id,"EVIDENCE_STORED_UNSCANNED");return Map.of("id",id,"status","STORED_UNSCANNED");
     }
-    @GetMapping("/evidence/{id}/content") public ResponseEntity<byte[]> image(@PathVariable String id,HttpServletRequest req) throws Exception {var a=actor(req);var e=record(id,"evidence",a);require(str(e,"status").equals("STORED_UNSCANNED"),"Ảnh chưa lưu.");return ResponseEntity.ok().header("Cache-Control","no-store").header("X-Content-Type-Options","nosniff").header("Content-Disposition","inline; filename=evidence."+(str(e,"mime").equals("image/png")?"png":"jpg")).contentType(MediaType.parseMediaType(str(e,"mime"))).body(Files.readAllBytes(storage.resolve(id)));}
+    @GetMapping("/evidence/{id}/content")
+    public ResponseEntity<byte[]> image(@PathVariable String id,HttpServletRequest req) throws Exception {
+        var evidence=record(id,"evidence",actor(req));
+        require(str(evidence,"status").equals("STORED_UNSCANNED"),"Ảnh chưa lưu.");
+        byte[] bytes;
+        try {
+            bytes=Files.readAllBytes(storage.resolve(id));
+        } catch (java.nio.file.NoSuchFileException missing) {
+            throw new Problem(404,"Tệp ảnh đính kèm không còn trong kho lưu trữ.");
+        }
+        return ResponseEntity.ok()
+                .header("Cache-Control","no-store")
+                .header("X-Content-Type-Options","nosniff")
+                .header("Content-Disposition","inline; filename=evidence."+(str(evidence,"mime").equals("image/png")?"png":"jpg"))
+                .contentType(MediaType.parseMediaType(str(evidence,"mime")))
+                .body(bytes);
+    }
     @ExceptionHandler(Exception.class) public ResponseEntity<?> error(Exception e) {int status=e instanceof Problem p?p.status:e instanceof org.springframework.web.bind.MissingRequestHeaderException||e instanceof org.springframework.http.converter.HttpMessageNotReadableException?400:500;String message=e instanceof Problem?e.getMessage():status==400?"Thiếu header hoặc nội dung JSON không hợp lệ.":"Không thể xử lý yêu cầu. Vui lòng thử lại.";return ResponseEntity.status(status).body(Map.of("code","STORE_"+status,"message",message,"requestId",UUID.randomUUID().toString()));}
 }

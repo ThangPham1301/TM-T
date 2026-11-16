@@ -803,8 +803,8 @@ export function AccountOrders({
                             fontSize: "14px",
                           }}
                         >
-                          {cleanText(String(order.recipient || "Nguyễn Văn An"))} •{" "}
-                          {String(order.phone || "0905 123 456")}
+                          {cleanText(String(order.recipient || "Chưa có thông tin người nhận"))} •{" "}
+                          {String(order.phone || "Chưa có số điện thoại")}
                         </div>
                         <div
                           style={{
@@ -816,7 +816,7 @@ export function AccountOrders({
                           {cleanText(
                             String(
                               order.address ||
-                                "Số 12 Lê Lợi, Phường Phú Nhuận, Thành phố Huế",
+                                "Chưa có địa chỉ giao hàng",
                             ),
                           )}
                         </div>

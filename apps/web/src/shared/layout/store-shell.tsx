@@ -99,7 +99,6 @@ export function StoreFooter({ categories }: StoreFooterProps) {
       </div>
       <div className={styles.footerBottom}>
         <span>© 2025 Gói Huế. Gói trọn phong vị Cố Đô. Tất cả quyền được bảo lưu.</span>
-        <span className={styles.architectureNote}>Next.js App Router Architecture UI</span>
       </div>
     </footer>
   );

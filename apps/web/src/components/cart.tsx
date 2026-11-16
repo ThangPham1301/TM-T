@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { AddressFields } from "./account-settings";
 import { ProductImage } from "./product/product-image";
 import styles from "./journey.module.css";
-import { api, fields, money, type Row, useStore } from "@/lib/store";
+import { api, fields, money, shippingPauseMessage, type Row, useStore } from "@/lib/store";
 type Summary = {
   items: Row[];
   cartToken: string;
@@ -263,7 +263,7 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
               )}
               {!summary.shipping.enabled && (
                 <p className="store-warning">
-                  Cửa hàng đang tạm ngừng nhận đơn mới.
+                  {shippingPauseMessage(summary.shipping)}
                 </p>
               )}
               {checkout && (
