@@ -5,6 +5,7 @@ import {
   SiteHeader,
   SiteFooter,
   StatusMessages,
+  StorePauseBanner,
 } from "@/components/site-shell";
 import "@/styles/heritage.css";
 import "@/styles/tokens.css";
@@ -53,6 +54,7 @@ export default function RootLayout({
       <body>
         <StoreProvider>
           <SiteHeader />
+          <StorePauseBanner />
           <StatusMessages />
           {children}
           <SiteFooter />

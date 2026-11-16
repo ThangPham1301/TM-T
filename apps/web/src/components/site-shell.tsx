@@ -1,6 +1,6 @@
 "use client";
 
-import { useStore, api, type Row } from "@/lib/store";
+import { useStore, api, shippingPauseMessage, type Row } from "@/lib/store";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { StoreHeader, StoreFooter } from "@/shared/layout/store-shell";
@@ -11,6 +11,23 @@ export function SiteHeader() {
   if (pathname && ["/admin/returns", "/admin/settings", "/admin/policies", "/admin/audit"].includes(pathname) && state?.user.role === "ADMIN") return null;
   return <StoreHeader user={state ? { name: String(state.user.name), role: String(state.user.role) } : null} cartCount={state?.cartCount} busy={busy} onLogout={() => void run(logout)} />;
 }
+export function StorePauseBanner() {
+  const pathname = usePathname();
+  const [shipping, setShipping] = useState<Row | null>(null);
+  useEffect(() => {
+    if (pathname !== "/") return;
+    let active = true;
+    void api("shipping").then((result) => {
+      if (active) setShipping(result);
+    }).catch(() => {
+      if (active) setShipping(null);
+    });
+    return () => { active = false; };
+  }, [pathname]);
+  if (pathname !== "/" || shipping?.enabled !== false) return null;
+  return <p className="store-warning storefront-pause-banner" role="status">{shippingPauseMessage(shipping)}</p>;
+}
+
 export function SiteFooter() {
   const pathname = usePathname();
   const [categories, setCategories] = useState<Row[]>([]);

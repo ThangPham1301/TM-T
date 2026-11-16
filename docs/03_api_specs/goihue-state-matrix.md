@@ -19,7 +19,7 @@ Mọi thao tác ghi yêu cầu Origin tin cậy. BFF chỉ chấp nhận same-or
 | GET products/{slug} | Slug | Chi tiết public hoặc 404 |
 | GET admin/products | Không | Toàn bộ sản phẩm, catalog.manage |
 | GET categories / admin/categories | Không | Danh mục active public / toàn bộ danh mục cho catalog.manage |
-| GET shipping | Không | Phí cơ bản, ngưỡng miễn phí, enabled và revision; public |
+| GET shipping | Không | Phí cơ bản, ngưỡng miễn phí, enabled, revision và pauseMessage nếu đã lưu; public |
 | GET cart/summary | Không | CUSTOMER: items, cartToken, subtotal, shippingFee, total, shipping |
 | PUT catalog/images/{id}/content | Binary PNG/JPEG ≤5MB | ADMIN; intent từ catalog-image-intent; decode/re-encode PNG |
 | GET catalog/images/{id} | Không | Public khi gắn catalog active; còn lại chỉ ADMIN |
@@ -52,7 +52,7 @@ POST commerce/command bắt buộc `Idempotency-Key` 16–80 chữ/số/gạch n
 | product-save | id/revision khi sửa, name≤150, slug≤120, category≤120, description≤4000, imageId tùy chọn, price 1..10.000.000, stock 0..1.000.000, active boolean | ADMIN; category active, slug duy nhất; imageId READY hoặc rỗng để gỡ ảnh; không nhận URL ảnh mới; sửa stock tuyệt đối có audit |
 | category-save / category-delete | id/revision khi sửa/xóa; code/name/description/sortOrder/active/imageId khi lưu | ADMIN; code duy nhất; đổi code cập nhật mapping product; chỉ xóa khi không có product |
 | product-delete / catalog-toggle | id/revision; kind/active khi toggle | ADMIN; chỉ xóa product chưa có cart/order tham chiếu; còn lại dùng ẩn |
-| shipping-save | revision, baseFee, freeShippingThreshold, enabled | ADMIN catalog.manage+order.manage; không thay phí đơn cũ |
+| shipping-save | revision, baseFee, freeShippingThreshold, enabled, optional pauseMessage (250 characters) | ADMIN catalog.manage+order.manage; không thay phí đơn cũ |
 | catalog-image-intent | name≤120 | ADMIN; fileId để upload, idempotency bắt buộc |
 
 Không có voucher, loyalty, phí thanh toán online hay API carrier. Giá đơn hàng là snapshot, không bị đổi theo catalog sau khi đặt.
@@ -95,7 +95,7 @@ Return: REQUESTED→REVIEWING→EVIDENCE_REQUIRED/APPROVED/REJECTED. Nếu cần
 | 422 | Lỗi điều kiện nghiệp vụ an toàn |
 | 503 BFF | Backend chưa kết nối, thông báo thử lại |
 | Policy | Dự thảo chờ phê duyệt, không có ngày hiệu lực bịa đặt |
-| Evidence | Ảnh private, xem trực tiếp khi click; chưa có antivirus |
+| Evidence | Ảnh private, xem trực tiếp khi click; trả 404 nếu thiếu tệp và giao diện hiển thị trạng thái không có ảnh; chưa có antivirus |
 
 Error từ backend gồm code, message, requestId. BFF có thể trả message riêng khi route/origin/size/upstream lỗi. Không chạy test nghiệp vụ trong lần chuyển khung theo yêu cầu người dùng.
 

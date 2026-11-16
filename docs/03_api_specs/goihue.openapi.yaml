@@ -25,7 +25,7 @@ paths:
       operationId: shippingSettings
       security: []
       responses:
-        '200': {description: id/code/baseFee/freeShippingThreshold/enabled/revision; threshold zero disables free shipping}
+        '200': {description: id/code/baseFee/freeShippingThreshold/enabled/revision and optional pauseMessage; threshold zero disables free shipping}
   /cart/summary:
     get:
       operationId: cartQuote
@@ -136,6 +136,7 @@ paths:
                 - {$ref: '#/components/schemas/Mutation'}
                 - type: object
                   properties:
+                    pauseMessage: {type: string, maxLength: 250, description: Optional customer-facing notice for shipping-save when new orders are paused}
                     addressId: {type: string, format: uuid, description: Optional saved CUSTOMER destination for checkout in place of manual recipient fields}
                     action: {type: string, enum: [cart-set, cart-clear, cart-refresh, checkout, order-cancel, order-status, order-paid, order-recipient, product-save, product-delete, category-save, category-delete, catalog-toggle, shipping-save, catalog-image-intent]}
       responses:

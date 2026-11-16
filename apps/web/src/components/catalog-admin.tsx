@@ -132,6 +132,7 @@ export function CatalogAdmin({
                 baseFee: Number(b.baseFee),
                 freeShippingThreshold: Number(b.freeShippingThreshold),
                 enabled: b.enabled === "yes",
+                pauseMessage: b.pauseMessage,
               });
             });
           }}>
@@ -158,6 +159,15 @@ export function CatalogAdmin({
                   <input type="radio" name="enabled" value="no" defaultChecked={!shipping.enabled} />
                   <span><strong>Tạm ngừng tiếp nhận đơn mới</strong><small>Khách vẫn có thể xem sản phẩm và giỏ hàng.</small></span>
                 </label>
+                <div className="operations-pause-message">
+                  <label>
+                    Thông báo hiển thị cho khách hàng
+                    <textarea name="pauseMessage" rows={4} maxLength={250}
+                      defaultValue={String(shipping.pauseMessage ?? "")}
+                      placeholder="Cửa hàng đang tạm ngừng nhận đơn mới." />
+                  </label>
+                  <p className="store-subtle">Tối đa 250 ký tự. Thông báo hiện trên trang chủ, giỏ hàng và thanh toán khi tạm ngừng nhận đơn.</p>
+                </div>
               </section>
             </div>
             <footer className="operations-savebar">

@@ -11,9 +11,9 @@ export const adminNavigation: readonly NavigationItem[] = [
   { key: "orders", href: "/admin/orders", label: "Đơn hàng" },
   { key: "products", href: "/admin/products", label: "Sản phẩm" },
   { key: "categories", href: "/admin/categories", label: "Danh mục" },
-  { key: "settings", href: "/admin/settings", label: "Phí giao hàng" },
+  { key: "settings", href: "/admin/settings", label: "Cấu hình bán hàng" },
   { key: "returns", href: "/admin/returns", label: "Đổi trả" },
-  { key: "privacy", href: "/admin/privacy", label: "Quyền dữ liệu" },
+  { key: "privacy", href: "/admin/privacy", label: "Quyền riêng tư & dữ liệu" },
   { key: "policies", href: "/admin/policies", label: "Chính sách" },
   { key: "audit", href: "/admin/audit", label: "Nhật ký" },
 ];

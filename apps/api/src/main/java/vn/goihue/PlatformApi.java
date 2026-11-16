@@ -441,6 +441,22 @@ public class PlatformApi {
         boolean png=bytes.length>8&&HexFormat.of().formatHex(Arrays.copyOf(bytes,8)).equals("89504e470d0a1a0a"),jpg=bytes.length>3&&(bytes[0]&255)==255&&(bytes[1]&255)==216&&(bytes[2]&255)==255;require(png||jpg,"Chỉ chấp nhận nội dung PNG/JPEG.");
         Files.createDirectories(storage);Files.write(storage.resolve(id),bytes,StandardOpenOption.CREATE_NEW);e.put("status","STORED_UNSCANNED");e.put("mime",png?"image/png":"image/jpeg");e.put("scan","NOT_CONFIGURED");save("evidence",owner(id),e);audit(a,id,"EVIDENCE_STORED_UNSCANNED");return Map.of("id",id,"status","STORED_UNSCANNED");
     }
-    @GetMapping("/evidence/{id}/content") public ResponseEntity<byte[]> image(@PathVariable String id,HttpServletRequest req) throws Exception {var a=actor(req);var e=record(id,"evidence",a);require(str(e,"status").equals("STORED_UNSCANNED"),"Ảnh chưa lưu.");return ResponseEntity.ok().header("Cache-Control","no-store").header("X-Content-Type-Options","nosniff").header("Content-Disposition","inline; filename=evidence."+(str(e,"mime").equals("image/png")?"png":"jpg")).contentType(MediaType.parseMediaType(str(e,"mime"))).body(Files.readAllBytes(storage.resolve(id)));}
+    @GetMapping("/evidence/{id}/content")
+    public ResponseEntity<byte[]> image(@PathVariable String id,HttpServletRequest req) throws Exception {
+        var evidence=record(id,"evidence",actor(req));
+        require(str(evidence,"status").equals("STORED_UNSCANNED"),"Ảnh chưa lưu.");
+        byte[] bytes;
+        try {
+            bytes=Files.readAllBytes(storage.resolve(id));
+        } catch (java.nio.file.NoSuchFileException missing) {
+            throw new Problem(404,"Tệp ảnh đính kèm không còn trong kho lưu trữ.");
+        }
+        return ResponseEntity.ok()
+                .header("Cache-Control","no-store")
+                .header("X-Content-Type-Options","nosniff")
+                .header("Content-Disposition","inline; filename=evidence."+(str(evidence,"mime").equals("image/png")?"png":"jpg"))
+                .contentType(MediaType.parseMediaType(str(evidence,"mime")))
+                .body(bytes);
+    }
     @ExceptionHandler(Exception.class) public ResponseEntity<?> error(Exception e) {int status=e instanceof Problem p?p.status:e instanceof org.springframework.web.bind.MissingRequestHeaderException||e instanceof org.springframework.http.converter.HttpMessageNotReadableException?400:500;String message=e instanceof Problem?e.getMessage():status==400?"Thiếu header hoặc nội dung JSON không hợp lệ.":"Không thể xử lý yêu cầu. Vui lòng thử lại.";return ResponseEntity.status(status).body(Map.of("code","STORE_"+status,"message",message,"requestId",UUID.randomUUID().toString()));}
 }

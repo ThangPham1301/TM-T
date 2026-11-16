@@ -14,7 +14,7 @@ import { ReturnRequestForm } from "./return-request-form";
 import { ProductImage } from "./product/product-image";
 import styles from "./journey.module.css";
 import { WorkspaceNav, Pagination } from "./workspace-nav";
-import { ReturnQueue, PolicyEditor, AuditLog, OperationsWorkspace } from "./operations";
+import { ReturnQueue, PolicyEditor, AuditLog, OperationsWorkspace, EvidencePreview } from "./operations";
 import {
   api,
   fields,
@@ -495,6 +495,8 @@ export function Account({
                   <div className="returns-detail-block">
                     <small>Người nhận</small>
                     <strong>{String(linkedReturnOrder.recipient)}</strong>
+                    {linkedReturnOrder.phone != null && <span>{String(linkedReturnOrder.phone)}</span>}
+                    {linkedReturnOrder.address != null && <span>{String(linkedReturnOrder.address)}</span>}
                   </div>
                 )}
                 <div className="returns-detail-block returns-detail-product">
@@ -572,18 +574,7 @@ export function Account({
                 <h4>Ảnh đính kèm</h4>
                 <div className="store-evidence-list returns-evidence-list">
                   {((current.evidenceIds as string[]) ?? []).map((id) => (
-                    <a
-                      key={id}
-                      href={`/api/store/evidence/${id}/content`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <img
-                        src={`/api/store/evidence/${id}/content`}
-                        alt="Bằng chứng đính kèm"
-                        className="store-evidence-thumb"
-                      />
-                    </a>
+                    <EvidencePreview key={id} id={id} />
                   ))}
                 </div>
               </div>
@@ -1297,6 +1288,7 @@ function CaseAction({
     !(refundAwaitingPayment && resumeNeedsPayment && step === "RESUME"),
   );
   const [selection, setTarget] = useState("");
+  const [note, setNote] = useState("");
   const reviewingReturn = !row.type && row.status === "REVIEWING";
   const target = next.includes(selection) ? selection : reviewingReturn ? "" : next[0];
   const refundNotice = refundAwaitingPayment && (
@@ -1419,9 +1411,9 @@ function CaseAction({
       )}
       <label>
         Lý do/kết quả
-        <textarea name="note" required maxLength={2000} />
+        <textarea name="note" required maxLength={2000} value={note} onChange={(event) => setNote(event.target.value)} />
       </label>
-      <button disabled={busy || !target}>Xác nhận xử lý</button>
+      <button disabled={busy || !target || !note.trim()}>Xác nhận xử lý</button>
     </form>
   );
 }

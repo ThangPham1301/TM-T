@@ -49,6 +49,18 @@ export function OperationsWorkspace({
   );
 }
 
+export function EvidencePreview({ id, compact = false }: { id: string; compact?: boolean }) {
+  const [missing, setMissing] = useState(false);
+  const url = `/api/store/evidence/${encodeURIComponent(id)}/content`;
+  return missing ? (
+    <span className="returns-evidence-missing" data-compact={compact}>Ảnh không khả dụng</span>
+  ) : (
+    <a className="returns-evidence-preview" data-compact={compact} href={url} target="_blank" rel="noreferrer">
+      <img src={url} alt="Xem ảnh bằng chứng" loading="lazy" onError={() => setMissing(true)} />
+    </a>
+  );
+}
+
 const pageSize = 8;
 
 const returnFilters = [
@@ -122,7 +134,7 @@ export function ReturnQueue({
         row,
         caseStatus,
         quantity,
-        evidenceCount: evidence.size,
+        evidenceIds: [...evidence],
         products: group.length > 1 ? `${group.length} dòng hàng` : String(row.product),
         reasons: [...new Set(group.map((line) => label(line.reason)))].join(", "),
       };
@@ -189,7 +201,7 @@ export function ReturnQueue({
               </tr>
             </thead>
             <tbody>
-              {visibleCases.map(({ row, products, reasons, quantity, evidenceCount, caseStatus }) => (
+              {visibleCases.map(({ row, products, reasons, quantity, evidenceIds, caseStatus }) => (
                 <tr key={row.id}>
                   <td>
                     <strong>#{String(row.caseId || row.id).slice(0, 8)}</strong><br />
@@ -197,7 +209,12 @@ export function ReturnQueue({
                   </td>
                   <td>{String(orderById.get(String(row.orderId))?.recipient ?? "—")}</td>
                   <td>{products} · {quantity} sản phẩm<br /><small>{reasons}</small></td>
-                  <td>{evidenceCount} ảnh</td>
+                  <td>
+                    <div className="returns-evidence-cell">
+                      {evidenceIds.slice(0, 2).map((id) => <EvidencePreview key={id} id={id} compact />)}
+                    </div>
+                    <small>{evidenceIds.length} ảnh</small>
+                  </td>
                   <td><span className="store-status-chip">{caseStatus}</span></td>
                   <td>
                     <button
