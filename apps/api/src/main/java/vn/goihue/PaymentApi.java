@@ -40,15 +40,17 @@ public class PaymentApi {
     final PlatformApi app;
     final JdbcTemplate db;
     final CatalogService catalog;
-    @Value("${APP_IPN_SECRET:demoipnsecret}") String ipnSecret;
+    final CommerceApi commerce;
+    @Value("${APP_IPN_SECRET:}") String ipnSecret;
     @Value("${APP_SEPAY_SECRET:}") String sepaySecret;
 
     private static final Pattern ORDER_NUMBER = Pattern.compile("GH-[A-Z0-9]{8}");
 
-    public PaymentApi(PlatformApi app, JdbcTemplate db, CatalogService catalog) {
+    public PaymentApi(PlatformApi app, JdbcTemplate db, CatalogService catalog, CommerceApi commerce) {
         this.app = app;
         this.db = db;
         this.catalog = catalog;
+        this.commerce = commerce;
     }
 
     static String hmacHex(String secret, String data) {
@@ -67,6 +69,8 @@ public class PaymentApi {
 
     @PostMapping("/payments/ipn") @Transactional
     public Object ipn(@RequestBody Map<String, Object> b) {
+        if (ipnSecret == null || ipnSecret.isBlank())
+            throw new PlatformApi.Problem(404, "IPN mô phỏng chưa được bật.");
         app.lock();
         String number = app.text(b, "orderNumber", 20);
         long amount;
@@ -124,8 +128,9 @@ public class PaymentApi {
         } catch (Exception e) {
             return sepayOk();
         }
-        // SePay's transaction id is stable across retries and manual replays: it is the dedup key.
-        String txn = "SEPAY-" + app.str(payload, "id");
+        String providerId = app.str(payload, "id");
+        if (amount <= 0 || providerId.isBlank() || providerId.length() > 100) return sepayOk();
+        String txn = "SEPAY-" + providerId;
         app.lock();
         try {
             processPayment(number, amount, txn, "SePay", "payment-sepay");
@@ -149,11 +154,12 @@ public class PaymentApi {
 
     /**
      * GW3 matching, shared by every notification sender. Returns the outcome
-     * code; throws 404 for an unknown order and 422 for an order that is not
-     * a VietQR order or is already refunded.
+     * code; throws 404 for an unknown order and 422 for a non-VietQR order
+     * or a nonpositive amount.
      */
     @SuppressWarnings("unchecked")
     String processPayment(String number, long amount, String txn, String source, String historyAction) {
+        app.require(amount > 0, "Số tiền thanh toán phải lớn hơn 0.");
         var rows = db.queryForList("SELECT owner_id, data::text FROM records WHERE kind='order' AND data->>'number'=?", number);
         if (rows.isEmpty()) throw new PlatformApi.Problem(404, "Không tìm thấy đơn hàng.");
         UUID owner = (UUID) rows.getFirst().get("owner_id");
@@ -161,10 +167,16 @@ public class PaymentApi {
         var payment = (Map<String, Object>) order.get("payment");
         if (payment == null || !"VIETQR".equals(app.str(order, "paymentMethod")))
             throw new PlatformApi.Problem(422, "Đơn không dùng thanh toán VietQR.");
+        boolean knownBeforeMigration = txn.equals(app.str(payment, "transactionId"))
+                || txn.equals(app.str(payment, "extraTransactionId"));
+        int inserted = db.update("""
+                INSERT INTO payment_notifications (source, transaction_id, order_id, amount)
+                VALUES (?, ?, ?, ?) ON CONFLICT (source, transaction_id) DO NOTHING
+                """, source, txn, app.uuid(app.str(order, "id")), amount);
+        if (inserted == 0 || knownBeforeMigration) return "DUPLICATE_IGNORED";
+
         String paymentStatus = app.str(order, "paymentStatus");
         if (paymentStatus.equals("PAID")) {
-            if (txn.equals(app.str(payment, "transactionId")))
-                return "DUPLICATE_IGNORED";
             // A second, distinct payment for an already-paid order: the extra
             // money exists and must be reconciled (refund), never dropped.
             String firstTxn = app.str(payment, "transactionId");
@@ -178,10 +190,28 @@ public class PaymentApi {
             app.save("order", owner, order);
             return "REVIEW_DOUBLE";
         }
-        if (paymentStatus.equals("REVIEW"))
+        if (paymentStatus.equals("REVIEW")) {
+            addHistory(order, "Nhận thêm giao dịch " + txn + " (" + amount + "đ) trong lúc đối soát.", historyAction);
+            order.put("revision", app.number(order, "revision") + 1);
+            app.save("order", owner, order);
             return "ALREADY_REVIEW";
+        }
+        if (paymentStatus.equals("REFUNDED")) {
+            toReview(order, owner, payment, txn,
+                    "Nhận giao dịch mới sau khi đã hoàn tiền. Chuyển đối soát thủ công.", historyAction);
+            return "REVIEW_LATE";
+        }
         if (!paymentStatus.equals("UNPAID"))
             throw new PlatformApi.Problem(422, "Đơn không còn chờ thanh toán.");
+        if (Set.of("CANCELLED", "RETURNED").contains(app.str(order, "status"))) {
+            toReview(order, owner, payment, txn,
+                    "Tiền đến qua " + source + " sau khi đơn đã hủy hoặc hoàn về. Chuyển đối soát thủ công.",
+                    historyAction);
+            return "REVIEW_LATE";
+        }
+        if (canExpire(order, payment) && deadlineReached(payment)) {
+            markExpired(owner, order, payment);
+        }
         long total = ((Number) order.get("total")).longValue();
         if (amount != total) {
             toReview(order, owner, payment, txn,
@@ -190,7 +220,7 @@ public class PaymentApi {
             return "REVIEW_AMOUNT";
         }
         boolean expired = app.str(payment, "status").equals("EXPIRED")
-                || Instant.parse(app.str(payment, "expiresAt")).isBefore(Instant.now());
+                || deadlineReached(payment);
         if (expired) {
             toReview(order, owner, payment, txn,
                     "Tiền đến qua " + source + " sau khi phiên thanh toán đã hết hạn. Chuyển đối soát thủ công (REVIEW).",
@@ -227,12 +257,24 @@ public class PaymentApi {
                 "action", action));
     }
 
-    /**
-     * E2 of the checkout design: a VietQR session that reaches its deadline
-     * unpaid is cancelled and its stock released exactly once (the order is
-     * no longer UNPAID afterwards, so the sweep never touches it again).
-     * A payment that still arrives later lands in REVIEW via the IPN path.
-     */
+    private boolean deadlineReached(Map<String, Object> payment) {
+        return !Instant.parse(app.str(payment, "expiresAt")).isAfter(Instant.now());
+    }
+
+    private boolean canExpire(Map<String, Object> order, Map<String, Object> payment) {
+        return Set.of("PLACED", "CONFIRMED").contains(app.str(order, "status"))
+                && "PENDING".equals(app.str(payment, "status"));
+    }
+
+    private void markExpired(UUID owner, Map<String, Object> order, Map<String, Object> payment) {
+        catalog.releaseReservedStock(order);
+        commerce.restoreExpiredCart(owner, order);
+        payment.put("status", "EXPIRED");
+        order.put("status", "CANCELLED");
+        addHistory(order, "Hết hạn thanh toán VietQR. Đã hủy đơn và hoàn tồn kho.", "payment-expire");
+    }
+
+    /** Expire only unpaid reservations that have not reached packing. */
     @Scheduled(fixedDelayString = "${APP_PAYMENT_SWEEP_MS:60000}")
     @Transactional
     @SuppressWarnings("unchecked")
@@ -241,25 +283,14 @@ public class PaymentApi {
         var rows = db.queryForList(
                 "SELECT owner_id, data::text FROM records WHERE kind='order'"
                         + " AND data->>'paymentMethod'='VIETQR' AND data->>'paymentStatus'='UNPAID'"
+                        + " AND data->>'status' IN ('PLACED','CONFIRMED')"
                         + " AND data#>>'{payment,status}'='PENDING'"
                         + " AND (data#>>'{payment,expiresAt}')::timestamptz < now()");
         for (var row : rows) {
             UUID owner = (UUID) row.get("owner_id");
             var order = app.decode((String) row.get("data"));
             var payment = (Map<String, Object>) order.get("payment");
-            payment.put("status", "EXPIRED");
-            for (var line : (List<Map<String, Object>>) order.get("items")) {
-                var p = catalog.get(app.str(line, "productId"), "product");
-                p.put("stock", app.number(p, "stock") + app.number(line, "quantity"));
-                p.put("revision", app.number(p, "revision") + 1);
-                app.save("product", null, p);
-            }
-            order.put("status", "CANCELLED");
-            ((List<Object>) order.get("history")).add(Map.of(
-                    "at", Instant.now().toString(),
-                    "status", "CANCELLED",
-                    "note", "Hết hạn thanh toán VietQR (E2): hủy phiên, hoàn tồn kho. Tiền đến muộn sẽ vào đối soát REVIEW.",
-                    "action", "payment-expire"));
+            markExpired(owner, order, payment);
             order.put("revision", app.number(order, "revision") + 1);
             app.save("order", owner, order);
         }

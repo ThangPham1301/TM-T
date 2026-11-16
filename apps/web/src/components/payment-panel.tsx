@@ -97,8 +97,11 @@ export function PaymentPanel({ order }: { order: Row }) {
       {pStatus === "EXPIRED" && (
         <p>
           Phiên thanh toán đã hết hạn; đơn đã bị hủy và tồn kho đã được hoàn.
-          Hãy đặt một đơn mới.
+          Bạn có thể kiểm tra giỏ và đặt lại.
         </p>
+      )}
+      {pStatus === "CANCELLED" && (
+        <p>Đơn đã hủy. Phiên VietQR này không còn hiệu lực.</p>
       )}
       {pStatus === "RESOLVED_PAID" && (
         <p>Đã đối soát xong: cửa hàng đã ghi nhận khoản thanh toán này.</p>

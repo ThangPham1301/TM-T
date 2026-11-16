@@ -10,6 +10,7 @@ export const accountNavigation: readonly NavigationItem[] = [
 export const adminNavigation: readonly NavigationItem[] = [
   { key: "orders", href: "/admin/orders", label: "Đơn hàng" },
   { key: "products", href: "/admin/products", label: "Sản phẩm" },
+  { key: "inventory", href: "/admin/inventory", label: "Kho theo lô" },
   { key: "categories", href: "/admin/categories", label: "Danh mục" },
   { key: "settings", href: "/admin/settings", label: "Phí giao hàng" },
   { key: "returns", href: "/admin/returns", label: "Đổi trả" },

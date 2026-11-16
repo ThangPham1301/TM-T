@@ -42,12 +42,12 @@ services:
       APP_BANK_BIN: ${APP_BANK_BIN:-970422}
       APP_BANK_ACCOUNT: ${APP_BANK_ACCOUNT:-012345678901}
       APP_BANK_NAME: ${APP_BANK_NAME:-GOI HUE}
-      # Literal on purpose: this Compose version rejects ${...:-...} defaults
-      # for this variable. Demo-only secret — change it here if needed.
-      APP_IPN_SECRET: demoipnsecret
+      APP_IPN_SECRET: ${APP_IPN_SECRET:-}
+      APP_SEED_DEMO_CUSTOMER: ${APP_SEED_DEMO_CUSTOMER:-false}
+      APP_COOKIE_SECURE: ${APP_COOKIE_SECURE:-false}
       # SePay webhook signing secret (HMAC-SHA256). The value itself lives
       # only in .env (gitignored); see scripts for the Test-mode setup.
-      APP_SEPAY_SECRET: ${APP_SEPAY_SECRET}
+      APP_SEPAY_SECRET: ${APP_SEPAY_SECRET:-}
       APP_PAYMENT_TTL_MINUTES: ${APP_PAYMENT_TTL_MINUTES:-15}
       APP_PAYMENT_SWEEP_MS: ${APP_PAYMENT_SWEEP_MS:-60000}
     ports:

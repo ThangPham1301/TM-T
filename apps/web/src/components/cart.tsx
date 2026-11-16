@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AddressFields } from "./account-settings";
 import { ProductImage } from "./product/product-image";
@@ -20,16 +20,8 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
   const [summary, setSummary] = useState<Summary | null>(null),
     [error, setError] = useState(""),
     [fetching, setFetching] = useState(false);
-  const [addressChoice, setAddressChoice] = useState("");
+  const [addressChoice, setAddressChoice] = useState<string | null>(null);
   const [addingAddress, setAddingAddress] = useState(false);
-  const autoAddress = useRef(false);
-  useEffect(() => {
-    if (!checkout || autoAddress.current) return;
-    if (state?.addresses.length === 1) {
-      autoAddress.current = true;
-      setAddressChoice(state.addresses[0].id);
-    }
-  }, [checkout, state]);
   async function refresh() {
     setFetching(true);
     try {
@@ -78,7 +70,10 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
         <Link href="/admin">Về quản trị cửa hàng</Link>
       </main>
     );
-  const selectedAddress = state.addresses.find((entry) => entry.id === addressChoice);
+  const selectedAddress = addressChoice === null
+    ? state.addresses.find((entry) => entry.isDefault === true)
+      ?? (state.addresses.length === 1 ? state.addresses[0] : undefined)
+    : state.addresses.find((entry) => entry.id === addressChoice);
   const rows = summary?.items ?? [],
     blocked = rows.some(
       (l) =>
@@ -357,7 +352,7 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
                       <input type="radio" name="paymentMethod" value="COD" defaultChecked />
                       <span className={styles.payCardBody}>
                         <span className={styles.payCardTitle}>Thanh toán khi nhận hàng (COD)</span>
-                        <span className={styles.payCardDesc}>Trả tiền mặt khi đơn được giao.</span>
+                        <span className={styles.payCardDesc}>Xác nhận trong trang Đơn hàng trong vòng 24 giờ, rồi trả tiền mặt khi nhận hàng.</span>
                       </span>
                     </label>
                     <label className={styles.payCard}>

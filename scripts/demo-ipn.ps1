@@ -33,7 +33,7 @@ param(
     [Parameter(Mandatory = $true)][long]$Amount,
     [ValidateSet("ok", "wrong-amount", "bad-signature")][string]$Case = "ok",
     [string]$TransactionId = "",
-    [string]$Secret = "demoipnsecret",
+    [string]$Secret = $env:APP_IPN_SECRET,
     [string]$ApiBase = "http://127.0.0.1:8088/api/v1"
 )
 
@@ -43,6 +43,9 @@ if ([string]::IsNullOrWhiteSpace($TransactionId)) {
     $TransactionId = "DEMO-" + (Get-Date -Format "yyyyMMddHHmmss")
 }
 $effectiveAmount = $Amount
+if ([string]::IsNullOrWhiteSpace($Secret)) {
+    throw "Set APP_IPN_SECRET or supply -Secret to match the local demo API."
+}
 $effectiveSecret = $Secret
 switch ($Case) {
     "wrong-amount" { $effectiveAmount = $Amount + 1000 }

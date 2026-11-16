@@ -170,6 +170,9 @@ export function Account({
             {Boolean(current.deliveredAt) && (
               <p>Giao thành công lúc: {date(current.deliveredAt)}</p>
             )}
+            {Boolean((current.packing as Row | undefined)?.photoId) && (
+              <p><a href={`/api/store/packing/${current.id}/photo`} target="_blank" rel="noreferrer">Xem ảnh đóng gói</a></p>
+            )}
             {Boolean(current.trackingReference) && (
               <p>Vận đơn: {String(current.trackingReference)}</p>
             )}
@@ -233,12 +236,25 @@ export function Account({
               <OrderAction
                 key={current.id + String(current.revision)}
                 row={current}
-                onSave={(b) =>
+                onSave={(b, photo) =>
                   void run(async () => {
+                    let packingPhotoId: string | undefined;
+                    if (photo) {
+                      if (!photo.size || photo.size > 5 * 1024 * 1024) throw new Error("Chọn ảnh tối đa 5 MB.");
+                      const response = await fetch(`/api/store/packing/${current.id}/photo/${current.revision}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/octet-stream" },
+                        body: photo,
+                      });
+                      const uploaded = await response.json();
+                      if (!response.ok) throw new Error(uploaded.message ?? "Không tải được ảnh đóng gói.");
+                      packingPhotoId = uploaded.photoId;
+                    }
                     await mutate("commerce", "order-status", {
                       ...b,
                       id: current.id,
                       revision: current.revision,
+                      ...(packingPhotoId ? { packingPhotoId } : {}),
                     });
                   })
                 }
@@ -1084,6 +1100,15 @@ export function Account({
   );
 }
 
+const packingInstructions = [
+  ["WAX_PAPER", "Kiểm giấy sáp gạo nếp chống dính · 20 giây"],
+  ["MOLDED_TRAY", "Xếp khay bã mía, hút ẩm và thẻ hạt mầm/thiệp nếu có · 30 giây"],
+  ["KRAFT_BOX", "Lồng hộp Kraft · 25 giây"],
+  ["HONEYCOMB", "Quấn giấy tổ ong và chèn góc · 40 giây"],
+  ["CORN_TAPE", "Đóng thùng sóng E, dán keo giấy chữ H · 35 giây"],
+  ["LABEL", "Dán vận đơn và tem tránh nắng, cho đồng kiểm · 30 giây"],
+] as const;
+
 function OrderAction({
   row,
   busy,
@@ -1091,9 +1116,23 @@ function OrderAction({
 }: {
   row: Row;
   busy: boolean;
-  onSave: (b: Record<string, unknown>) => void;
+  onSave: (b: Record<string, unknown>, photo?: File) => void;
 }) {
-  const nextOptions = (
+  const vietQr = row.paymentMethod === "VIETQR";
+  const pendingCod = row.paymentMethod === "COD" && row.status === "PLACED" && Boolean(row.codConfirmBy);
+  const inspectionItems = (row.items as Row[] | undefined) ?? [];
+  const pickLots = inspectionItems.flatMap((item) =>
+    Array.isArray(item.lotAllocations) ? item.lotAllocations as Row[] : []
+  );
+  const fulfillmentQc = row.fulfillmentQc as Row | undefined;
+  const canPick = row.status === "CONFIRMED" && (!vietQr || row.paymentStatus === "PAID");
+  const needsQc = Boolean(row.fulfillmentQcRequired) || pickLots.length > 0;
+  const fulfillmentActions: Record<string, string> = {
+    "order-pick-qc": "Ghi nhận QC soạn hàng",
+    "order-repick": "Cấp lại lô không còn đạt",
+    "order-reopen-packing": "Mở lại đơn để soạn và kiểm định",
+  };
+  const nextOptions = ((
     {
       PLACED: ["CONFIRMED"],
       CONFIRMED: ["PACKED"],
@@ -1101,15 +1140,23 @@ function OrderAction({
       SHIPPED: ["DELIVERED", "DELIVERY_FAILED"],
       DELIVERY_FAILED: ["SHIPPED", "RETURNED"],
     } as Record<string, string[]>
-  )[String(row.status)] ?? [];
+  )[String(row.status)] ?? []).filter((status) =>
+    (!vietQr || row.paymentStatus === "PAID" || !["PACKED", "SHIPPED"].includes(status)) &&
+    (status !== "PACKED" || !needsQc || fulfillmentQc?.outcome === "PASSED")
+  );
   const actions = [
+    ...(canPick ? ["order-pick-qc"] : []),
+    ...(canPick && pickLots.length > 0 ? ["order-repick"] : []),
+    ...(row.status === "PACKED" ? ["order-reopen-packing"] : []),
+    ...(row.status === "RETURNED" && row.returnStockStatus === "QUARANTINED" ? ["order-return-qc"] : []),
+    ...(row.status === "RETURNED" && row.paymentStatus === "PAID" ? ["order-return-refund"] : []),
     ...(row.paymentStatus === "REVIEW" ? ["payment-resolve"] : []),
-    ...(nextOptions.length ? ["order-status"] : []),
-    ...(row.paymentStatus !== "PAID" && row.status !== "CANCELLED"
+    ...(!pendingCod && nextOptions.length ? ["order-status"] : []),
+    ...(!vietQr && !pendingCod && row.paymentStatus !== "PAID" && !["CANCELLED", "RETURNED"].includes(String(row.status))
       ? ["order-paid"]
       : []),
     ...(["PLACED", "CONFIRMED"].includes(String(row.status)) &&
-    row.paymentStatus !== "PAID"
+    !["PAID", "REVIEW"].includes(String(row.paymentStatus))
       ? ["order-cancel"]
       : []),
   ];
@@ -1118,26 +1165,94 @@ function OrderAction({
   const nextValue = nextOptions.includes(next)
     ? next
     : (nextOptions[0] ?? "");
+  const needsPackingSop = action === "order-status" && nextValue === "PACKED" && Boolean(row.packingSopRequired);
+  const inspection = row.returnInspection as Row | undefined;
   if (!actions.length)
-    return <p>Không còn thao tác xử lý trực tiếp cho đơn này.</p>;
+    return inspection
+      ? <p>Đã kiểm hàng hoàn. Biên bản QC: {String(inspection.reference)}.</p>
+      : <p>Không còn thao tác xử lý trực tiếp cho đơn này.</p>;
   const title =
-    action === "payment-resolve"
+    fulfillmentActions[action] ?? (action === "order-return-qc"
+      ? "Ghi nhận kiểm định hàng hoàn"
+      : action === "order-return-refund"
+        ? "Ghi nhận tiền đã hoàn cho đơn trả về"
+        : action === "payment-resolve"
       ? "Xử lý đối soát thanh toán (REVIEW)"
       : action === "order-status"
         ? `Chuyển sang ${label(nextValue)}`
         : action === "order-paid"
           ? "Xác nhận đã thu tiền"
-          : "Hủy đơn đủ điều kiện";
+          : "Hủy đơn đủ điều kiện");
   return (
     <form
       className="store-form"
       onSubmit={(e) => {
         const b = fields(e);
+        if (needsPackingSop) {
+          const form = new FormData(e.currentTarget);
+          const photo = form.get("packingPhoto");
+          if (photo instanceof File && window.confirm(`${title} cho đơn ${row.number}?`)) {
+            onSave({ action, status: nextValue, note: b.note, packingSteps: form.getAll("packingSteps") }, photo);
+          }
+          return;
+        }
+        if (action === "order-pick-qc") {
+          const form = new FormData(e.currentTarget);
+          if (window.confirm(`${title} cho đơn ${row.number}?`)) {
+            onSave({
+              action, reference: b.reference, note: b.note, qcOutcome: b.qcOutcome,
+              qcTexture: form.has("qcTexture"), qcAroma: form.has("qcAroma"),
+              qcPackaging: form.has("qcPackaging"), qcContents: form.has("qcContents"),
+              affectedLotIds: form.getAll("affectedLotIds"),
+            });
+          }
+          return;
+        }
+        if (action === "order-return-qc") {
+          const form = new FormData(e.currentTarget);
+          const inspection = inspectionItems.map((item, index) => ({
+            productId: item.productId,
+            ...(Array.isArray(item.lotAllocations)
+              ? { lots: item.lotAllocations.map((lot: Row, lotIndex: number) => ({
+                  lotId: lot.lotId,
+                  acceptedQuantity: Number(form.get(`accepted-${index}-${lotIndex}`)),
+                })) }
+              : { acceptedQuantity: Number(form.get(`accepted-${index}`)) }),
+          }));
+          if (window.confirm(`${title} cho đơn ${row.number}?`)) {
+            onSave({
+              action, reference: b.reference, note: b.note, inspection,
+              packagingChecked: form.has("packagingChecked"),
+              qualityChecked: form.has("qualityChecked"),
+            });
+          }
+          return;
+        }
         if (window.confirm(`${title} cho đơn ${row.number}?`))
           onSave({ ...b, status: nextValue });
       }}
     >
       <h3>Xử lý đơn hàng</h3>
+      {canPick && (
+        <section>
+          <h4>Phiếu soạn hàng</h4>
+          <ul>
+            {inspectionItems.map((item) => (
+              <li key={String(item.productId)}>
+                {String(item.name)} × {Number(item.quantity)}
+                {Array.isArray(item.lotAllocations) && (
+                  <ul>{(item.lotAllocations as Row[]).map((lot) => (
+                    <li key={String(lot.lotId)}>
+                      Lô {String(lot.code)} · SL {Number(lot.quantity)} · HSD {String(lot.expiresOn)}
+                    </li>
+                  ))}</ul>
+                )}
+              </li>
+            ))}
+          </ul>
+          {fulfillmentQc && <p>QC: {fulfillmentQc.outcome === "PASSED" ? "Đạt" : "Không đạt"} · {String(fulfillmentQc.reference)}</p>}
+        </section>
+      )}
       <label>
         Thao tác
         <select
@@ -1147,17 +1262,64 @@ function OrderAction({
         >
           {actions.map((a) => (
             <option key={a} value={a}>
-              {a === "payment-resolve"
+              {fulfillmentActions[a] ?? (a === "order-return-qc"
+                ? "Kiểm định hàng hoàn"
+                : a === "order-return-refund"
+                  ? "Ghi nhận khoản hoàn tiền"
+                  : a === "payment-resolve"
                 ? "Đối soát thanh toán (REVIEW)"
                 : a === "order-status"
                   ? `Chuyển sang ${label(nextValue)}`
                   : a === "order-paid"
                     ? "Xác nhận đã thu tiền"
-                    : "Hủy đơn"}
+                    : "Hủy đơn")}
             </option>
           ))}
         </select>
       </label>
+      {action === "order-pick-qc" && (
+        <fieldset>
+          <legend>Kiểm định trước đóng gói</legend>
+          <label><input type="checkbox" name="qcTexture" /> Kết cấu và độ dẻo đạt</label>
+          <label><input type="checkbox" name="qcAroma" /> Mùi và cảm quan đạt</label>
+          <label><input type="checkbox" name="qcPackaging" /> Bao bì và niêm phong đạt</label>
+          <label><input type="checkbox" name="qcContents" /> Đủ hàng, đúng quy cách và thiệp nếu có</label>
+          {pickLots.map((lot) => (
+            <label key={String(lot.lotId)}>
+              <input type="checkbox" name="affectedLotIds" value={String(lot.lotId)} /> Cách ly lô {String(lot.code)}
+            </label>
+          ))}
+          <label>Kết luận<select name="qcOutcome" required defaultValue="">
+            <option value="" disabled>Chọn kết luận</option>
+            <option value="PASSED">Đạt</option>
+            <option value="FAILED">Không đạt</option>
+          </select></label>
+          <label>Mã biên bản QC<input name="reference" required maxLength={200} /></label>
+        </fieldset>
+      )}
+      {action === "order-return-qc" && (
+        <fieldset>
+          <legend>Kiểm định hàng đang cách ly</legend>
+          <label><input type="checkbox" name="packagingChecked" required /> Đã kiểm bao bì</label>
+          <label><input type="checkbox" name="qualityChecked" required /> Đã kiểm chất lượng</label>
+          {inspectionItems.map((item, index) => Array.isArray(item.lotAllocations)
+            ? item.lotAllocations.map((lot: Row, lotIndex: number) => (
+                <label key={String(lot.lotId)}>
+                  {String(item.name)} · Lô {String(lot.code)} · Số lượng đạt
+                  <input type="number" name={`accepted-${index}-${lotIndex}`} min={0}
+                    max={Number(lot.quantity)} step={1} defaultValue={0} required />
+                </label>
+              ))
+            : (
+            <label key={String(item.productId)}>
+              {String(item.name)} · Số lượng đạt để nhập lại
+              <input type="number" name={`accepted-${index}`} min={0}
+                max={Number(item.quantity)} step={1} defaultValue={0} required />
+            </label>
+          ))}
+          <label>Mã biên bản QC<input name="reference" required maxLength={200} /></label>
+        </fieldset>
+      )}
       {action === "order-status" && nextOptions.length > 1 && (
         <label>
           Trạng thái tiếp theo
@@ -1173,6 +1335,18 @@ function OrderAction({
           </select>
         </label>
       )}
+      {needsPackingSop && (
+        <fieldset>
+          <legend>Đóng gói xanh · 6 bước · mục tiêu 180 giây</legend>
+          {packingInstructions.map(([step, description]) => (
+            <label key={step}><input type="checkbox" name="packingSteps" value={step} required /> {description}</label>
+          ))}
+          <label>Ảnh live-packing trước khi đóng hộp
+            <input name="packingPhoto" type="file" accept="image/png,image/jpeg" required />
+          </label>
+          <p>Chụp rõ sản phẩm, mã lô và hạn dùng. Tránh để lộ thông tin người nhận.</p>
+        </fieldset>
+      )}
       {action === "payment-resolve" && (
         <label>
           Kết quả đối soát
@@ -1187,12 +1361,15 @@ function OrderAction({
         </label>
       )}
       {(action === "order-paid" ||
+        action === "order-return-refund" ||
         action === "payment-resolve" ||
         (action === "order-status" && nextValue === "SHIPPED")) && (
         <label>
           {action === "order-paid"
             ? "Mã chứng từ thu tiền"
-            : action === "payment-resolve"
+            : action === "order-return-refund"
+              ? "Mã chứng từ hoàn tiền"
+              : action === "payment-resolve"
               ? "Mã chứng từ xử lý (biên nhận hoàn / đối soát)"
               : "Mã vận đơn"}
           <input name="reference" required maxLength={200} />

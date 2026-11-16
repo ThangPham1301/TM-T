@@ -29,6 +29,8 @@ public class PlatformApi {
     @Value("${ADMIN_EMAIL:admin@goihue.local}") String adminEmail;
     @Value("${ADMIN_PASSWORD}") String adminPassword;
     @Value("${APP_ORIGINS:http://localhost:3000}") String origins;
+    @Value("${APP_SEED_DEMO_CUSTOMER:false}") boolean seedDemoCustomer;
+    @Value("${APP_COOKIE_SECURE:false}") boolean secureCookie;
     public PlatformApi(JdbcTemplate db, ObjectMapper json, StoreLive live) { this.db=db; this.json=json; this.live=live; }
     static class Problem extends RuntimeException {
         final int status;
@@ -62,7 +64,7 @@ public class PlatformApi {
         if(!granted.contains(p))throw new Problem(403,"Bạn không có quyền thực hiện thao tác này.");
     }
     Map<String,Object> safe(Map<String,Object> a) {var m=new LinkedHashMap<>(a);m.remove("password_hash");return m;}
-    void cookie(HttpServletResponse res,String t,int age) {res.addHeader("Set-Cookie",ResponseCookie.from("goihue_session",t).httpOnly(true).sameSite("Strict").path("/api/store").maxAge(age).build().toString());}
+    void cookie(HttpServletResponse res,String t,int age) {res.addHeader("Set-Cookie",ResponseCookie.from("goihue_session",t).httpOnly(true).secure(secureCookie).sameSite("Strict").path("/api/store").maxAge(age).build().toString());}
     void audit(Map<String,Object> a,String subject,String action) {db.update("INSERT INTO audit(actor_id,subject,action) VALUES(?,?,?)",a.get("id"),subject,action);}
     Map<String,Object> save(String kind,UUID owner,Map<String,Object> data) {
         if(!data.containsKey("id")){data.put("id",UUID.randomUUID().toString());data.put("createdAt",Instant.now().toString());data.put("revision",1);}
@@ -88,6 +90,7 @@ public class PlatformApi {
         if(db.queryForObject("SELECT count(*) FROM records WHERE kind='policy'",Integer.class)==0) {
             var p=new LinkedHashMap<String,Object>();p.put("title","Chính sách bảo mật Gói Huế");p.put("version","1.0-draft");p.put("content",POLICY);p.put("status","DRAFT");save("policy",null,p);
         }
+        if (!seedDemoCustomer) return;
         String customerEmail = "customer@goihue.local";
         UUID customerId;
         var existing = db.queryForList("SELECT id FROM customers WHERE email=?", customerEmail);
@@ -387,6 +390,7 @@ public class PlatformApi {
                         db.update("DELETE FROM records WHERE kind IN ('evidence','consent','address') AND owner_id=?",owner);r.put("description","Đã ẩn danh");r.remove("export");r.put("history",new ArrayList<>());r.put("result","Đã đóng tài khoản, xóa liên hệ/ảnh/lựa chọn tiếp thị và ẩn danh nội dung yêu cầu trong phân hệ. Giữ snapshot giao dịch và nhật ký phục vụ đối soát/tranh chấp; lịch lưu cụ thể chờ phê duyệt. Chưa tác động hệ thống khác.");
                         db.update("DELETE FROM operations WHERE actor_id=?",owner);
                         db.update("DELETE FROM records WHERE kind='cart' AND owner_id=?",owner);
+                        db.update("DELETE FROM packing_photos WHERE order_id IN (SELECT id FROM records WHERE kind='order' AND owner_id=?)",owner);
                         db.update("UPDATE records SET data=data || jsonb_build_object('recipient','Đã ẩn danh','phone','','address','','history',jsonb_build_array(jsonb_build_object('note','Nội dung liên hệ đã ẩn danh; số liệu giao dịch được giữ phục vụ đối soát'))) WHERE kind='order' AND owner_id=?",owner);
                         db.update("UPDATE operations SET result=jsonb_build_object('redacted',true) WHERE result->>'id' IN (SELECT id::text FROM records WHERE owner_id=?)",owner);
                     }

@@ -44,11 +44,22 @@ POST commerce/command bắt buộc `Idempotency-Key` 16–80 chữ/số/gạch n
 | --- | --- | --- |
 | cart-set | cartToken, productId UUID, quantity 0..100 | 0 xóa dòng; kiểm tra active của sản phẩm/danh mục và tồn; giá lấy server; một dòng/product/customer |
 | cart-clear / cart-refresh | cartToken | Xóa toàn giỏ / chủ động nhận snapshot giá mới; không tự giảm số lượng |
-| checkout | cartToken, shippingRevision, recipient ≤100, phone 8..30, address ≤400 | Giỏ không rỗng; kiểm tra giá/tồn/catalog và cấu hình phí mới nhất; phí lấy shipping, COD/UNPAID; giảm tồn và xóa giỏ atomically; hạn mức tiền hàng 100 triệu |
-| order-cancel | id, revision, note ≤2000 | Owner hoặc ADMIN; PLACED/CONFIRMED và chưa PAID; trả tồn đúng một lần |
+| cart-reorder | id (đơn của khách), cartToken | CUSTOMER cart.manage; thay giỏ trong một transaction sau khi kiểm mọi dòng. 409 nếu giỏ đã đổi, 422 nếu hàng thiếu/ngừng bán; lỗi giữ nguyên giỏ. |
+| checkout | cartToken, shippingRevision, paymentMethod (COD mặc định hoặc VIETQR), addressId hoặc thông tin người nhận | Chốt giá/phí/tồn và xóa giỏ trong transaction. VietQR tạo phiên PENDING có hạn; nếu hết hạn trước đóng gói, hủy đơn, hoàn tồn và phục hồi các món còn thiếu vào giỏ theo giá snapshot. |
+| order-cod-confirm | id, revision, note | Khách sở hữu xác nhận trước codConfirmBy; PLACED → CONFIRMED. 409 nếu hết hạn hoặc không còn chờ. Đơn mới chưa xác nhận tự hủy sau 24 giờ, hoàn tồn và phục hồi dòng thiếu trong giỏ. Đơn cũ không có hạn giữ luồng quản trị hiện tại. |
+| inventory-lot-add | productId, revision, code, manufacturedOn, expiresOn, quantity, legacyQuantity tùy chọn | ADMIN catalog.manage; đăng ký lô, bật quản lý theo lô và chuyển lượng tồn cũ đã đối chiếu. 409 nếu revision cũ hoặc trùng mã. Tồn bán chỉ gồm lô đã sản xuất, chưa hết hạn và còn ít nhất 75% hạn dùng. Checkout phân bổ FEFO; hủy/hết hạn trả đúng lô. |
+| order-return-qc | id, revision, note, reference, packagingChecked=true, qualityChecked=true, inspection (theo productId và theo lotId nếu có phân bổ lô) | ADMIN order.manage. Chỉ xử lý đơn RETURNED đang QUARANTINED; 409 khi đã xử lý hoặc revision cũ. Cộng đúng lô và số lượng đạt trong cùng transaction; lô dưới ngưỡng vẫn nằm ngoài tồn bán. Lưu biên bản, người kiểm và thời gian; trạng thái RESTOCKED, PARTIALLY_RESTOCKED hoặc REJECTED. |
+| order-cancel | id, revision, note ≤2000 | Owner hoặc ADMIN; PLACED/CONFIRMED và chưa PAID/REVIEW; trả tồn và đóng phiên VietQR PENDING trong cùng transaction. |
 | order-recipient | id, revision, recipient, phone, address, note | Owner hoặc ADMIN; PLACED/CONFIRMED; không đổi giá/phí/items |
-| order-status | id, revision, status, note, reference khi SHIPPED | ADMIN; PLACED→CONFIRMED→PACKED→SHIPPED→DELIVERED; lưu deliveredAt bằng thời gian server |
-| order-paid | id, revision, note, reference ≤200 | ADMIN; chưa PAID, không CANCELLED; ghi nhận thực thu thủ công, không chuyển tiền |
+| order-return-refund | id, revision, note, reference | ADMIN order.manage; ghi nhận khoản đã hoàn bên ngoài cho đơn RETURNED/PAID, không tạo giao dịch chuyển tiền và không thay đổi tồn. |
+| order-pick-qc | id, revision, note, reference, qcOutcome, qcTexture, qcAroma, qcPackaging, qcContents, affectedLotIds tùy chọn | ADMIN order.manage; đơn CONFIRMED (VietQR phải PAID). Đạt khi cả bốn mục đạt và lô đủ điều kiện. Không đạt có thể cách ly các lô được nhận diện trên phiếu soạn. |
+| order-repick | id, revision, note | ADMIN; cấp lại riêng số lượng đang giữ ở lô lỗi/cận hạn theo FEFO. Cấp lại thành công xóa QC cũ; lỗi giữ nguyên phân bổ trong transaction. |
+| PUT /packing/{orderId}/photo/{revision} | PNG/JPEG ≤5 MB, tối đa 4 triệu pixel | ADMIN; yêu cầu đơn CONFIRMED đủ QC, kiểm revision, chuẩn hóa PNG và trả photoId. |
+| GET /packing/{orderId}/photo | orderId | Owner hoặc ADMIN; chỉ trả ảnh đã gắn sau khi PACKED, private no-store. |
+| order-reopen-packing | id, revision, note | ADMIN; PACKED chưa bàn giao về CONFIRMED, bỏ QC cũ để soạn và kiểm lại. |
+| order-status | id, revision, status, note, reference khi SHIPPED; packingSteps và packingPhotoId khi PACKED đối với đơn mới | ADMIN; VietQR cần PAID trước PACKED/SHIPPED; PACKED cần QC đạt đối với đơn mới hoặc có lô; tái kiểm lô trước PACKED/SHIPPED; DELIVERY_FAILED cho giao lại hoặc nhận hoàn khi hàng đã về kho, tách khỏi đối soát tiền. Hàng RETURNED ở trạng thái QUARANTINED, không cộng tồn bán. |
+| payment-resolve | id, revision, note, resolution, reference | ADMIN; xử lý REVIEW. Chỉ ghi PAID_RECORDED với đơn chưa hủy. REFUNDED hủy và trả tồn nếu đơn còn PLACED/CONFIRMED. |
+| order-paid | id, revision, note, reference ≤200 | ADMIN; ghi nhận thực thu thủ công cho COD; VietQR dùng webhook hoặc payment-resolve khi REVIEW. |
 | product-save | id/revision khi sửa, name≤150, slug≤120, category≤120, description≤4000, imageId tùy chọn, price 1..10.000.000, stock 0..1.000.000, active boolean | ADMIN; category active, slug duy nhất; imageId READY hoặc rỗng để gỡ ảnh; không nhận URL ảnh mới; sửa stock tuyệt đối có audit |
 | category-save / category-delete | id/revision khi sửa/xóa; code/name/description/sortOrder/active/imageId khi lưu | ADMIN; code duy nhất; đổi code cập nhật mapping product; chỉ xóa khi không có product |
 | product-delete / catalog-toggle | id/revision; kind/active khi toggle | ADMIN; chỉ xóa product chưa có cart/order tham chiếu; còn lại dùng ẩn |

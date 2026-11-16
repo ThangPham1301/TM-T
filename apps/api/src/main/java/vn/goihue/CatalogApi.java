@@ -18,6 +18,14 @@ public class CatalogApi {
     public CatalogApi(CatalogService catalog,PlatformApi app){this.catalog=catalog;this.app=app;}
     @GetMapping("/categories") public Object categories(){return catalog.categories(false);}
     @GetMapping("/shipping") public Object shipping(){return catalog.shipping();}
+    @GetMapping("/admin/inventory/lots/{productId}")
+    public Object inventoryLots(@PathVariable String productId, HttpServletRequest request) {
+        app.permission(app.actor(request), "catalog.manage");
+        var product = catalog.get(productId, "product");
+        return Map.of("lots", catalog.inventory.list(app.uuid(productId)),
+                "lotTracked", Boolean.TRUE.equals(product.get("lotTracked")),
+                "unallocatedStock", app.number(product, "stock"));
+    }
     @GetMapping("/admin/categories") public Object categories(HttpServletRequest req){app.permission(app.actor(req),"catalog.manage");return catalog.categories(true);}
     @PutMapping(value="/catalog/images/{id}/content",consumes=MediaType.APPLICATION_OCTET_STREAM_VALUE) @Transactional
     public Object upload(@PathVariable String id,@RequestBody byte[] input,HttpServletRequest req) throws Exception{

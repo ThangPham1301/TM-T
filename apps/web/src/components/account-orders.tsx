@@ -115,6 +115,15 @@ export function AccountOrders({
     }));
   };
 
+  const handleConfirmCod = (order: Row) => run(async () => {
+    await mutate("commerce", "order-cod-confirm", {
+      id: order.id,
+      revision: order.revision,
+      note: "Khách đã xác nhận đơn thanh toán khi nhận hàng.",
+    });
+    setToastMessage(`Đã xác nhận đơn #${order.number}.`);
+  });
+
   const handleCancelOrder = async (order: Row) => {
     if (
       !window.confirm(
@@ -141,24 +150,11 @@ export function AccountOrders({
     if (!items.length) return;
 
     void run(async () => {
-      let summary = await api("cart/summary");
-      if (summary.items && summary.items.length > 0) {
-        await mutate("commerce", "cart-clear", {
-          cartToken: summary.cartToken,
-        });
-        summary = await api("cart/summary");
-      }
-      for (const item of items) {
-        const pId = String(item.productId || item.id || "");
-        if (!pId) continue;
-        const qty = Number(item.quantity) || 1;
-        await mutate("commerce", "cart-set", {
-          productId: pId,
-          quantity: qty,
-          cartToken: summary.cartToken,
-        });
-        summary = await api("cart/summary");
-      }
+      const summary = await api("cart/summary");
+      await mutate("commerce", "cart-reorder", {
+        id: order.id,
+        cartToken: summary.cartToken,
+      });
       setToastMessage(
         `Đã tạo phiên đặt hàng mới từ đơn #${order.number}. Đang chuyển đến trang đặt hàng...`,
       );
@@ -414,7 +410,7 @@ export function AccountOrders({
             ].includes(String(order.status));
             const isCancellable =
               ["PLACED", "CONFIRMED"].includes(String(order.status)) &&
-              String(order.paymentStatus) !== "PAID";
+              !["PAID", "REVIEW"].includes(String(order.paymentStatus));
             const isPaid = String(order.paymentStatus) === "PAID";
             const history = (order.history as Row[] | undefined) || [];
 
@@ -639,6 +635,19 @@ export function AccountOrders({
                     </div>
 
                     <div className="orders-actions-btns">
+                      {Boolean((order.packing as Row | undefined)?.photoId) && (
+                        <a className="orders-btn-action" href={`/api/store/packing/${order.id}/photo`}
+                          target="_blank" rel="noreferrer">Xem ảnh đóng gói</a>
+                      )}
+                      {order.status === "PLACED" && order.paymentMethod === "COD" && Boolean(order.codConfirmBy) && (
+                        <>
+                          <span>Xác nhận trước {date(order.codConfirmBy)}</span>
+                          <button type="button" className="orders-btn-action" disabled={busy}
+                            onClick={() => void handleConfirmCod(order)}>
+                            Xác nhận đơn COD
+                          </button>
+                        </>
+                      )}
                       {/* Cancel order button if applicable */}
                       {isCancellable && (
                         <button

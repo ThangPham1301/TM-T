@@ -8,9 +8,79 @@ import java.util.*;
 public class CatalogService {
     final PlatformApi app;
     final JdbcTemplate db;
-    public CatalogService(PlatformApi app,JdbcTemplate db){this.app=app;this.db=db;}
+    final LotInventory inventory;
+    public CatalogService(PlatformApi app, JdbcTemplate db, LotInventory inventory) {
+        this.app = app;
+        this.db = db;
+        this.inventory = inventory;
+    }
+
+    int stock(Map<String, Object> product) {
+        return Boolean.TRUE.equals(product.get("lotTracked"))
+                ? inventory.available(app.uuid(app.str(product, "id")))
+                : app.number(product, "stock");
+    }
+
+    Map<String, Object> withAvailableStock(Map<String, Object> product) {
+        product.put("stock", stock(product));
+        return product;
+    }
+
+    Map<String, Object> addLot(Map<String, Object> actor, Map<String, Object> body) {
+        app.permission(actor, "catalog.manage");
+        var product = get(app.text(body, "productId", 50), "product");
+        revision(product, body);
+        var id = app.uuid(app.str(product, "id"));
+        int unallocated = app.number(product, "stock");
+        int reassigned = body.containsKey("legacyQuantity") ? app.number(body, "legacyQuantity") : 0;
+        app.require(reassigned >= 0 && reassigned <= unallocated && reassigned <= app.number(body, "quantity"),
+                "Số lượng chuyển từ tồn cũ không hợp lệ.");
+        var lot = inventory.add(id, body);
+        product.put("lotTracked", true);
+        product.put("stock", unallocated - reassigned);
+        product.put("revision", app.number(product, "revision") + 1);
+        app.save("product", null, product);
+        return lot;
+    }
+
+    void reserveProduct(Map<String, Object> product, int quantity, Map<String, Object> orderLine) {
+        if (Boolean.TRUE.equals(product.get("lotTracked"))) {
+            orderLine.put("lotAllocations", inventory.reserve(app.uuid(app.str(product, "id")), quantity));
+        } else {
+            product.put("stock", app.number(product, "stock") - quantity);
+        }
+        product.put("revision", app.number(product, "revision") + 1);
+        app.save("product", null, product);
+    }
     Map<String,Object> get(String id,String kind){return app.record(id,kind,Map.of("role","ADMIN"));}
     public List<Map<String,Object>> categories(boolean all){return db.query("SELECT data::text FROM records WHERE kind='category'"+(all?"":" AND data->>'active'='true'")+" ORDER BY (data->>'sortOrder')::int,data->>'name'",(r,i)->app.decode(r.getString(1)));}
+    @SuppressWarnings("unchecked")
+    void releaseReservedStock(Map<String, Object> order) {
+        for (var line : (List<Map<String, Object>>) order.get("items")) {
+            String productId = app.str(line, "productId");
+            if (line.get("lotAllocations") instanceof List<?> allocations) {
+                restoreLotStock(productId, (List<Map<String, Object>>) allocations);
+            } else {
+                restoreProductStock(productId, app.number(line, "quantity"));
+            }
+        }
+    }
+
+    void restoreLotStock(String productId, List<Map<String, Object>> allocations) {
+        var id = app.uuid(productId);
+        for (var allocation : allocations) inventory.restore(id, allocation);
+        var product = get(productId, "product");
+        product.put("revision", app.number(product, "revision") + 1);
+        app.save("product", null, product);
+    }
+
+    void restoreProductStock(String productId, int quantity) {
+        var product = get(productId, "product");
+        product.put("stock", Math.addExact(app.number(product, "stock"), quantity));
+        product.put("revision", app.number(product, "revision") + 1);
+        app.save("product", null, product);
+    }
+
     boolean categoryActive(String code){return db.queryForObject("SELECT count(*) FROM records WHERE kind='category' AND data->>'code'=? AND data->>'active'='true'",Integer.class,code)>0;}
     boolean visible(Map<String,Object> p){return Boolean.TRUE.equals(p.get("active"))&&categoryActive(app.str(p,"category"));}
     public Map<String,Object> shipping(){return db.query("SELECT data::text FROM records WHERE kind='settings' AND data->>'code'='shipping'",(r,i)->app.decode(r.getString(1))).getFirst();}
@@ -28,7 +98,7 @@ public class CatalogService {
         app.require(categoryActive(category),"Chọn danh mục đang hoạt động.");
         app.require(db.queryForObject("SELECT count(*) FROM records WHERE kind='product' AND data->>'slug'=? AND id<>?",Integer.class,slug,edit?app.uuid(app.str(p,"id")):UUID.randomUUID())==0,"Slug đã tồn tại.");
         int price=app.number(b,"price"),stock=app.number(b,"stock");app.require(price>0&&price<=10_000_000&&stock>=0&&stock<=1_000_000,"Giá hoặc tồn kho không hợp lệ.");
-        p.put("slug",slug);p.put("category",category);p.put("name",app.text(b,"name",150));p.put("description",app.text(b,"description",4000));p.put("price",price);p.put("stock",stock);p.put("active",Boolean.TRUE.equals(b.get("active")));if(!p.containsKey("image"))p.put("image","/images/product-placeholder.svg");image(p,b);if(edit)p.put("revision",app.number(p,"revision")+1);return app.save("product",null,p);
+        p.put("slug",slug);p.put("category",category);p.put("name",app.text(b,"name",150));p.put("description",app.text(b,"description",4000));p.put("price",price);if(!Boolean.TRUE.equals(p.get("lotTracked")))p.put("stock",stock);p.put("active",Boolean.TRUE.equals(b.get("active")));if(!p.containsKey("image"))p.put("image","/images/product-placeholder.svg");image(p,b);if(edit)p.put("revision",app.number(p,"revision")+1);return withAvailableStock(new LinkedHashMap<>(app.save("product",null,p)));
     }
     public Map<String,Object> mutation(Map<String,Object> a,Map<String,Object> b){
         app.permission(a,"catalog.manage");String action=app.str(b,"action");
@@ -42,6 +112,7 @@ public class CatalogService {
             }
             case "product-delete" -> {
                 var p=get(app.text(b,"id",50),"product");revision(p,b);
+                app.require(!Boolean.TRUE.equals(p.get("lotTracked")), "Sản phẩm đã có lô hàng. Hãy ẩn thay vì xóa.");
                 app.require(db.queryForObject("SELECT count(*) FROM records WHERE (kind='cart' AND data->>'productId'=?) OR (kind='order' AND EXISTS(SELECT 1 FROM jsonb_array_elements(data->'items') x WHERE x->>'productId'=?))",Integer.class,p.get("id"),p.get("id"))==0,"Sản phẩm đã được dùng trong giỏ/đơn. Hãy ẩn thay vì xóa.");
                 db.update("DELETE FROM records WHERE kind='product' AND id=?",app.uuid(app.str(p,"id")));return Map.of("id",p.get("id"),"deleted",true);
             }

@@ -20,6 +20,16 @@ paths:
       responses:
         '200': {description: ADMIN catalog.manage; all category records}
         '403': {$ref: '#/components/responses/Error'}
+  /admin/inventory/lots/{productId}:
+    get:
+      operationId: inventoryLots
+      parameters:
+        - {name: productId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Lot records, tracking mode and unallocated legacy quantity for the product}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
   /shipping:
     get:
       operationId: shippingSettings
@@ -136,8 +146,47 @@ paths:
                 - {$ref: '#/components/schemas/Mutation'}
                 - type: object
                   properties:
+                    paymentMethod: {type: string, enum: [COD, VIETQR], default: COD}
                     addressId: {type: string, format: uuid, description: Optional saved CUSTOMER destination for checkout in place of manual recipient fields}
-                    action: {type: string, enum: [cart-set, cart-clear, cart-refresh, checkout, order-cancel, order-status, order-paid, order-recipient, product-save, product-delete, category-save, category-delete, catalog-toggle, shipping-save, catalog-image-intent]}
+                    action: {type: string, enum: [cart-set, cart-clear, cart-refresh, cart-reorder, checkout, order-cancel, order-cod-confirm, order-return-qc, order-return-refund, order-pick-qc, order-repick, order-reopen-packing, order-status, order-paid, order-recipient, payment-resolve, product-save, product-delete, category-save, category-delete, catalog-toggle, shipping-save, catalog-image-intent, inventory-lot-add]}
+                    manufacturedOn: {type: string, format: date}
+                    expiresOn: {type: string, format: date}
+                    legacyQuantity: {type: integer, minimum: 0, description: Units in the lot already counted as legacy stock}
+                    packingPhotoId: {type: string, format: uuid}
+                    packingSteps:
+                      type: array
+                      minItems: 6
+                      maxItems: 6
+                      uniqueItems: true
+                      items: {type: string, enum: [WAX_PAPER, MOLDED_TRAY, KRAFT_BOX, HONEYCOMB, CORN_TAPE, LABEL]}
+                    qcOutcome: {type: string, enum: [PASSED, FAILED]}
+                    qcTexture: {type: boolean}
+                    qcAroma: {type: boolean}
+                    qcPackaging: {type: boolean}
+                    qcContents: {type: boolean}
+                    affectedLotIds:
+                      type: array
+                      items: {type: string, format: uuid}
+                    packagingChecked: {type: boolean, description: Must be true for order-return-qc}
+                    qualityChecked: {type: boolean, description: Must be true for order-return-qc}
+                    inspection:
+                      type: array
+                      description: Required for order-return-qc. Submit one disposition per original product line.
+                      items:
+                        type: object
+                        required: [productId]
+                        properties:
+                          productId: {type: string, format: uuid}
+                          acceptedQuantity: {type: integer, minimum: 0, description: Required for a line without lot allocations}
+                          lots:
+                            type: array
+                            description: Required for a line with lot allocations. Include every allocated lot.
+                            items:
+                              type: object
+                              required: [lotId, acceptedQuantity]
+                              properties:
+                                lotId: {type: string, format: uuid}
+                                acceptedQuantity: {type: integer, minimum: 0}
       responses:
         '200': {description: Persisted record or acknowledgement}
         '401': {$ref: '#/components/responses/Error'}
@@ -145,6 +194,76 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
         '422': {$ref: '#/components/responses/Error'}
+  /packing/{orderId}/photo:
+    get:
+      operationId: orderPackingPhoto
+      description: Private finalized live-packing photo for the order owner or ADMIN.
+      parameters:
+        - {name: orderId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Private PNG without public caching.
+          content:
+            image/png:
+              schema: {type: string, format: binary}
+        '401': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+  /packing/{orderId}/photo/{revision}:
+    put:
+      operationId: uploadPackingPhoto
+      description: ADMIN order.manage. Stages one PNG/JPEG for the current order revision before PACKED.
+      parameters:
+        - {name: orderId, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: revision, in: path, required: true, schema: {type: integer, minimum: 1}}
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        '200': {description: Staged photoId}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+  /payments/ipn:
+    post:
+      operationId: demoPaymentNotification
+      description: Enabled only with a configured demo secret. A validated notification is recorded once per source and transaction ID.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderNumber, amount, transactionId, signature]
+              properties:
+                orderNumber: {type: string}
+                amount: {type: integer, minimum: 1}
+                transactionId: {type: string, maxLength: 100}
+                signature: {type: string}
+      responses:
+        '200': {description: Payment outcome or acknowledgement of a duplicate}
+        '401': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+  /payments/sepay/webhook:
+    post:
+      operationId: receiveSePayWebhook
+      description: Authenticated SePay notification. A validated transfer assigned to a VietQR order is recorded once per provider ID.
+      parameters:
+        - {name: X-SePay-Signature, in: header, required: true, schema: {type: string}}
+        - {name: X-SePay-Timestamp, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: true}
+      responses:
+        '200': {description: SePay acknowledgement}
+        '401': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
   /password:
     post:
       operationId: changePassword

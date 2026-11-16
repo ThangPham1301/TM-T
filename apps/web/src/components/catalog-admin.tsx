@@ -343,7 +343,7 @@ export function CatalogAdmin({
                     };
                     if (isProduct) {
                       payload.price = Number(b.price);
-                      payload.stock = Number(b.stock);
+                      payload.stock = selected.lotTracked ? Number(selected.stock) : Number(b.stock);
                     } else payload.sortOrder = Number(b.sortOrder);
                     if (id) payload.imageId = id;
                     else if (removeImage) payload.imageId = "";
@@ -418,6 +418,7 @@ export function CatalogAdmin({
                         type="number"
                         min={0}
                         max={1000000}
+                        readOnly={Boolean(selected.lotTracked)}
                         defaultValue={Number(selected.stock ?? 0)}
                         required
                       />

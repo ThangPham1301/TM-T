@@ -55,11 +55,17 @@ npm.cmd run dev
 
 Nếu container web đang chiếm cổng 3000, chạy `docker compose stop web` trước. Frontend local mặc định gọi API loopback cổng 8088; tùy chỉnh bằng `apps/web/.env.local` theo `.env.example`. Build: `npm.cmd run build`; kiểm tra kiểu: `npm.cmd run typecheck`. Backend dùng Java 21/Maven trong Docker; build cấu hình bỏ qua test theo yêu cầu.
 
+## Cấu hình thanh toán và dữ liệu demo
+
+- Checkout hỗ trợ COD và VietQR. Webhook SePay cần cấu hình `APP_SEPAY_SECRET`. Chỉ đặt `APP_IPN_SECRET` cho môi trường mô phỏng và dùng cùng giá trị khi chạy `scripts/demo-ipn.ps1`.
+- Khách minh họa chỉ được seed khi bật `APP_SEED_DEMO_CUSTOMER=true`. Trước khi dùng cơ sở dữ liệu cũ ở môi trường thật, kiểm tra và xử lý tài khoản demo đã tạo ở phiên bản trước theo dữ liệu đang có.
+- Trên HTTPS, đặt `APP_COOKIE_SECURE=true`. Kiểm tra cấu hình ngân hàng, proxy và origin tại môi trường triển khai.
+
 ## Trạng thái tích hợp
 
-Đây là chức năng của dự án chính, không còn module `/academic` hoặc Mockoon. Thanh toán hiện là COD, thu tiền/hoàn tiền và trạng thái giao vận do ADMIN cập nhật thủ công dựa trên chứng từ. Website không tự chuyển tiền, gửi email/SMS hoặc tạo vận đơn với carrier. Không đánh dấu giao/thu/hoàn thành công khi chưa có chứng cứ thực tế.
+Đây là chức năng của dự án chính, không còn module `/academic` hoặc Mockoon. Thanh toán hỗ trợ COD và VietQR. Hoàn tiền và trạng thái giao vận do ADMIN ghi nhận thủ công dựa trên chứng từ. Website không tự chuyển tiền, gửi email/SMS hoặc tạo vận đơn với carrier. Không đánh dấu giao/thu/hoàn thành công khi chưa có chứng cứ thực tế.
 
-Chính sách giữ nhãn dự thảo đến khi được phê duyệt; chuyển vào dự án chính không đồng nghĩa đã có hiệu lực pháp lý. Retention, SLA cụ thể và nhà cung cấp chưa xác nhận. Ảnh catalog PNG/JPEG tối đa 5 MB được decode/re-encode PNG (tối đa 6000px mỗi chiều và 16 triệu pixel), lưu volume; ảnh chưa gắn catalog active chỉ ADMIN truy cập. Ảnh bằng chứng đổi trả được kiểm tra signature và tải theo quyền riêng. Chưa có antivirus/cleanup tự động. Danh sách quản trị phân trang trên client. Chưa có quên mật khẩu/email verification, đổi mật khẩu, đánh giá sản phẩm, voucher/loyalty, B2B hay nhiều kho. Không tự tạo giao dịch giả để lấp các tích hợp chưa có.
+Chính sách giữ nhãn dự thảo đến khi được phê duyệt; chuyển vào dự án chính không đồng nghĩa đã có hiệu lực pháp lý. Retention, SLA cụ thể và nhà cung cấp chưa xác nhận. Ảnh catalog PNG/JPEG tối đa 5 MB được decode/re-encode PNG (tối đa 6000px mỗi chiều và 16 triệu pixel), lưu volume; ảnh chưa gắn catalog active chỉ ADMIN truy cập. Ảnh bằng chứng đổi trả được kiểm tra signature và tải theo quyền riêng. Chưa có antivirus/cleanup tự động. Danh sách quản trị phân trang trên client. Chưa có quên mật khẩu/email verification, đánh giá sản phẩm, voucher/loyalty, B2B hay nhiều kho. Không tự tạo giao dịch giả để lấp các tích hợp chưa có.
 
 Cookie hiện dành cho localhost HTTP. Trước triển khai public cần HTTPS/Secure cookie, secret manager, backup, kiểm thử bảo mật và duyệt chính sách. Không chạy test nghiệp vụ trong lần xây dựng này theo yêu cầu người dùng; kết quả build được ghi trong bàn giao.
 
