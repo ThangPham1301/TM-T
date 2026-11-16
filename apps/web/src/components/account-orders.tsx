@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type Row, api, cleanText, date, money, useStore } from "@/lib/store";
+import { PaymentPanel } from "./payment-panel";
 
 export function AccountOrders({
   onSelectOrder,
@@ -724,6 +725,7 @@ export function AccountOrders({
                 {/* Expandable Details Section (Accordion) */}
                 {isExpanded && (
                   <div className="orders-accordion-panel">
+                    <PaymentPanel order={order} />
                     <div className="orders-accordion-grid">
                       {/* 1. Shipping Lifecycle */}
                       <div
