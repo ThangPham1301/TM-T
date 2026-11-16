@@ -77,7 +77,7 @@ body:has(.account-screen-wrapper) {
   height: 100dvh;
 }
 
-body:has(.account-screen-wrapper) footer {
+body:has(.account-screen-wrapper:not(.b07-account)) footer {
   display: none !important;
 }
 

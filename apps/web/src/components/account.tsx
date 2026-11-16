@@ -10,6 +10,7 @@ import { AccountOrders } from "./account-orders";
 import { accountNavigation } from "@/shared/layout/navigation";
 import { PaymentPanel } from "./payment-panel";
 import { OrderBadges, OrderTimeline } from "./order-presentation";
+import { ReturnRequestForm } from "./return-request-form";
 import { ProductImage } from "./product/product-image";
 import styles from "./journey.module.css";
 import { WorkspaceNav, Pagination } from "./workspace-nav";
@@ -90,7 +91,16 @@ export function Account({
   const returnOrder = section === "returns"
     ? state.orders.find((order) => order.id === returnOrderId)
     : current;
-  const orderItems = (returnOrder?.items as Row[] | undefined) ?? [];
+  const orderItems = (current?.items as Row[] | undefined) ?? [];
+  const customerReturnDetail = !admin && section === "returns";
+  const history = (current?.history as Row[] | undefined) ?? [];
+  const timelineItem = (entry: Row, index: number) => (
+    <li key={index}>
+      <strong>{entry.transition === "RESUME" && "Tiếp tục xử lý · "}{label(entry.status)}</strong>
+      <small>{date(entry.at)}</small>
+      <p>{String(entry.note)}</p>
+    </li>
+  );
   const selectedProducts = returnLines.map((line) => line.productId || String(orderItems[0]?.productId ?? ""));
   const nextProduct = orderItems.find((item) => !selectedProducts.includes(String(item.productId)));
   const orderCount = (s: string) =>
@@ -129,9 +139,9 @@ export function Account({
 
   const returnForm = (
     !admin &&
-    returnOrder?.status === "DELIVERED" &&
+    current?.status === "DELIVERED" &&
     (() => {
-      const deliveredAt = returnOrder.deliveredAt ? new Date(String(returnOrder.deliveredAt)).getTime() : 0;
+      const deliveredAt = current.deliveredAt ? new Date(String(current.deliveredAt)).getTime() : 0;
       const isAfter7Days = deliveredAt > 0 && Date.now() - deliveredAt > 7 * 24 * 3600 * 1000;
       return (
         <form
@@ -163,13 +173,12 @@ export function Account({
                 description: b[`description_${l.id}`] ?? "",
               }));
               await mutate("command", "return-submit", {
-                orderId: returnOrder.id,
+                orderId: current.id,
                 evidenceIds: uploadedEvidence,
                 items,
               });
               setFiles([]);
               setReturnLines([{ id: 0, productId: "", reason: "DAMAGED" }]);
-              if (section === "returns") setReturnOrderId("");
             });
           }}
         >
@@ -501,13 +510,13 @@ export function Account({
             ) : (
               <p><strong>{String(current.product ?? current.description)}</strong></p>
             )}
-            {Boolean(current.unitPrice) && (
+            {!customerReturnDetail && Boolean(current.unitPrice) && (
               <p>
                 Đơn giá: {money(current.unitPrice)} · Số lượng:{" "}
                 {String(current.quantity)}
               </p>
             )}
-            {Boolean(current.approvedQuantity) && (
+            {!customerReturnDetail && Boolean(current.approvedQuantity) && (
               <p>Số lượng được duyệt: {String(current.approvedQuantity)}</p>
             )}
             {Boolean(current.amount) && (
@@ -518,10 +527,10 @@ export function Account({
             {Boolean(current.resolution) && (
               <p>Phương án: {label(current.resolution)}</p>
             )}
-            {Boolean(current.goods) && (
+            {!customerReturnDetail && Boolean(current.goods) && (
               <p>Thu hồi hàng: {label(current.goods)}</p>
             )}
-            {Boolean(current.fulfillment) && (
+            {!customerReturnDetail && Boolean(current.fulfillment) && (
               <p>Thực hiện giải pháp: {label(current.fulfillment)}</p>
             )}
             {Boolean(current.refundReference) && (
@@ -532,7 +541,7 @@ export function Account({
                 Đơn đổi hàng mới: {String(current.replacementOrderNumber)}
               </p>
             )}
-            {Boolean(current.intakeReference) && (
+            {!customerReturnDetail && Boolean(current.intakeReference) && (
               <p>Biên bản nhận hàng: {String(current.intakeReference)}</p>
             )}
             {Boolean(current.decisionReason) && (
@@ -585,7 +594,7 @@ export function Account({
                 String(current.status),
               ) && (
                 <details className="returns-withdraw">
-                  <summary>Rút yêu cầu đổi trả</summary>
+                  <summary>Rút yêu cầu</summary>
                   <form
                     className="store-form"
                     onSubmit={(e) => {
@@ -623,81 +632,84 @@ export function Account({
                 ? !["RESOLVED", "COMPLETED", "REJECTED", "WITHDRAWN"].includes(String(current.status))
                 : current.status === "EVIDENCE_REQUIRED"
             ) && (
-              <form
-                className="store-form"
-                onSubmit={(e) => {
-                  const b = fields(e);
-                  void run(async () => {
-                    const uploadedEvidence = await upload(supplementFiles);
-                    await mutate(
-                      "command",
-                      current.type
-                        ? "privacy-supplement"
-                        : "return-supplement",
-                      {
-                        id: current.id,
-                        revision: current.revision,
-                        note: b.note,
-                        evidenceIds: uploadedEvidence,
-                      },
-                    );
-                    setSupplementFiles([]);
-                  });
-                }}
-              >
-                <label>
-                  Bổ sung thông tin
-                  <textarea name="note" required maxLength={2000} />
-                </label>
-                {!current.type && (
+              <details className="returns-supplement">
+                <summary>Bổ sung thông tin/ảnh</summary>
+                <form
+                  className="store-form"
+                  onSubmit={(e) => {
+                    const b = fields(e);
+                    void run(async () => {
+                      const uploadedEvidence = await upload(supplementFiles);
+                      await mutate(
+                        "command",
+                        current.type
+                          ? "privacy-supplement"
+                          : "return-supplement",
+                        {
+                          id: current.id,
+                          revision: current.revision,
+                          note: b.note,
+                          evidenceIds: uploadedEvidence,
+                        },
+                      );
+                      setSupplementFiles([]);
+                    });
+                  }}
+                >
                   <label>
-                    Ảnh bổ sung PNG/JPEG (tối đa 5 MB/ảnh)
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg"
-                      multiple
-                      onChange={(e) => {
-                        const selectedFiles = Array.from(
-                          e.target.files ?? [],
-                        );
-                        const alreadyAttached = (
-                          (current.evidenceIds as string[]) ?? []
-                        ).length;
-                        if (
-                          selectedFiles.length + alreadyAttached > 5 ||
-                          selectedFiles.some(
-                            (file) =>
-                              file.size > 5 * 1024 * 1024 ||
-                              !["image/png", "image/jpeg"].includes(
-                                file.type,
-                              ),
-                          )
-                        ) {
-                          e.target.value = "";
-                          setSupplementFiles([]);
-                        } else setSupplementFiles(selectedFiles);
-                      }}
-                    />
-                    <small>
-                      Còn{" "}
-                      {Math.max(
-                        0,
-                        5 -
-                          ((current.evidenceIds as string[]) ?? [])
-                            .length,
-                      )}{" "}
-                      ảnh có thể đính kèm.
-                    </small>
+                    Bổ sung thông tin
+                    <textarea name="note" required maxLength={2000} />
                   </label>
-                )}
-                {!current.type && supplementFiles.length > 0 && (
-                  <p className="store-subtle">
-                    Đã chọn:{" "}
-                    {supplementFiles.map((file) => file.name).join(", ")}
-                  </p>
-                )}
-                <button disabled={busy}>Gửi bổ sung</button>
-              </form>
+                  {!current.type && (
+                    <label>
+                      Ảnh bổ sung PNG/JPEG (tối đa 5 MB/ảnh)
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg"
+                        multiple
+                        onChange={(e) => {
+                          const selectedFiles = Array.from(
+                            e.target.files ?? [],
+                          );
+                          const alreadyAttached = (
+                            (current.evidenceIds as string[]) ?? []
+                          ).length;
+                          if (
+                            selectedFiles.length + alreadyAttached > 5 ||
+                            selectedFiles.some(
+                              (file) =>
+                                file.size > 5 * 1024 * 1024 ||
+                                !["image/png", "image/jpeg"].includes(
+                                  file.type,
+                                ),
+                            )
+                          ) {
+                            e.target.value = "";
+                            setSupplementFiles([]);
+                          } else setSupplementFiles(selectedFiles);
+                        }}
+                      />
+                      <small>
+                        Còn{" "}
+                        {Math.max(
+                          0,
+                          5 -
+                            ((current.evidenceIds as string[]) ?? [])
+                              .length,
+                        )}{" "}
+                        ảnh có thể đính kèm.
+                      </small>
+                    </label>
+                  )}
+                  {!current.type && supplementFiles.length > 0 && (
+                    <p className="store-subtle">
+                      Đã chọn:{" "}
+                      {supplementFiles.map((file) => file.name).join(", ")}
+                    </p>
+                  )}
+                  <button disabled={busy}>Gửi bổ sung</button>
+                </form>
+              </details>
             )}
             {admin && (
               <CaseAction
@@ -722,23 +734,32 @@ export function Account({
             )}
           </>
         )}
-        <h3>Lịch sử xử lý</h3>
-        <ol className="store-timeline">
-          {((current.history as Row[]) ?? []).map((h, i) => (
-            <li key={i}>
-              <strong>{h.transition === "RESUME" && "Tiếp tục xử lý · "}{label(h.status)}</strong>
-              <small>{date(h.at)}</small>
-              <p>{String(h.note)}</p>
-            </li>
-          ))}
-        </ol>
+        {customerReturnDetail ? (
+          history.length > 0 && (
+            <div className="b07-timeline">
+              <h3>Lịch sử xử lý</h3>
+              <ol className="store-timeline">{timelineItem(history[history.length - 1], history.length - 1)}</ol>
+              {history.length > 1 && (
+                <details>
+                  <summary>Xem {history.length - 1} bước trước đó</summary>
+                  <ol className="store-timeline">{history.slice(0, -1).map(timelineItem)}</ol>
+                </details>
+              )}
+            </div>
+          )
+        ) : (
+          <>
+            <h3>Lịch sử xử lý</h3>
+            <ol className="store-timeline">{history.map(timelineItem)}</ol>
+          </>
+        )}
       </>
     </section>
   ) : null;
 
   if (!admin) {
     return (
-      <div className="account-screen-wrapper">
+      <div className={section === "returns" ? "account-screen-wrapper b07-account" : "account-screen-wrapper"}>
         <div className="account-main-layout">
           <aside className="account-sidebar-aside">
             <div>
@@ -784,7 +805,7 @@ export function Account({
               <div className="customer-returns">
                 <header className="returns-heading">
                   <div>
-                    <span className="eyebrow">Bảo hành và khiếu nại dịch vụ</span>
+                    <span className="eyebrow">Bảo hành &amp; khiếu nại dịch vụ</span>
                     <h1>Yêu cầu đổi trả &amp; hoàn tiền</h1>
                     <p>Gửi yêu cầu hỗ trợ cho sản phẩm trong đơn hàng đã giao.</p>
                     <Link href="/return-policy">Xem chính sách đổi trả →</Link>
@@ -793,7 +814,7 @@ export function Account({
                 </header>
                 <div className="returns-policy-strip">
                   <span className="material-symbols-outlined" aria-hidden="true">info</span>
-                  <p><strong>Thời hạn tiếp nhận dự thảo:</strong> 7 ngày từ khi giao. Lỗi chất lượng hoặc an toàn thực phẩm vẫn được tiếp nhận sau thời hạn này.</p>
+                  <p><strong>Thời hạn tiếp nhận:</strong> 7 ngày từ khi giao. Lỗi chất lượng hoặc an toàn thực phẩm vẫn được tiếp nhận sau thời hạn này.</p>
                   <Link href="/return-policy">Điều khoản &amp; quy định</Link>
                 </div>
                 <div className="returns-layout returns-customer-layout">
@@ -827,7 +848,7 @@ export function Account({
                           <option value="">Chọn đơn hàng</option>
                           {state.orders.filter((order) => order.status === "DELIVERED").map((order) => (
                             <option key={order.id} value={order.id}>
-                              {String(order.number)} · {date(order.deliveredAt)}
+                              {String(order.number)} · {new Date(String(order.deliveredAt)).toLocaleDateString("vi-VN")} · {((order.items as Row[] | undefined) ?? []).reduce((sum, item) => sum + Number(item.quantity), 0)} món · {money(order.total)}
                             </option>
                           ))}
                         </select>
@@ -836,7 +857,21 @@ export function Account({
                         <p className="store-subtle">Bạn chưa có đơn đã giao. <Link href="/account/orders">Xem đơn hàng</Link></p>
                       )}
                     </div>
-                    <div key={returnOrderId}>{returnForm}</div>
+                    {returnOrder?.status === "DELIVERED" && (
+                      <ReturnRequestForm
+                        key={returnOrder.id}
+                        order={returnOrder}
+                        returns={state.returns}
+                        busy={busy}
+                        onSubmit={(items, photos) => {
+                          void run(async () => {
+                            const evidenceIds = await upload(photos);
+                            await mutate("command", "return-submit", { orderId: returnOrder.id, items, evidenceIds });
+                            setReturnOrderId("");
+                          });
+                        }}
+                      />
+                    )}
                   </section>
                 </div>
               </div>
