@@ -526,7 +526,8 @@ export function Account({
               </div>
             )}
             {!admin &&
-              !["RESOLVED", "REJECTED", "WITHDRAWN"].includes(
+              !current.type &&
+              ["REQUESTED", "REVIEWING", "EVIDENCE_REQUIRED", "CUSTOMER_CONFIRMATION"].includes(
                 String(current.status),
               ) && (
                 <form
@@ -543,7 +544,7 @@ export function Account({
                       await mutate("command", "return-withdraw", {
                         id: current.id,
                         revision: current.revision,
-                        reason: b.reason,
+                        note: b.note,
                       });
                     });
                   }}
@@ -551,7 +552,7 @@ export function Account({
                   <h4>Rút yêu cầu đổi trả</h4>
                   <label>
                     Lý do rút yêu cầu
-                    <textarea name="reason" required maxLength={500} />
+                    <textarea name="note" required maxLength={500} />
                   </label>
                   <button disabled={busy} className="store-btn-danger">
                     Xác nhận rút yêu cầu
