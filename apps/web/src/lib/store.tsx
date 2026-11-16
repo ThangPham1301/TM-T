@@ -152,6 +152,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [notice, setNotice] = useState("");
   const pending = useRef<{ body: string; key: string } | null>(null);
   const reloadVersion = useRef(0);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+  }, []);
   const reload = useCallback(async () => {
     const version = ++reloadVersion.current;
     try {
@@ -213,6 +217,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   async function run(work: () => Promise<void>) {
     setBusy(true);
     setError("");
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    noticeTimer.current = null;
     setNotice("");
     try {
       await work();
@@ -236,6 +242,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     pending.current = null;
     await reload();
     setNotice("Đã lưu thông tin.");
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => {
+      setNotice("");
+      noticeTimer.current = null;
+    }, 4000);
     return result;
   }
   async function logout() {
