@@ -17,7 +17,9 @@ export function SiteFooter() {
   useEffect(() => {
     void api("categories").then(setCategories).catch(() => setCategories([]));
   }, []);
-  if (["/admin/products", "/admin/categories"].includes(pathname)) return null;
+  if (pathname?.startsWith("/account") || pathname?.startsWith("/admin")) {
+    return null;
+  }
   return <StoreFooter categories={categories.map(c => ({ id: c.id, code: String(c.code), name: String(c.name) }))} />;
 }
 export function StatusMessages() {

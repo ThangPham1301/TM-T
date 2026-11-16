@@ -164,7 +164,16 @@ public class PlatformApi {
             throw new Problem(409,"Địa chỉ vừa thay đổi. Hãy tải lại.");
         if (action.equals("address-delete")) {
             if (id.isEmpty()) throw new Problem(404,"Không tìm thấy địa chỉ.");
+            boolean wasDefault = Boolean.TRUE.equals(row.get("isDefault"));
             db.update("DELETE FROM records WHERE id=? AND owner_id=? AND kind='address'",uuid(id),owner);
+            if (wasDefault) {
+                var remaining = list("address", a);
+                if (!remaining.isEmpty()) {
+                    var first = remaining.getFirst();
+                    first.put("isDefault", true);
+                    save("address", owner, first);
+                }
+            }
             return Map.of("id",id,"deleted",true);
         }
         if (id.isEmpty()) require(list("address",a).size()<20,"Bạn có thể lưu tối đa 20 địa chỉ.");
@@ -175,6 +184,18 @@ public class PlatformApi {
                 "Số điện thoại không hợp lệ.");
         row.put("phone",phone);
         row.put("address",text(body,"address",400));
+        boolean isDefault = Boolean.TRUE.equals(body.get("isDefault")) || "true".equalsIgnoreCase(String.valueOf(body.get("isDefault")));
+        if (isDefault) {
+            for (var addr : list("address", a)) {
+                if (!str(addr, "id").equals(id) && Boolean.TRUE.equals(addr.get("isDefault"))) {
+                    addr.put("isDefault", false);
+                    save("address", owner, addr);
+                }
+            }
+        } else if (list("address", a).stream().noneMatch(addr -> !str(addr, "id").equals(id) && Boolean.TRUE.equals(addr.get("isDefault")))) {
+            isDefault = true;
+        }
+        row.put("isDefault", isDefault);
         if (!id.isEmpty()) row.put("revision",number(row,"revision")+1);
         return save("address",owner,row);
     }
