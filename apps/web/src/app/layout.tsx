@@ -9,6 +9,7 @@ import {
 import "@/styles/heritage.css";
 import "@/styles/tokens.css";
 import "@/styles/store.css";
+import "@/styles/lan.css";
 
 const bodyFont = localFont({
   src: [

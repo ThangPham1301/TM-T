@@ -238,3 +238,9 @@ Ví dụ xóa mô tả cũ và cập nhật OCOP:
 4. Every mutation validates `400/422`, transition or revision conflict `409`, and retry behavior.
 5. Every endpoint has controlled latency and `500/503` UI tests.
 6. Error responses preserve `code` and `requestId`; clients do not branch on translated `message`.
+
+## Lân product/category UI checkpoint (2026-11-14)
+
+The two catalog pages retain the existing `/api/store` adapter and ADMIN guard; this is not a new permission or REST implementation. They expose loading, empty/search results, API error + retry, disabled pending actions, a product modal, a category drawer and category delete confirmation/cancellation. Failed writes keep the editor open through existing StoreProvider error reporting. Success closes it after mutation returns. Revision/idempotency fields, PNG/JPEG upload validation (<=5 MB) and existing server refusal of linked deletes remain unchanged. Category order/status/count use actual data. The proposed multi-image area is labeled unavailable and disabled.
+
+Fixture browser checks cover save/toggle/delete payloads and Customer access denial. Live API, server authorization, upload storage and revision-conflict integration require the backend; no live acceptance is claimed.
