@@ -19,7 +19,6 @@ export function CatalogAdmin({
     busy,
     run,
     mutate,
-    logout,
     error: mutationError,
   } = useStore();
   const [products, setProducts] = useState<Row[]>([]),
@@ -140,8 +139,6 @@ export function CatalogAdmin({
         section={section}
         title="Cấu hình bán hàng & vận chuyển"
         description="Quản lý phí giao hàng và trạng thái tiếp nhận đơn mới."
-        userName={String(state.user.name)}
-        onLogout={() => void logout()}
       >
         <aside className="operations-notice">
           <span className="operations-notice-mark" aria-hidden="true">!</span>

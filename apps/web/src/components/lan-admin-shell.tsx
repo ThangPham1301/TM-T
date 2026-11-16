@@ -20,7 +20,6 @@ export function LanAdminShell({
   children: ReactNode;
 }) {
   const { state, busy, run, logout } = useStore();
-  if (section === "settings") return children;
   return (
     <div className="lan-admin-shell">
       <aside className="lan-admin-sidebar">

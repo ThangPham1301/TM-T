@@ -1,12 +1,15 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { AddressBook, PasswordSettings } from "./account-settings";
+import { PasswordSettings } from "./account-settings";
+import { useCurrentTime } from "@/lib/use-current-time";
 import { AccountProfile } from "./account-profile";
 import { AccountAddresses } from "./account-addresses";
 import { AccountSecurity } from "./account-security";
 import { AccountPrivacy } from "./account-privacy";
 import { AccountOrders } from "./account-orders";
+import { AdminOrders } from "./admin-orders";
+import { AdminPrivacy } from "./admin-privacy";
 import { accountNavigation } from "@/shared/layout/navigation";
 import { PaymentPanel } from "./payment-panel";
 import { OrderBadges, OrderTimeline } from "./order-presentation";
@@ -45,22 +48,31 @@ export function Account({
   const selectedFromUrl = useRef(false);
   const [returnLines, setReturnLines] = useState([{ id: 0, productId: "", reason: "DAMAGED" }]);
   const nextReturnLine = useRef(1);
+  const now = useCurrentTime();
   useEffect(() => {
-    if (state && section === "orders" && !selectedFromUrl.current) {
+    let active = true;
+    void Promise.resolve().then(() => {
+    if (active && state && section === "orders" && !selectedFromUrl.current) {
       selectedFromUrl.current = true;
       const id = new URLSearchParams(window.location.search).get("order");
       const order = state.orders.find((o) => o.id === id);
       if (order) setSelected(order);
     }
+    });
+    return () => { active = false; };
   }, [state, section]);
   const openedInitialReturn = useRef(false);
   useEffect(() => {
-    if (section !== "returns" || !state || openedInitialReturn.current) return;
+    let active = true;
+    void Promise.resolve().then(() => {
+    if (!active || section !== "returns" || !state || openedInitialReturn.current) return;
     openedInitialReturn.current = true;
     const firstOpen = state.returns.find(
       (row) => !["RESOLVED", "REJECTED", "WITHDRAWN"].includes(String(row.status)),
     );
     if (firstOpen) setSelected(firstOpen);
+    });
+    return () => { active = false; };
   }, [section, state]);
   if (loading) return <main className="store-page">Đang tải tài khoản…</main>;
   if (!state)
@@ -146,7 +158,7 @@ export function Account({
     current?.status === "DELIVERED" &&
     (() => {
       const deliveredAt = current.deliveredAt ? new Date(String(current.deliveredAt)).getTime() : 0;
-      const isAfter7Days = deliveredAt > 0 && Date.now() - deliveredAt > 7 * 24 * 3600 * 1000;
+      const isAfter7Days = now !== null && deliveredAt > 0 && now - deliveredAt > 7 * 24 * 3600 * 1000;
       return (
         <form
           className="store-form"
@@ -513,9 +525,7 @@ export function Account({
                   </div>
                 </div>
               </>
-            ) : (
-              <p><strong>{String(current.product ?? current.description)}</strong></p>
-            )}
+            ) : null}
             {!customerReturnDetail && Boolean(current.unitPrice) && (
               <p>
                 Đơn giá: {money(current.unitPrice)} · Số lượng:{" "}
@@ -755,7 +765,17 @@ export function Account({
     </section>
   ) : null;
 
+  if (admin && section === "orders") {
+    return <AdminOrders orders={state.orders} filteredOrders={filteredOrders} query={orderQuery} status={orderStatus} paymentStatus={paymentStatus} page={visibleOrderPage} selected={current} detail={detailPanel} onQueryChange={(value) => { setOrderQuery(value); setOrderPage(1); }} onStatusChange={(value) => { setOrderStatus(value); setOrderPage(1); }} onPaymentStatusChange={(value) => { setPaymentStatus(value); setOrderPage(1); }} onPageChange={setOrderPage} onSelect={(order) => { setReturnLines([{ id: 0, productId: "", reason: "DAMAGED" }]); setFiles([]); setSelected(order); }} onClose={() => setSelected(null)} />;
+  }
+
+  if (admin && section === "privacy") {
+    return <AdminPrivacy rows={state.privacy} selected={current} detail={detailPanel} onSelect={setSelected} />;
+  }
+
   if (!admin) {
+    const customerOnlySections = ["addresses", "orders", "returns"];
+    const unavailableToAdmin = state.user.role === "ADMIN" && customerOnlySections.includes(section);
     return (
       <div className={section === "returns" ? "account-screen-wrapper b07-account" : "account-screen-wrapper"}>
         <div className="account-main-layout">
@@ -766,7 +786,7 @@ export function Account({
                 <h2 className="account-sidebar-title">Tài Khoản Của Tôi</h2>
               </div>
               <nav className="account-sidebar-nav" aria-label="Quản lý tài khoản">
-                {accountNavigation.map((item) => (
+                {accountNavigation.filter((item) => state.user.role !== "ADMIN" || !customerOnlySections.includes(item.key)).map((item) => (
                   <Link
                     key={item.key}
                     href={item.href}
@@ -783,7 +803,7 @@ export function Account({
               <button
                 type="button"
                 className="account-sidebar-logout"
-                onClick={() => void logout()}
+                onClick={() => void run(logout)}
               >
                 <span className="material-symbols-outlined">logout</span>
                 <span>Đăng xuất</span>
@@ -792,14 +812,23 @@ export function Account({
           </aside>
 
           <main className="account-content-pane">
+            {unavailableToAdmin && (
+              <section className="store-card">
+                <h1>Mục dành cho khách hàng</h1>
+                <p>Tài khoản quản trị không sử dụng mục này trong tài khoản cá nhân.</p>
+                <Link href={section === "orders" ? "/admin/orders" : section === "returns" ? "/admin/returns" : "/account/profile"}>
+                  {section === "orders" ? "Đến quản lý đơn hàng →" : section === "returns" ? "Đến xử lý đổi trả →" : "Về hồ sơ cá nhân →"}
+                </Link>
+              </section>
+            )}
             {section === "profile" && <AccountProfile />}
-            {section === "addresses" && <AccountAddresses />}
+            {section === "addresses" && !unavailableToAdmin && <AccountAddresses />}
             {section === "security" && <AccountSecurity />}
             {section === "privacy" && <AccountPrivacy />}
-            {section === "orders" && (
-              <AccountOrders onSelectOrder={setSelected} />
+            {section === "orders" && !unavailableToAdmin && (
+              <AccountOrders />
             )}
-            {section === "returns" && (
+            {section === "returns" && !unavailableToAdmin && (
               <div className="customer-returns">
                 <header className="returns-heading">
                   <div>
@@ -875,7 +904,7 @@ export function Account({
                 </div>
               </div>
             )}
-            {section !== "orders" && section !== "returns" && detailPanel}
+            {section !== "orders" && section !== "returns" && !unavailableToAdmin && detailPanel}
           </main>
         </div>
       </div>
@@ -890,8 +919,7 @@ export function Account({
     } as const;
     const [title, description] = operationsSections[section as keyof typeof operationsSections];
     return (
-      <OperationsWorkspace section={section} title={title} description={description}
-        userName={String(state.user.name)} onLogout={() => void logout()}>
+      <OperationsWorkspace section={section} title={title} description={description}>
         {section === "returns" && (
           <div className="returns-layout returns-admin-layout">
             <ReturnQueue rows={state.returns} orders={state.orders} onSelect={setSelected} admin />

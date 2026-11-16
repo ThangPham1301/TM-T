@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useRouter } from "next/navigation";
 
 export type Row = { id: string; [key: string]: unknown };
 export type StoreState = {
@@ -197,6 +198,7 @@ type StoreContext = {
 };
 const Context = createContext<StoreContext | null>(null);
 export function StoreProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [state, setState] = useState<StoreState | null>(null),
     [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(false),
@@ -221,7 +223,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
   useEffect(() => {
     let active = true;
-    void reload()
+    void Promise.resolve().then(() => { if (active) return reload(); })
       .catch((e) => {
         if (active) setError(e.message);
       })
@@ -304,6 +306,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   async function logout() {
     await api("auth/logout", "POST", {});
     ++reloadVersion.current;
+    router.replace("/");
     setState(null);
   }
   return (

@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { date, label, money, type Row } from "@/lib/store";
@@ -57,11 +58,12 @@ export function PaymentPanel({ order }: { order: Row }) {
         <>
           {qrUrl && (
             <div className={styles.qrFrame}>
-              <img
+              <Image
                 src={qrUrl}
                 width={216}
                 height={216}
                 alt="Mã VietQR của đơn hàng"
+                unoptimized
                 draggable
               />
             </div>

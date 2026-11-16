@@ -5,11 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type Row, api, cleanText, date, money, useStore } from "@/lib/store";
 
+const EMPTY_ORDERS: Row[] = [];
 export function AccountOrders({
-  onSelectOrder,
   initialOrderId,
 }: {
-  onSelectOrder?: (order: Row) => void;
   initialOrderId?: string;
 }) {
   const router = useRouter();
@@ -32,7 +31,7 @@ export function AccountOrders({
   const [currentPage, setCurrentPage] = useState(1);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const orders = state?.orders || [];
+  const orders = state?.orders ?? EMPTY_ORDERS;
 
   // Tab counts
   const countAll = orders.length;

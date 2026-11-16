@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { type Row } from "@/lib/store";
 import { ProductImage } from "./product/product-image";
+import { useCurrentTime } from "@/lib/use-current-time";
 
 const reasons = [
   ["DAMAGED", "Bao bì móp méo, rách niêm phong hoặc hư hỏng khi giao"],
@@ -54,7 +55,8 @@ export function ReturnRequestForm({
   const [photos, setPhotos] = useState<File[]>([]);
   const [fileError, setFileError] = useState("");
   const input = useRef<HTMLInputElement>(null);
-  const late = Date.now() - Date.parse(String(order.deliveredAt)) > 7 * 86400000;
+  const now = useCurrentTime();
+  const late = now !== null && now - Date.parse(String(order.deliveredAt)) > 7 * 86400000;
   const availableReasons = late ? reasons.filter(([code]) => code === "UNSAFE" || code === "QUALITY") : reasons;
   const products = getReturnableProducts(order, returns);
   const hasAvailableProducts = products.some(({ remaining }) => remaining > 0);

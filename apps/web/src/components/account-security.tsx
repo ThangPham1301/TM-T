@@ -165,6 +165,7 @@ export function AccountSecurity() {
                     <input
                       id="sec-current-pwd"
                       name="currentPassword"
+                      autoComplete="current-password"
                       type={showCurrent ? "text" : "password"}
                       required
                       maxLength={72}
@@ -173,17 +174,11 @@ export function AccountSecurity() {
                     />
                     <button
                       type="button"
-                      onClick={() => setShowCurrent(!showCurrent)}
-                      style={{
-                        position: "absolute",
-                        right: "0.75rem",
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        color: "var(--af-outline)",
-                        display: "flex",
-                        alignItems: "center",
-                      }}
+                      onClick={() => setShowCurrent((shown) => !shown)}
+                      className="heritage-password-toggle"
+                      aria-label={showCurrent ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                      aria-pressed={showCurrent}
+                      aria-controls="sec-current-pwd"
                       title={showCurrent ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
                     >
                       <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
@@ -202,6 +197,7 @@ export function AccountSecurity() {
                     <input
                       id="sec-new-pwd"
                       name="newPassword"
+                      autoComplete="new-password"
                       type={showNew ? "text" : "password"}
                       required
                       minLength={12}
@@ -213,17 +209,11 @@ export function AccountSecurity() {
                     />
                     <button
                       type="button"
-                      onClick={() => setShowNew(!showNew)}
-                      style={{
-                        position: "absolute",
-                        right: "0.75rem",
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        color: "var(--af-outline)",
-                        display: "flex",
-                        alignItems: "center",
-                      }}
+                      onClick={() => setShowNew((shown) => !shown)}
+                      className="heritage-password-toggle"
+                      aria-label={showNew ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                      aria-pressed={showNew}
+                      aria-controls="sec-new-pwd"
                       title={showNew ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
                     >
                       <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
@@ -288,6 +278,7 @@ export function AccountSecurity() {
                     <input
                       id="sec-confirm-pwd"
                       name="confirmation"
+                      autoComplete="new-password"
                       type={showConfirm ? "text" : "password"}
                       required
                       minLength={12}
@@ -297,17 +288,11 @@ export function AccountSecurity() {
                     />
                     <button
                       type="button"
-                      onClick={() => setShowConfirm(!showConfirm)}
-                      style={{
-                        position: "absolute",
-                        right: "0.75rem",
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        color: "var(--af-outline)",
-                        display: "flex",
-                        alignItems: "center",
-                      }}
+                      onClick={() => setShowConfirm((shown) => !shown)}
+                      className="heritage-password-toggle"
+                      aria-label={showConfirm ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                      aria-pressed={showConfirm}
+                      aria-controls="sec-confirm-pwd"
                       title={showConfirm ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
                     >
                       <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>

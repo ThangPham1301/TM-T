@@ -5,61 +5,31 @@ import Link from "next/link";
 import { useRef, useState, type ReactNode } from "react";
 import { date, fields, label, type Row } from "@/lib/store";
 import { PolicyPreview } from "./policy-preview";
-import { Pagination, WorkspaceNav } from "./workspace-nav";
+import { Pagination } from "./workspace-nav";
+import { LanAdminShell } from "./lan-admin-shell";
+import styles from "./admin-operations.module.css";
 
 export function OperationsWorkspace({
   section,
   title,
   description,
-  userName,
-  onLogout,
   children,
 }: {
   section: string;
   title: string;
   description: string;
-  userName: string;
-  onLogout: () => void;
   children: ReactNode;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
-  const area = section === "returns" ? "Chăm sóc khách hàng"
-    : section === "settings" ? "Thiết lập hệ thống"
-    : section === "policies" ? "Quản lý nội dung" : "Giám sát hệ thống";
-  return (
-    <div className="admin-returns" data-sidebar-collapsed={collapsed}>
-      <aside className="returns-admin-sidebar" id="operations-sidebar">
-        <header>
-          <Image className="operations-brand-mark" src="/images/stitch/asset-08.png" width={48} height={38} alt="" />
-          <div><strong>Quản trị Gói Huế</strong><small>Quản lý cửa hàng</small></div>
-        </header>
-        <WorkspaceNav admin section={section} showIcons />
-        <div className="returns-admin-links">
-          <Link href="/">Xem cửa hàng →</Link>
-          <div className="operations-admin-profile">
-            <span aria-hidden="true">{userName.trim().split(/\s+/).slice(-2).map((word) => word[0]).join("")}</span>
-            <div><strong>{userName}</strong><small>Quản trị viên</small></div>
-          </div>
-          <button type="button" onClick={onLogout}>Đăng xuất</button>
-        </div>
-      </aside>
-      <main className="returns-admin-main">
-        <div className="returns-admin-topbar">
-          <button className="operations-toggle-sidebar" type="button" aria-controls="operations-sidebar" aria-expanded={!collapsed}
-            onClick={() => setCollapsed((current) => !current)}>
-            {collapsed ? "Mở menu" : "Thu gọn menu"}
-          </button>
-          <span className="operations-breadcrumb">Quản trị › {area} › {title}</span>
-          <Link href="/">Xem cửa hàng</Link>
-          <span className="store-status-chip">{userName}</span>
-        </div>
-        <header className="returns-heading returns-admin-heading">
-          <div><h1>{title}</h1><p>{description}</p></div>
+  return <LanAdminShell section={section}>
+      <main className={`store-page lan-page lan-admin ${styles.workspace}`}>
+        <header className={styles.heading}>
+          <span className="eyebrow">Khu vực điều hành</span>
+          <h1>{title}</h1>
+          <p>{description}</p>
         </header>
         {children}
       </main>
-    </div>
-  );
+    </LanAdminShell>;
 }
 
 export function EvidencePreview({ id, compact = false }: { id: string; compact?: boolean }) {
@@ -69,7 +39,7 @@ export function EvidencePreview({ id, compact = false }: { id: string; compact?:
     <span className="returns-evidence-missing" data-compact={compact}>Ảnh không khả dụng</span>
   ) : (
     <a className="returns-evidence-preview" data-compact={compact} href={url} target="_blank" rel="noreferrer">
-      <img src={url} alt="Xem ảnh bằng chứng" loading="lazy" onError={() => setMissing(true)} />
+      <Image src={url} alt="Xem ảnh bằng chứng" width={120} height={120} unoptimized loading="lazy" onError={() => setMissing(true)} />
     </a>
   );
 }
@@ -202,6 +172,7 @@ export function ReturnQueue({
       )}
       {admin && visibleCases.length > 0 && (
         <div className="operations-table">
+          <div className={styles.tableHeading}><h2>Danh sách yêu cầu đổi trả</h2><span>{cases.length} hồ sơ</span></div>
           <table>
             <thead>
               <tr>

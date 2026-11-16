@@ -1,4 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block');
+@font-face {
+  font-family: "Material Symbols Outlined";
+  src: url("../assets/fonts/MaterialSymbolsOutlined.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: block;
+}
 
 /* Hue Heritage Craft — Account & Privacy Design System
    Matches UI_Figma/02_Tai_khoan specifications strictly */
@@ -422,6 +428,39 @@ body:has(.account-screen-wrapper:not(.b07-account)) footer {
   color: var(--af-outline);
   font-size: 18px;
   pointer-events: none;
+}
+
+.heritage-input-wrapper .heritage-password-toggle {
+  position: absolute;
+  right: 0.25rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--af-outline);
+  cursor: pointer;
+}
+
+.heritage-input-wrapper .heritage-password-toggle .material-symbols-outlined {
+  position: static;
+  color: inherit;
+  pointer-events: none;
+}
+
+.heritage-input-wrapper .heritage-password-toggle:focus-visible {
+  outline: 2px solid var(--af-secondary);
+  outline-offset: -3px;
+}
+
+.heritage-input-wrapper input::-ms-reveal {
+  display: none;
 }
 
 .heritage-input {
