@@ -22,8 +22,8 @@ Mốc 16/11/2026, nền `feat/account@6271fbc`, nhánh triển khai `integration
 
 ## Hạng mục còn phải nghiệm thu
 
-- Chạy đầy đủ kịch bản hậu mãi, SePay Test mode và nâng cơ sở dữ liệu đang có từ V2 lên V3.
-- Nghiệm thu kho, phiếu soạn, QC và đóng gói trên trình duyệt. Tiếp tục thiết bị bàn giao, tự động hóa live-packing/ZNS và kết nối trạng thái nhà vận chuyển.
+- Chạy đầy đủ kịch bản hậu mãi và SePay Test mode. Diễn tập migration trên bản sao dữ liệu triển khai trước khi phát hành.
+- Nghiệm thu bổ sung thao tác nhập lô và QC hàng hoàn trên trình duyệt. Tiếp tục thiết bị bàn giao, tự động hóa live-packing/ZNS và kết nối trạng thái nhà vận chuyển.
 - Đưa kết quả ghép giao diện từ worktree thử vào nhánh hoàn thiện khi các bước nghiệm thu còn lại đã đạt.
 - Chốt catalog sản phẩm và quy cách quà, sau đó triển khai các tích hợp carrier, hoàn tiền, liên lạc và đo lường theo hợp đồng vận hành. Hợp đồng và thông tin xác thực cho dịch vụ thật cần được cung cấp trước khi nghiệm thu tích hợp.
 
@@ -40,4 +40,6 @@ Mốc 16/11/2026, nền `feat/account@6271fbc`, nhánh triển khai `integration
 - PostgreSQL áp dụng V6 trên database thử V5. Ca HTTP dùng ảnh PNG tổng hợp, từ chối khách tải ảnh, ảnh không hợp lệ, revision cũ và thiếu bước; chủ đơn/admin đọc được ảnh sau khi đóng gói, khách khác không đọc được. Mở lại đơn làm ảnh cũ hết hiệu lực; tải ảnh mới và đóng gói lại đạt. Build Next.js đạt; chưa thử thao tác tải ảnh qua trình duyệt và chưa gửi ZNS thật.
 - Bản ghép dùng snapshot `29ed381` và đầu nhánh Lân `26c95a0`. Build production và 13 ca Maven đạt. Bộ Playwright của Lân đạt với API giả lập. Ca trình duyệt nối Spring Boot/PostgreSQL đạt trang chủ, lọc bộ sưu tập, chi tiết thêm giỏ đúng số lượng, cập nhật giá và thứ tự danh mục lưu thật, chặn khách vào quản trị và điều hướng Kho theo lô. Trang Đơn hàng đã nối lại panel VietQR và kiểm tra mã QR trên liên kết từ đơn.
 - Chạy lại kiểm thử trình duyệt trên database local thử với Next.js ở cổng 3000. Cài Playwright trong môi trường QA và cung cấp `ADMIN_EMAIL`, `ADMIN_PASSWORD`; từ `apps/web` chạy `node tests/lan-ui.mjs` và `node tests/storefront-integration.mjs`. Bài thứ hai tạo khách, danh mục, sản phẩm và đơn mới trong database thử.
+- Edge + Next BFF + Spring Boot + PostgreSQL đã qua ca đặt COD trên checkout, khách xác nhận, admin mở phiếu có mã lô, ghi QC, chọn đủ sáu bước, tải JPEG thực qua form và bàn giao có mã vận đơn. Chủ đơn và admin đọc được PNG qua proxy; khách chưa đăng nhập bị từ chối. Sau PACKED, thao tác mặc định của admin là bàn giao; mở lại đóng gói vẫn có trong danh sách.
+- Thử nâng PostgreSQL riêng từ schema V2, với fixture tồn 7 và đơn COD kiểu cũ không có trường hạn xác nhận, QC hay SOP. Flyway chạy V3–V6; tồn 7 được bảo toàn và admin vẫn hoàn tất CONFIRMED → PACKED cho đơn cũ. Đây là dữ liệu thử có định dạng tương thích V2, chưa phải bản sao database triển khai.
 - Maven package gặp lỗi reset kết nối khi tải phụ thuộc plugin đóng gói. API thử nghiệm được chạy từ các lớp Maven đã biên dịch.

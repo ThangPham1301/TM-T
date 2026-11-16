@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 
 const { chromium } = createRequire(import.meta.url)("playwright");
 const adminEmail = process.env.ADMIN_EMAIL;
@@ -83,5 +84,84 @@ assert(adminEmail && adminPassword, "Set ADMIN_EMAIL and ADMIN_PASSWORD for the 
     assert.match(await qr.getAttribute("src"),/^data:image\/png;base64,/);
     console.log("LIVE VIETQR QR DEEP-LINK PASS");
     console.log("LIVE BROWSER PASS: home, collection, product and persisted cart, product edit, category edit, authorization and inventory navigation");
+
+    const updatedProduct = (await request(admin, "admin/products")).find((item) => item.id === product.id);
+    const manufacturingDate = new Date().toISOString().slice(0, 10);
+    const expiryDate = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    const lotCode = "QA-" + suffix;
+    await request(admin, "commerce", {
+      action: "inventory-lot-add", productId: product.id, revision: updatedProduct.revision,
+      code: lotCode, manufacturedOn: manufacturingDate, expiresOn: expiryDate,
+      quantity: updatedProduct.stock, legacyQuantity: updatedProduct.stock,
+    });
+    const emptyCart = await request(shopper, "cart/summary");
+    await request(shopper, "commerce", {
+      action: "cart-set", productId: product.id, quantity: 1, cartToken: emptyCart.cartToken,
+    });
+    const submit = async (page, button, action) => {
+      const [response] = await Promise.all([
+        page.waitForResponse((candidate) => candidate.url().endsWith("/api/store/commerce")
+          && candidate.request().method() === "POST"
+          && candidate.request().postDataJSON()?.action === action),
+        button.click(),
+      ]);
+      assert(response.ok(), action + " " + response.status() + " " + await response.text());
+      return response.json();
+    };
+    await customerPage.goto(base + "/checkout");
+    await customerPage.getByLabel("Điện thoại", { exact: true }).fill("0901234567");
+    await customerPage.getByLabel("Địa chỉ", { exact: true }).fill("Địa chỉ kiểm thử");
+    const cod = await submit(customerPage, customerPage.getByRole("button", { name: "Xác nhận đặt hàng" }), "checkout");
+    await customerPage.waitForURL("**/account/orders?order=" + cod.id);
+    const confirmed = await submit(customerPage, customerPage.getByRole("button", { name: "Xác nhận đơn COD" }), "order-cod-confirm");
+    assert.equal(confirmed.status, "CONFIRMED");
+    assert.equal(confirmed.items[0].lotAllocations[0].code, lotCode);
+
+    adminPage.on("dialog", (dialog) => dialog.accept());
+    await adminPage.goto(base + "/admin/orders");
+    await adminPage.getByLabel("Tìm mã đơn/người nhận/điện thoại").fill(cod.number);
+    await adminPage.getByRole("button", { name: new RegExp(cod.number) }).click();
+    const orderForm = adminPage.locator("form").filter({ has: adminPage.getByRole("heading", { name: "Xử lý đơn hàng" }) });
+    await orderForm.getByText(lotCode, { exact: false }).first().waitFor();
+    await orderForm.locator('select[name="action"]').selectOption("order-pick-qc");
+    for (const check of ["qcTexture", "qcAroma", "qcPackaging", "qcContents"]) {
+      await orderForm.locator(`input[name="${check}"]`).check();
+    }
+    await orderForm.locator('select[name="qcOutcome"]').selectOption("PASSED");
+    await orderForm.getByLabel("Mã biên bản QC", { exact: true }).fill("QC-" + suffix);
+    await orderForm.getByLabel("Ghi chú", { exact: true }).fill("Kiểm định thử");
+    const inspected = await submit(adminPage, orderForm.getByRole("button", { name: "Xác nhận xử lý" }), "order-pick-qc");
+    assert.equal(inspected.fulfillmentQc.outcome, "PASSED");
+    await orderForm.locator('select[name="action"]').selectOption("order-status");
+    const sopChecks = orderForm.locator('input[name="packingSteps"]');
+    await sopChecks.first().waitFor();
+    assert.equal(await sopChecks.count(), 6);
+    for (const checkbox of await sopChecks.all()) await checkbox.check();
+    await orderForm.locator('input[name="packingPhoto"]').setInputFiles(fileURLToPath(
+      new URL("../public/goi-hue/assets/photo-sp-me-xung-dia.jpg", import.meta.url)
+    ));
+    await orderForm.getByLabel("Ghi chú", { exact: true }).fill("Đóng gói thử");
+    const packed = await submit(adminPage, orderForm.getByRole("button", { name: "Xác nhận xử lý" }), "order-status");
+    assert.equal(packed.status, "PACKED");
+    assert.equal(packed.packing.steps.length, 6);
+    await orderForm.locator('select[name="action"]').selectOption("order-status");
+    await orderForm.getByLabel("Mã vận đơn", { exact: true }).fill("QA-AWB-" + suffix);
+    await orderForm.getByLabel("Ghi chú", { exact: true }).fill("Bàn giao thử");
+    const shipped = await submit(adminPage, orderForm.getByRole("button", { name: "Xác nhận xử lý" }), "order-status");
+    assert.equal(shipped.status, "SHIPPED");
+    await customerPage.reload();
+    const photoLink = customerPage.getByRole("link", { name: "Xem ảnh đóng gói", exact: true });
+    await photoLink.waitFor();
+    const photoPath = await photoLink.getAttribute("href");
+    const photo = await shopper.request.get(base + photoPath);
+    assert.equal(photo.headers()["content-type"], "image/png");
+    assert.equal((await admin.request.get(base + photoPath)).status(), 200);
+    const guest = await browser.newContext();
+    try {
+      assert.equal((await guest.request.get(base + photoPath)).status(), 401);
+    } finally {
+      await guest.close();
+    }
+    console.log("LIVE PACKING PASS: COD confirmation, picked lot, QC, six steps, photo upload, shipping, and private photo");
   } finally { await browser.close(); }
 })().catch((error) => { console.error(error); process.exitCode = 1; });

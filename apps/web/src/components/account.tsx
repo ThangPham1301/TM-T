@@ -1147,11 +1147,11 @@ function OrderAction({
   const actions = [
     ...(canPick ? ["order-pick-qc"] : []),
     ...(canPick && pickLots.length > 0 ? ["order-repick"] : []),
-    ...(row.status === "PACKED" ? ["order-reopen-packing"] : []),
     ...(row.status === "RETURNED" && row.returnStockStatus === "QUARANTINED" ? ["order-return-qc"] : []),
     ...(row.status === "RETURNED" && row.paymentStatus === "PAID" ? ["order-return-refund"] : []),
     ...(row.paymentStatus === "REVIEW" ? ["payment-resolve"] : []),
     ...(!pendingCod && nextOptions.length ? ["order-status"] : []),
+    ...(row.status === "PACKED" ? ["order-reopen-packing"] : []),
     ...(!vietQr && !pendingCod && row.paymentStatus !== "PAID" && !["CANCELLED", "RETURNED"].includes(String(row.status))
       ? ["order-paid"]
       : []),
