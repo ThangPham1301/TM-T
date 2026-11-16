@@ -670,7 +670,7 @@ export function Account({
         <ol className="store-timeline">
           {((current.history as Row[]) ?? []).map((h, i) => (
             <li key={i}>
-              <strong>{label(h.status)}</strong>
+              <strong>{h.transition === "RESUME" && "Tiếp tục xử lý · "}{label(h.status)}</strong>
               <small>{date(h.at)}</small>
               <p>{String(h.note)}</p>
             </li>
@@ -1156,13 +1156,29 @@ function CaseAction({
         EXCEPTION: ["RESUME"],
       };
   const paymentBlocked = row.resolution === "REFUND" ? paymentStatus !== "PAID" : row.resolution === "ADJUST_DUE" && paymentStatus === "PAID";
+  const refundAwaitingPayment = row.resolution === "REFUND" && paymentBlocked;
+  const resumeNeedsPayment =
+    row.status === "PAYMENT_REVIEW" ||
+    (row.status === "EXCEPTION" && ["INSPECTED", "PROCESSING"].includes(String(row.resumeStatus)));
   const next = (options[String(row.status)] ?? []).filter((step) =>
     (step !== "WAITING_STOCK" || shipment) && (step !== "PAYMENT_REVIEW" || financial) &&
-    (!paymentBlocked || !["PROCESSING", "RESOLVED"].includes(step)),
+    (!paymentBlocked || !["PROCESSING", "RESOLVED"].includes(step)) &&
+    !(refundAwaitingPayment && resumeNeedsPayment && step === "RESUME"),
   );
   const [selection, setTarget] = useState("");
   const target = next.includes(selection) ? selection : next[0];
-  if (!next.length) return null;
+  const refundNotice = refundAwaitingPayment && (
+    <div className="store-warning">
+      <p>Chưa thể tiếp tục hoàn tiền vì đơn hàng chưa được xác nhận đã thu tiền.</p>
+      <p>Nếu đã thu tiền thực tế, mở đơn hàng để ghi nhận chứng từ thu tiền hoặc đối soát thanh toán. Nếu chưa thu tiền, giữ hồ sơ chờ xác minh.</p>
+      {typeof row.orderId === "string" && (
+        <Link href={`/admin/orders?order=${encodeURIComponent(row.orderId)}`}>
+          Mở đơn hàng {String(row.orderNumber ?? "")}
+        </Link>
+      )}
+    </div>
+  );
+  if (!next.length) return refundNotice || null;
   return (
     <form
       className="store-form"
@@ -1176,7 +1192,13 @@ function CaseAction({
       }}
     >
       <h3>Xử lý hồ sơ</h3>
-      {paymentBlocked && <p className="store-warning">{row.resolution === "REFUND" ? "Cần xác nhận đã thu tiền trước khi hoàn." : "Đơn đã thu tiền. Cần chuyển sang phương án hoàn tiền."}</p>}
+      {!row.type && row.status === "INSPECTED" && (
+        <p className="store-subtle">Hàng trả đã được kiểm tra. Hồ sơ còn bước thực hiện và xác nhận kết quả.</p>
+      )}
+      {refundNotice}
+      {paymentBlocked && !refundAwaitingPayment && (
+        <p className="store-warning">Đơn đã thu tiền. Cần chuyển sang phương án hoàn tiền.</p>
+      )}
       <label>
         Bước tiếp theo
         <select
@@ -1186,7 +1208,9 @@ function CaseAction({
         >
           {next.map((s) => (
             <option key={s} value={s}>
-              {label(s)}
+              {s === "RESUME" && row.resumeStatus
+                ? `Tiếp tục xử lý → ${label(row.resumeStatus)}`
+                : label(s)}
             </option>
           ))}
         </select>

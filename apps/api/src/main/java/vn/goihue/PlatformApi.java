@@ -343,7 +343,7 @@ public class PlatformApi {
         }
         boolean privacy=action.startsWith("privacy-");String kind=privacy?"privacy":"return";var r=record(text(b,"id",50),kind,a);UUID owner=owner(str(r,"id"));
         if(number(b,"revision")!=number(r,"revision"))throw new Problem(409,"Hồ sơ vừa thay đổi. Hãy tải lại.");
-        String status=str(r,"status"),note=text(b,"note",2000);
+        String status=str(r,"status"),note=text(b,"note",2000);boolean resumed=false;
         if(action.equals("return-confirm") || action.equals("return-withdraw")) {
             permission(a,"return.create");
             if(action.equals("return-confirm")) {
@@ -404,7 +404,13 @@ public class PlatformApi {
                     }
                     case "RESUME" -> {
                         require(Set.of("WAITING_STOCK","PAYMENT_REVIEW","EXCEPTION").contains(status),"Hồ sơ không ở trạng thái chờ.");
-                        next=str(r,"resumeStatus");r.remove("resumeStatus");
+                        next=str(r,"resumeStatus");
+                        if(str(r,"resolution").equals("REFUND") && (status.equals("PAYMENT_REVIEW")
+                                || status.equals("EXCEPTION") && Set.of("INSPECTED","PROCESSING").contains(next))) {
+                            validateReturnPayment(r,a);
+                        }
+                        r.remove("resumeStatus");
+                        resumed=true;
                     }
                     case "APPROVED" -> {
                         require(status.equals("REVIEWING")||(Set.of("WAITING_STOCK","PAYMENT_REVIEW").contains(status)&&str(r,"resumeStatus").equals("APPROVED")&&str(r,"goods").equals("NOT_REQUIRED")),"Cần xem xét trước khi duyệt.");r.remove("resumeStatus");int q=number(b,"approvedQuantity");require(q>0&&q<=number(r,"quantity"),"Số lượng duyệt không hợp lệ.");if(r.containsKey("approvedQuantity"))require(q<=number(r,"approvedQuantity"),"Không thể tăng số lượng đã duyệt.");String previousResolution=str(r,"resolution");r.put("approvedQuantity",q);r.put("amount",number(r,"unitPrice")*q);r.put("resolution",text(b,"resolution",30));validateReturnResolution(str(r,"reason"),str(r,"resolution"),true);require(!Boolean.TRUE.equals(b.get("returnRequired"))||!missingReturnItem(str(r,"reason")),"Không thể thu hồi hàng chưa nhận.");r.put("goods",Boolean.TRUE.equals(b.get("returnRequired"))?"AWAITING_PICKUP":"NOT_REQUIRED");r.put("feeBearer","Gói Huế");if(!str(r,"resolution").equals(previousResolution)){r.put("proposedQuantity",r.remove("approvedQuantity"));next="CUSTOMER_CONFIRMATION";}
@@ -419,7 +425,7 @@ public class PlatformApi {
             }
             r.put("status",next);
         }
-        var history=(List<Object>)r.getOrDefault("history",new ArrayList<>());history.add(Map.of("at",Instant.now().toString(),"status",str(r,"status"),"note",note,"role",str(a,"role")));r.put("history",history);r.put("revision",number(r,"revision")+1);return save(kind,owner,r);
+        var history=(List<Object>)r.getOrDefault("history",new ArrayList<>());var entry=new LinkedHashMap<String,Object>(Map.of("at",Instant.now().toString(),"status",str(r,"status"),"note",note,"role",str(a,"role")));if(resumed)entry.put("transition","RESUME");history.add(entry);r.put("history",history);r.put("revision",number(r,"revision")+1);return save(kind,owner,r);
     }
     String bounded(Map<String,Object> b,String key,int max){String s=str(b,key);require(s.length()<=max,"Thông tin quá dài: "+key);return s;}
     Map<String,Object> export(UUID owner) {

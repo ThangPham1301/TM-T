@@ -167,7 +167,7 @@ paths:
   /command:
     post:
       operationId: platformMutation
-      description: Profile, consent, privacy, policy and return actions. Each case update requires current revision. Full fields are in state matrix.
+      description: Profile, consent, privacy, policy and return actions. Each case update requires current revision. Resuming a refund past a payment hold requires confirmed payment. Successful resumes record transition RESUME in history. Full fields are in state matrix.
       parameters:
         - {$ref: '#/components/parameters/Idempotency'}
       requestBody:
