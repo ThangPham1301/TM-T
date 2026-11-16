@@ -10,7 +10,7 @@ import { AccountOrders } from "./account-orders";
 import { accountNavigation } from "@/shared/layout/navigation";
 import { PaymentPanel } from "./payment-panel";
 import { OrderBadges, OrderTimeline } from "./order-presentation";
-import { ReturnRequestForm } from "./return-request-form";
+import { ReturnRequestForm, getReturnableProducts } from "./return-request-form";
 import { ProductImage } from "./product/product-image";
 import styles from "./journey.module.css";
 import { WorkspaceNav, Pagination } from "./workspace-nav";
@@ -35,7 +35,7 @@ export function Account({
 }) {
   const { state, loading, busy, run, mutate, logout } = useStore(),
     [selected, setSelected] = useState<Row | null>(null),
-    [returnOrderId, setReturnOrderId] = useState(""),
+    [returnOrderId, setReturnOrderId] = useState<string | null>(null),
     [files, setFiles] = useState<File[]>([]),
     [supplementFiles, setSupplementFiles] = useState<File[]>([]),
     [orderQuery, setOrderQuery] = useState(""),
@@ -88,9 +88,13 @@ export function Account({
   const linkedReturnItem = (linkedReturnOrder?.items as Row[] | undefined)?.find(
     (item) => item.productId === current?.lineId,
   );
-  const returnOrder = section === "returns"
-    ? state.orders.find((order) => order.id === returnOrderId)
-    : current;
+  const deliveredOrders = section === "returns" && !admin
+    ? state.orders.filter((order) => order.status === "DELIVERED")
+    : [];
+  const defaultReturnOrderId = returnOrderId === null
+    ? (deliveredOrders.find((order) => getReturnableProducts(order, state.returns).some(({ remaining }) => remaining > 0)) ?? deliveredOrders[0])?.id ?? ""
+    : returnOrderId;
+  const returnOrder = deliveredOrders.find((order) => order.id === defaultReturnOrderId);
   const orderItems = (current?.items as Row[] | undefined) ?? [];
   const customerReturnDetail = !admin && section === "returns";
   const history = (current?.history as Row[] | undefined) ?? [];
@@ -579,6 +583,9 @@ export function Account({
                 </div>
               </div>
             )}
+            {customerReturnDetail && current.status === "EXCEPTION" && (
+              <p className="store-subtle">Hồ sơ đang chờ cửa hàng xử lý vướng mắc. Bạn có thể theo dõi tiến độ trong lịch sử bên dưới.</p>
+            )}
             {!admin &&
               !current.type &&
               ["REQUESTED", "REVIEWING", "EVIDENCE_REQUIRED", "CUSTOMER_CONFIRMATION"].includes(
@@ -829,7 +836,7 @@ export function Account({
                       <label>
                         1. Chọn đơn hàng đã giao
                         <select
-                          value={returnOrderId}
+                          value={returnOrder?.id ?? ""}
                           onChange={(event) => {
                             setFiles([]);
                             setReturnLines([{ id: 0, productId: "", reason: "DAMAGED" }]);
@@ -837,14 +844,14 @@ export function Account({
                           }}
                         >
                           <option value="">Chọn đơn hàng</option>
-                          {state.orders.filter((order) => order.status === "DELIVERED").map((order) => (
+                          {deliveredOrders.map((order) => (
                             <option key={order.id} value={order.id}>
-                              {String(order.number)} · {new Date(String(order.deliveredAt)).toLocaleDateString("vi-VN")} · {((order.items as Row[] | undefined) ?? []).reduce((sum, item) => sum + Number(item.quantity), 0)} món · {money(order.total)}
+                              {String(order.number)} · Giao ngày {new Date(String(order.deliveredAt)).toLocaleDateString("vi-VN")} · {((order.items as Row[] | undefined) ?? []).reduce((sum, item) => sum + Number(item.quantity), 0)} món · {money(order.total)}
                             </option>
                           ))}
                         </select>
                       </label>
-                      {!state.orders.some((order) => order.status === "DELIVERED") && (
+                      {!deliveredOrders.length && (
                         <p className="store-subtle">Bạn chưa có đơn đã giao. <Link href="/account/orders">Xem đơn hàng</Link></p>
                       )}
                     </div>
@@ -854,6 +861,7 @@ export function Account({
                         order={returnOrder}
                         returns={state.returns}
                         busy={busy}
+                        onReset={() => setReturnOrderId("")}
                         onSubmit={(items, photos) => {
                           void run(async () => {
                             const evidenceIds = await upload(photos);

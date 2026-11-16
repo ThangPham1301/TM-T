@@ -22,15 +22,32 @@ type DraftLine = {
   resolution: string;
 };
 
+export function getReturnableProducts(order: Row, returns: Row[]) {
+  return ((order.items as Row[] | undefined) ?? []).map((item) => {
+    const claims = returns.filter((row) =>
+      row.orderId === order.id && row.lineId === item.productId &&
+      !["REJECTED", "WITHDRAWN"].includes(String(row.status)),
+    );
+    const reserved = claims.reduce((sum, row) => sum + Number(row.approvedQuantity ?? row.quantity), 0);
+    return {
+      item,
+      remaining: Math.max(0, Number(item.quantity) - reserved),
+      pending: claims.some((row) => row.status !== "RESOLVED"),
+    };
+  });
+}
+
 export function ReturnRequestForm({
   order,
   returns,
   busy,
   onSubmit,
+  onReset,
 }: {
   order: Row;
   returns: Row[];
   busy: boolean;
+  onReset: () => void;
   onSubmit: (items: DraftLine[], photos: File[]) => void;
 }) {
   const [lines, setLines] = useState<DraftLine[]>([]);
@@ -39,12 +56,8 @@ export function ReturnRequestForm({
   const input = useRef<HTMLInputElement>(null);
   const late = Date.now() - Date.parse(String(order.deliveredAt)) > 7 * 86400000;
   const availableReasons = late ? reasons.filter(([code]) => code === "UNSAFE" || code === "QUALITY") : reasons;
-  const products = ((order.items as Row[] | undefined) ?? []).map((item) => ({
-    item,
-    remaining: Math.max(0, Number(item.quantity) - returns
-      .filter((row) => row.orderId === order.id && row.lineId === item.productId && !["REJECTED", "WITHDRAWN"].includes(String(row.status)))
-      .reduce((sum, row) => sum + Number(row.approvedQuantity ?? row.quantity), 0)),
-  }));
+  const products = getReturnableProducts(order, returns);
+  const hasAvailableProducts = products.some(({ remaining }) => remaining > 0);
 
   function update(lineId: string, patch: Partial<DraftLine>) {
     setLines((current) => current.map((line) => line.lineId === lineId ? { ...line, ...patch } : line));
@@ -56,13 +69,6 @@ export function ReturnRequestForm({
     setPhotos(invalid ? [] : files);
   }
 
-  function reset() {
-    setLines([]);
-    setPhotos([]);
-    setFileError("");
-    if (input.current) input.current.value = "";
-  }
-
   return (
     <form className="store-form b07-return-form" onSubmit={(event) => {
       event.preventDefault();
@@ -71,7 +77,7 @@ export function ReturnRequestForm({
     }}>
       <fieldset className="b07-products">
         <legend>2. Chọn sản phẩm yêu cầu hỗ trợ</legend>
-        {products.map(({ item, remaining }) => {
+        {products.map(({ item, remaining, pending }) => {
           const id = String(item.productId);
           const line = lines.find((entry) => entry.lineId === id);
           return (
@@ -84,7 +90,11 @@ export function ReturnRequestForm({
                     : current.filter((entry) => entry.lineId !== id));
                 }} />
                 {typeof item.image === "string" && <ProductImage src={item.image} alt="" width={42} height={42} />}
-                <span><strong>{String(item.name)}</strong><small>Còn quyền đổi {remaining} sản phẩm</small></span>
+                <span><strong>{String(item.name)}</strong><small>{remaining > 0
+                  ? `Còn quyền đổi ${remaining} sản phẩm`
+                  : pending
+                    ? "Số lượng đã được giữ trong hồ sơ đang xử lý"
+                    : "Số lượng đã được xử lý đổi trả"}</small></span>
               </label>
               {line && <input type="number" aria-label={`Số lượng ${String(item.name)}`} min={1} max={remaining} required value={line.quantity}
                 onChange={(event) => update(id, { quantity: Number(event.target.value) })} />}
@@ -92,6 +102,11 @@ export function ReturnRequestForm({
           );
         })}
       </fieldset>
+      {!hasAvailableProducts && (
+        <p className="store-warning">
+          Đơn này không còn sản phẩm có thể gửi yêu cầu mới. Xem hồ sơ đổi trả hiện có hoặc chọn một đơn đã giao khác.
+        </p>
+      )}
       {lines.length > 0 && (
         <>
           <fieldset className="b07-fields">
@@ -160,7 +175,7 @@ export function ReturnRequestForm({
       )}
       <div className="b07-buttons">
         <button disabled={busy || !lines.length || Boolean(fileError)}>Gửi yêu cầu đổi trả</button>
-        <button type="button" className="store-btn-secondary" disabled={busy} onClick={reset}>Làm mới</button>
+        <button type="button" className="store-btn-secondary" disabled={busy} onClick={onReset}>Làm mới</button>
       </div>
     </form>
   );
