@@ -4,9 +4,11 @@ import { accountNavigation, adminNavigation } from "@/shared/layout/navigation";
 export function WorkspaceNav({
   admin = false,
   section,
+  showIcons = false,
 }: {
   admin?: boolean;
   section: string;
+  showIcons?: boolean;
 }) {
   const sections = admin ? adminNavigation : accountNavigation;
   return (
@@ -14,13 +16,16 @@ export function WorkspaceNav({
       className="store-tabs"
       aria-label={admin ? "Chức năng quản trị" : "Chức năng tài khoản"}
     >
-      {sections.map(({ key, label: name, href }) => (
+      {sections.map(({ key, label: name, href, icon }) => (
         <Link
           className={section === key ? "active" : ""}
           key={key}
           href={href}
+          aria-current={section === key ? "page" : undefined}
+          aria-label={showIcons ? name : undefined}
         >
-          {name}
+          {showIcons && icon && <span className="material-symbols-outlined operations-nav-icon" aria-hidden="true">{icon}</span>}
+          {showIcons ? <span className="operations-nav-label">{name}</span> : name}
         </Link>
       ))}
     </nav>

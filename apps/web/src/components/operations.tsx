@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { date, fields, label, type Row } from "@/lib/store";
+import { PolicyPreview } from "./policy-preview";
 import { Pagination, WorkspaceNav } from "./workspace-nav";
 
 export function OperationsWorkspace({
@@ -21,24 +22,36 @@ export function OperationsWorkspace({
   onLogout: () => void;
   children: ReactNode;
 }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const area = section === "returns" ? "Chăm sóc khách hàng"
+    : section === "settings" ? "Thiết lập hệ thống"
+    : section === "policies" ? "Quản lý nội dung" : "Giám sát hệ thống";
   return (
-    <div className="admin-returns">
-      <aside className="returns-admin-sidebar">
+    <div className="admin-returns" data-sidebar-collapsed={collapsed}>
+      <aside className="returns-admin-sidebar" id="operations-sidebar">
         <header>
           <Image className="operations-brand-mark" src="/images/stitch/asset-08.png" width={48} height={38} alt="" />
           <div><strong>Quản trị Gói Huế</strong><small>Quản lý cửa hàng</small></div>
         </header>
-        <WorkspaceNav admin section={section} />
+        <WorkspaceNav admin section={section} showIcons />
         <div className="returns-admin-links">
           <Link href="/">Xem cửa hàng →</Link>
-          <small>{userName}</small>
+          <div className="operations-admin-profile">
+            <span aria-hidden="true">{userName.trim().split(/\s+/).slice(-2).map((word) => word[0]).join("")}</span>
+            <div><strong>{userName}</strong><small>Quản trị viên</small></div>
+          </div>
           <button type="button" onClick={onLogout}>Đăng xuất</button>
         </div>
       </aside>
       <main className="returns-admin-main">
         <div className="returns-admin-topbar">
-          <span>Quản trị › {title}</span>
+          <button className="operations-toggle-sidebar" type="button" aria-controls="operations-sidebar" aria-expanded={!collapsed}
+            onClick={() => setCollapsed((current) => !current)}>
+            {collapsed ? "Mở menu" : "Thu gọn menu"}
+          </button>
+          <span className="operations-breadcrumb">Quản trị › {area} › {title}</span>
           <Link href="/">Xem cửa hàng</Link>
+          <span className="store-status-chip">{userName}</span>
         </div>
         <header className="returns-heading returns-admin-heading">
           <div><h1>{title}</h1><p>{description}</p></div>
@@ -260,11 +273,33 @@ export function PolicyEditor({
   const [content, setContent] = useState(String(policy.content ?? ""));
   const [viewedId, setViewedId] = useState("");
   const viewed = versions.find((entry) => entry.id === viewedId);
+  const editor = useRef<HTMLTextAreaElement>(null);
+
+  function format(prefix: string, suffix = "", linePrefix = false) {
+    const input = editor.current;
+    if (!input) return;
+    const selectionStart = linePrefix ? content.lastIndexOf("\n", input.selectionStart - 1) + 1 : input.selectionStart;
+    const selectionEnd = input.selectionEnd;
+    const selection = content.slice(selectionStart, selectionEnd);
+    const replacement = linePrefix
+      ? selection.split("\n").map((line) => prefix + line).join("\n")
+      : prefix + selection + suffix;
+    const next = content.slice(0, selectionStart) + replacement + content.slice(selectionEnd);
+    if (next.length > input.maxLength) return;
+    setViewedId("");
+    setContent(next);
+    requestAnimationFrame(() => {
+      input.focus();
+      input.setSelectionRange(selectionStart + prefix.length, selectionStart + replacement.length - suffix.length);
+    });
+  }
+
   return (
     <>
       <aside className="operations-notice">
         <span className="operations-notice-mark" aria-hidden="true">!</span>
-        <div><h2>Chế độ bản thảo</h2><p>Phiên bản lưu trong hệ thống đang ở trạng thái dự thảo. Xem trước nội dung trước khi lưu phiên bản mới.</p></div>
+        <div><h2>Phạm vi áp dụng chính sách</h2><p>Trình biên tập lưu bản thảo chính sách bảo mật. Xem trước nội dung trước khi lưu phiên bản mới.</p></div>
+        <span className="store-status-chip">Phiên bản {String(policy.version ?? "—")}</span>
       </aside>
       <div className="operations-policy-grid">
         <section className="store-card operations-history">
@@ -293,9 +328,15 @@ export function PolicyEditor({
               Tiêu đề chính sách
               <input value={String(policy.title ?? "Chính sách bảo mật Gói Huế")} readOnly />
             </label>
+            <div className="operations-markdown-toolbar" role="group" aria-label="Định dạng Markdown">
+              <button type="button" aria-label="In đậm" onClick={() => format("**", "**")}><strong>B</strong></button>
+              <button type="button" aria-label="In nghiêng" onClick={() => format("*", "*")}><em>I</em></button>
+              <button type="button" aria-label="Tiêu đề cấp 3" onClick={() => format("### ", "", true)}>H3</button>
+              <button type="button" aria-label="Danh sách" onClick={() => format("- ", "", true)}>List</button>
+            </div>
             <label>
-              Nội dung
-              <textarea name="content" rows={16} required maxLength={16000} value={content} onChange={(event) => {
+              Nội dung Markdown
+              <textarea ref={editor} name="content" rows={16} required maxLength={16000} value={content} onChange={(event) => {
                 setContent(event.target.value);
                 setViewedId("");
               }} />
@@ -310,9 +351,10 @@ export function PolicyEditor({
             <Link href="/privacy-policy">Xem trang cửa hàng ↗</Link>
           </div>
           <article>
+            <small className="eyebrow">Storefront preview</small>
             <p className="store-status-chip">Dự thảo{(viewed?.version || version.trim()) && ` · ${String(viewed?.version || version.trim())}`}</p>
             <h3>{String(viewed?.title ?? policy.title)}</h3>
-            <div className="store-policy">{String(viewed?.content ?? content) || "Nhập nội dung để xem trước."}</div>
+            <PolicyPreview content={String(viewed?.content ?? content) || "Nhập nội dung để xem trước."} />
           </article>
           {viewed && <button type="button" className="store-btn-secondary" onClick={() => setViewedId("")}>Quay lại bản đang soạn</button>}
         </section>
@@ -321,20 +363,72 @@ export function PolicyEditor({
   );
 }
 
+const auditActions: Record<string, [string, string]> = {
+  LOGIN: ["Tài khoản", "Đăng nhập"],
+  PASSWORD_CHANGED: ["Tài khoản", "Đổi mật khẩu"],
+  profile: ["Tài khoản", "Cập nhật hồ sơ"],
+  "address-save": ["Tài khoản", "Lưu địa chỉ"],
+  "address-delete": ["Tài khoản", "Xóa địa chỉ"],
+  consent: ["Quyền riêng tư", "Cập nhật đồng ý"],
+  "privacy-create": ["Quyền riêng tư", "Gửi yêu cầu về dữ liệu"],
+  "privacy-update": ["Quyền riêng tư", "Xử lý yêu cầu về dữ liệu"],
+  "privacy-supplement": ["Quyền riêng tư", "Bổ sung yêu cầu về dữ liệu"],
+  policy: ["Chính sách", "Lưu bản thảo"],
+  "shipping-save": ["Cấu hình", "Lưu cấu hình bán hàng"],
+  "return-create": ["Đổi trả", "Tạo yêu cầu đổi trả"],
+  "return-submit": ["Đổi trả", "Gửi yêu cầu đổi trả"],
+  "return-update": ["Đổi trả", "Cập nhật hồ sơ đổi trả"],
+  "return-supplement": ["Đổi trả", "Bổ sung bằng chứng"],
+  "return-withdraw": ["Đổi trả", "Rút yêu cầu"],
+  "return-confirm": ["Đổi trả", "Xác nhận phương án"],
+  EVIDENCE_STORED_UNSCANNED: ["Đổi trả", "Lưu ảnh bằng chứng"],
+  checkout: ["Đơn hàng", "Tạo đơn hàng"],
+  "order-status": ["Đơn hàng", "Cập nhật trạng thái đơn"],
+  "order-paid": ["Đơn hàng", "Ghi nhận đã thu tiền"],
+  "order-cancel": ["Đơn hàng", "Hủy đơn hàng"],
+  "order-recipient": ["Đơn hàng", "Cập nhật người nhận"],
+  "payment-resolve": ["Đơn hàng", "Đối soát thanh toán"],
+  "cart-set": ["Giỏ hàng", "Cập nhật giỏ"],
+  "cart-clear": ["Giỏ hàng", "Xóa giỏ hàng"],
+  "cart-refresh": ["Giỏ hàng", "Làm mới giỏ hàng"],
+  "product-save": ["Danh mục và sản phẩm", "Lưu sản phẩm"],
+  "product-delete": ["Danh mục và sản phẩm", "Xóa sản phẩm"],
+  "category-save": ["Danh mục và sản phẩm", "Lưu danh mục"],
+  "category-delete": ["Danh mục và sản phẩm", "Xóa danh mục"],
+  "catalog-toggle": ["Danh mục và sản phẩm", "Cập nhật hiển thị"],
+  "catalog-image-intent": ["Danh mục và sản phẩm", "Chuẩn bị tải ảnh"],
+  CATALOG_IMAGE_UPLOADED: ["Danh mục và sản phẩm", "Tải ảnh sản phẩm"],
+};
+
+function auditAction(action: unknown) {
+  const code = String(action ?? "");
+  return auditActions[code] ?? ["Khác", code || "—"];
+}
+
 export function AuditLog({ rows }: { rows: Row[] }) {
   const [query, setQuery] = useState("");
   const [action, setAction] = useState("");
   const [actor, setActor] = useState("");
+  const [module, setModule] = useState("");
+  const [period, setPeriod] = useState("");
+  const [jump, setJump] = useState("");
+  const modules = [...new Set(rows.map((row) => auditAction(row.action)[0]))].sort();
+  const periodStart = new Date();
+  periodStart.setHours(0, 0, 0, 0);
+  if (period) periodStart.setDate(periodStart.getDate() - Number(period) + 1);
   const [from, setFrom] = useState("");
   const actors = [...new Set(rows.flatMap((row) => typeof row.actorName === "string" ? [row.actorName] : []))].sort();
   const [page, setPage] = useState(1);
   const filtered = rows.filter((row) =>
     (!action || row.action === action) &&
     (!actor || row.actorName === actor) &&
+    (!module || auditAction(row.action)[0] === module) &&
+    (!period || new Date(String(row.at)).getTime() >= periodStart.getTime()) &&
     (!from || new Date(String(row.at)).getTime() >= new Date(`${from}T00:00:00`).getTime()) &&
-    [row.subject, row.action, row.actorName].some((value) => String(value ?? "").toLowerCase().includes(query.trim().toLowerCase())),
+    [row.subject, row.subjectLabel, row.action, auditAction(row.action)[1], row.actorName].some((value) => String(value ?? "").toLowerCase().includes(query.trim().toLowerCase())),
   );
-  const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)));
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, pages);
 
   return (
     <div className="operations-audit">
@@ -346,7 +440,7 @@ export function AuditLog({ rows }: { rows: Row[] }) {
         <div className="store-list-heading">
           <h2>Bộ lọc truy vết sự kiện</h2>
           <button type="button" onClick={() => {
-            setQuery(""); setActor(""); setAction(""); setFrom(""); setPage(1);
+            setQuery(""); setActor(""); setAction(""); setModule(""); setPeriod(""); setFrom(""); setJump(""); setPage(1);
           }}>Đặt lại tiêu chí</button>
         </div>
         <div className="store-filters">
@@ -365,7 +459,7 @@ export function AuditLog({ rows }: { rows: Row[] }) {
             }}>
               <option value="">Tất cả hành động</option>
               {[...new Set(rows.map((row) => String(row.action)))].sort().map((value) => (
-                <option key={value} value={value}>{value}</option>
+                <option key={value} value={value}>{auditAction(value)[1]}</option>
               ))}
             </select>
           </label>
@@ -377,8 +471,24 @@ export function AuditLog({ rows }: { rows: Row[] }) {
             </select>
           </label>
           <label>
+            Phân hệ hoạt động
+            <select value={module} onChange={(event) => { setModule(event.target.value); setPage(1); }}>
+              <option value="">Tất cả phân hệ</option>
+              {modules.map((name) => <option key={name}>{name}</option>)}
+            </select>
+          </label>
+          <label>
+            Khoảng thời gian
+            <select value={period} onChange={(event) => { setPeriod(event.target.value); setFrom(""); setPage(1); }}>
+              <option value="">Tất cả thời gian</option>
+              <option value="1">Hôm nay</option>
+              <option value="7">7 ngày</option>
+              <option value="30">30 ngày</option>
+            </select>
+          </label>
+          <label>
             Từ ngày
-            <input type="date" value={from} onChange={(event) => { setFrom(event.target.value); setPage(1); }} />
+            <input type="date" value={from} onChange={(event) => { setFrom(event.target.value); setPeriod(""); setPage(1); }} />
           </label>
         </div>
       </section>
@@ -387,21 +497,46 @@ export function AuditLog({ rows }: { rows: Row[] }) {
         {filtered.length ? (
           <div className="operations-table">
             <table>
-              <thead><tr><th scope="col">Thời gian</th><th scope="col">Tác nhân</th><th scope="col">Hành động</th><th scope="col">Đối tượng</th></tr></thead>
+              <thead><tr><th scope="col">Thời gian</th><th scope="col">Tác nhân</th><th scope="col">Hành động</th><th scope="col">Đối tượng</th><th scope="col">Mô tả nghiệp vụ</th><th scope="col">Chi tiết bản ghi</th></tr></thead>
               <tbody>
                 {filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((row) => (
                   <tr key={row.id}>
                     <td>{date(row.at)}</td>
                     <td>{String(row.actorName ?? "—")}{row.actorRole ? ` · ${String(row.actorRole)}` : ""}</td>
-                    <td><span className="store-status-chip">{String(row.action)}</span></td>
-                    <td>{String(row.subject || "—")}</td>
+                    <td><span className="store-status-chip">{auditAction(row.action)[1]}</span></td>
+                    <td>{row.subjectLabel ? String(row.subjectLabel) : row.subject ? `#${String(row.subject).slice(0, 8)}` : "—"}</td>
+                    <td>{auditAction(row.action)[0]} · {auditAction(row.action)[1]}</td>
+                    <td>
+                      <details>
+                        <summary>Xem chi tiết</summary>
+                        <dl className="audit-record-details">
+                          <dt>Mã sự kiện</dt><dd>{String(row.id)}</dd>
+                          <dt>Mã hành động</dt><dd>{String(row.action)}</dd>
+                          <dt>Đối tượng</dt><dd>{String(row.subject || "—")}</dd>
+                          {row.subjectKind != null && <><dt>Loại đối tượng</dt><dd>{String(row.subjectKind)}</dd></>}
+                        </dl>
+                      </details>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : <p className="store-empty">{rows.length ? "Không tìm thấy sự kiện phù hợp." : "Chưa có hoạt động."}</p>}
-        {filtered.length > pageSize && <Pagination page={currentPage} total={filtered.length} pageSize={pageSize} onChange={setPage} />}
+        {pages > 1 && (
+          <div className="operations-pagination">
+            <Pagination page={currentPage} total={filtered.length} pageSize={pageSize} onChange={setPage} />
+            <form onSubmit={(event) => {
+              event.preventDefault();
+              const targetPage = Number(jump);
+              if (targetPage >= 1 && targetPage <= pages) setPage(targetPage);
+            }}>
+              <label>Đến trang <input type="number" min={1} max={pages} required value={jump}
+                onChange={(event) => setJump(event.target.value)} /></label>
+              <button>Đi</button>
+            </form>
+          </div>
+        )}
       </section>
     </div>
   );

@@ -85,7 +85,7 @@ paths:
     get:
       operationId: accountState
       responses:
-        '200': {description: User and role-scoped collections including saved addresses for CUSTOMER and audit/policy versions for ADMIN. Each ADMIN audit entry includes id, subject, action, at, and nullable actorName and actorRole.}
+        '200': {description: User and role-scoped collections including saved addresses for CUSTOMER and audit/policy versions for ADMIN. Each ADMIN audit entry includes id, subject, action, at, and nullable actorName, actorRole, subjectKind and subjectLabel.}
         '401': {$ref: '#/components/responses/Error'}
   /cart:
     get:
