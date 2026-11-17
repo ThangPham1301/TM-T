@@ -1,0 +1,404 @@
+[
+  {
+    "route": "/register",
+    "title": "Gói Huế - Tạo Tài Khoản (/register)",
+    "screen": "projects/3762085109118983605/screens/0ee399bd61054ea2b4b01b25c20fe153",
+    "htmlResource": "projects/3762085109118983605/files/9711118546590364089",
+    "headings": [
+      "Gắn kết phong vị, trọn vẹn thâm tình",
+      "Tạo tài khoản",
+      "Đăng ký thành công!"
+    ],
+    "tables": 0,
+    "dialogs": 0
+  },
+  {
+    "route": "/products",
+    "title": "Gói Huế - Bộ Sưu Tập (/products)",
+    "screen": "projects/3762085109118983605/screens/b5facac6342e4dfcaba78ad88227bc9f",
+    "htmlResource": "projects/3762085109118983605/files/3170098152687510866",
+    "headings": [
+      "Bộ Sưu Tập Gói Huế",
+      "Danh mục sản phẩm category",
+      "Khoảng giá (VNĐ) payments",
+      "Trạng thái sản phẩm inventory_2",
+      "Mè xửng giòn Gói Huế",
+      "Mè xửng dẻo mạch nha truyền thống",
+      "Mứt sen Tịnh Tâm ngào đường phèn",
+      "Trà Cung Đình thượng hạng 16 vị",
+      "Hộp quà Đoàn Viên trang nhã",
+      "Hộp quà Di Sản Cố Đô đặc biệt",
+      "Hộp quà Gói Chút Huế Gửi Nhau",
+      "Khám phá",
+      "Chính sách &amp; Hỗ trợ",
+      "Thông tin liên hệ"
+    ],
+    "tables": 0,
+    "dialogs": 0
+  },
+  {
+    "route": "/login",
+    "title": "Gói Huế - Đăng Nhập (/login)",
+    "screen": "projects/3762085109118983605/screens/71a753a2bb8246bfbcc650b3c9020347",
+    "htmlResource": "projects/3762085109118983605/files/18074692481639194447",
+    "headings": [
+      "“Gói chút Huế, gửi yêu thương.”",
+      "Đăng nhập"
+    ],
+    "tables": 0,
+    "dialogs": 0
+  },
+  {
+    "route": "/admin/returns",
+    "title": "Xử lý yêu cầu đổi trả (/admin/returns)",
+    "screen": "projects/3762085109118983605/screens/bd1b39f746304959ac2e3a6a96961ea4",
+    "htmlResource": "projects/3762085109118983605/files/4916864278948007101",
+    "headings": [
+      "QUẢN TRỊ GÓI HUẾ",
+      "Xử lý yêu cầu đổi trả",
+      "Yêu cầu #RT-1042"
+    ],
+    "tables": 1,
+    "dialogs": 0
+  },
+  {
+    "route": "/account/security",
+    "title": "Gói Huế - Bảo Mật Tài Khoản (/account/security)",
+    "screen": "projects/3762085109118983605/screens/2ce54165139f411cb0a594c69a38e9d1",
+    "htmlResource": "projects/3762085109118983605/files/5087627619424068136",
+    "headings": [
+      "Trung Tâm Tài Khoản",
+      "Bảo mật tài khoản",
+      "Thay đổi mật khẩu đăng nhập",
+      "Lưu ý bảo mật tài khoản"
+    ],
+    "tables": 0,
+    "dialogs": 0
+  },
+  {
+    "route": "/admin/categories",
+    "title": "Quản lý danh mục (/admin/categories)",
+    "screen": "projects/3762085109118983605/screens/a2d8840dd02043bdb9277539238e9add",
+    "htmlResource": "projects/3762085109118983605/files/4026498358520079018",
+    "headings": [
+      "QUẢN TRỊ GÓI HUẾ",
+      "Quản lý danh mục",
+      "Danh sách danh mục đặc sản",
+      "Chỉnh sửa danh mục",
+      "Xác nhận xóa danh mục"
+    ],
+    "tables": 1,
+    "dialogs": 2
+  },
+  {
+    "route": "/",
+    "title": "Gói Huế - Trang Chủ (/)",
+    "screen": "projects/3762085109118983605/screens/b07bdab80e8947f6a4f730ab3811c85d",
+    "htmlResource": "projects/3762085109118983605/files/4357161207403405871",
+    "headings": [
+      "Phong vị Huế",
+      "Tinh hoa truyền thống",
+      "Chất lượng tinh tuyển",
+      "Tận tâm từng gói",
+      "Quà tặng ý nghĩa",
+      "Danh mục quà",
+      "Sản phẩm bán chạy",
+      "Mè xửng giòn Cố Đô",
+      "Mè xửng dẻo Cố Đô",
+      "Mứt hạt sen Tịnh Tâm",
+      "Trà Cung Đình 20 túi lọc",
+      "Hộp Quà Di Sản Cố Đô",
+      "Kẹo đậu phộng giòn mè",
+      "Set Quà Tặng Gói Huế",
+      "Hộp Quà Đoàn Viên (400g)",
+      "Hộp Quà Di Sản Cố Đô (900g)",
+      "Thư Viện Khoảnh Khắc",
+      "Gói chút Huế gửi nhau...",
+      "Khám phá",
+      "Chính sách &amp; Hỗ trợ",
+      "Thông tin liên hệ"
+    ],
+    "tables": 0,
+    "dialogs": 0
+  },
+  {
+    "route": "/admin/settings",
+    "title": "Quản lý cấu hình bán hàng (/admin/settings)",
+    "screen": "projects/3762085109118983605/screens/c11d8e8135024c03ba8abfead382c973",
+    "htmlResource": "projects/3762085109118983605/files/5623601838818797406",
+    "headings": [
+      "QUẢN TRỊ GÓI HUẾ",
+      "Cấu hình bán hàng &amp; vận chuyển",
+      "Lưu ý nghiệp vụ quan trọng",
+      "Cấu hình vận chuyển tiêu chuẩn",
+      "Trạng thái tiếp nhận đơn hàng",
+      "Xác nhận cập nhật vận hành"
+    ],
+    "tables": 0,
+    "dialogs": 0
+  },
+  {
+    "route": "/checkout",
+    "title": "Gói Huế - Thanh Toán (/checkout)",
+    "screen": "projects/3762085109118983605/screens/cbed4a7097fe4877b4a0a2e56135650d",
+    "htmlResource": "projects/3762085109118983605/files/2144910179362892486",
+    "headings": [
+      "Địa chỉ gửi gắm &amp; Thông tin người nhận",
+      "Thông tin người nhận",
+      "Địa chỉ giao nhận đặc sản",
+      "Phương thức thanh toán",
+      "Đơn hàng của bạn (3 món)",
+      "Gói Huế Đã Nhận Đơn Hàng!",
+      "Khám phá",
+      "Chính sách &amp; Hỗ trợ",
+      "Thông tin liên hệ"
+    ],
+    "tables": 0,
+    "dialogs": 0
+  },
+  {
+    "route": "/account/addresses",
+    "title": "Gói Huế - Sổ Địa Chỉ (/account/addresses)",
+    "screen": "projects/3762085109118983605/screens/49294fee715d4d4a903ec5ab22952931",
+    "htmlResource": "projects/3762085109118983605/files/8067278437941097676",
+    "headings": [
+      "Tài Khoản Của Tôi",
+      "Sổ địa chỉ nhận hàng",
+      "Nguyễn Văn An",
+      "Nguyễn Văn An",
+      "Thêm địa chỉ mới",
+      "Xác nhận xóa"
+    ],
+    "tables": 0,
+    "dialogs": 0
+  },
+  {
+    "route": "/account/profile",
+    "title": "Gói Huế - Hồ Sơ Cá Nhân (/account/profile)",
+    "screen": "projects/3762085109118983605/screens/ad34af91f3c34f428d18a4ed2bfc8ff3",
+    "htmlResource": "projects/3762085109118983605/files/2381991722735838529",
+    "headings": [
+      "Tài Khoản Của Tôi",
+      "Hồ sơ cá nhân",
+      "Nguyễn Văn An",
+      "Thông tin cá nhân",
+      "Địa chỉ &amp; Tùy chọn"
+    ],
+    "tables": 0,
+    "dialogs": 0
+  },
+  {
+    "route": "/account/returns",
+    "title": "Gói Huế - Yêu Cầu Đổi Trả (/account/returns)",
+    "screen": "projects/3762085109118983605/screens/42e5a0c8cb2c45f193522d4f769420e6",
+    "htmlResource": "projects/3762085109118983605/files/13252517786589549887",
+    "headings": [
+      "Tài Khoản Của Tôi",
+      "Yêu cầu đổi trả &amp; hoàn tiền",
+      "Hồ sơ khiếu nại hiện hành",
+      "Mè xửng dẻo Gói Huế",
+      "Tạo yêu cầu đổi trả mới"
+    ],
+    "tables": 0,
+    "dialogs": 0
+  },
+  {
+    "route": "/admin/products",
+    "title": "Quản lý sản phẩm (/admin/products)",
+    "screen": "projects/3762085109118983605/screens/0f58088613a1435eaab1c7bd526ad7b6",
+    "htmlResource": "projects/3762085109118983605/files/12238766782862757078",
+    "headings": [
+      "QUẢN TRỊ GÓI HUẾ",
+      "Quản lý sản phẩm",
+      "Chỉnh sửa sản phẩm: Mè Xửng Giòn Cố Đô",
+      "SECTION 1 — Thông tin cơ bản",
+      "SECTION 2 — Thông tin bán hàng",
+      "SECTION 3 — Hình ảnh sản phẩm (Hiện hành)",
+      "SECTION 4 — Thao tác lưu &amp; Xác nhận dữ liệu"
+    ],
+    "tables": 1,
+    "dialogs": 0
+  },
+  {
+    "route": "/account/privacy",
+    "title": "Gói Huế - Quyền Riêng Tư & Dữ Liệu (/account/privacy)",
+    "screen": "projects/3762085109118983605/screens/40343764479546ce84218b83856d3d2e",
+    "htmlResource": "projects/3762085109118983605/files/776357662363266187",
+    "headings": [
+      "TÀI KHOẢN CỦA TÔI",
+      "Quyền riêng tư &amp; Dữ liệu cá nhân",
+      "Quyền của bạn",
+      "Xem dữ liệu cá nhân",
+      "Xuất dữ liệu cá nhân",
+      "Yêu cầu xóa dữ liệu",
+      "Hạn chế xử lý dữ liệu",
+      "Gửi khiếu nại",
+      "Gửi yêu cầu về dữ liệu cá nhân",
+      "Lịch sử yêu cầu"
+    ],
+    "tables": 1,
+    "dialogs": 0
+  },
+  {
+    "route": "/admin/audit",
+    "title": "Nhật ký hoạt động hệ thống (/admin/audit)",
+    "screen": "projects/3762085109118983605/screens/5963c51118b24db09b7532fd65db1cfa",
+    "htmlResource": "projects/3762085109118983605/files/17542861426559691657",
+    "headings": [
+      "QUẢN TRỊ GÓI HUẾ",
+      "Nhật ký hoạt động quản trị (Audit Log)"
+    ],
+    "tables": 1,
+    "dialogs": 0
+  },
+  {
+    "route": "/return-policy",
+    "title": "Gói Huế - Chính Sách Đổi Trả (/return-policy)",
+    "screen": "projects/3762085109118983605/screens/462bd72877e8441b995ec9676aa8964f",
+    "htmlResource": "projects/3762085109118983605/files/6028958205860142508",
+    "headings": [
+      "Chính sách đổi trả",
+      "Mục Lục Quy Chế",
+      "Phạm vi áp dụng",
+      "Bánh mè xửng Cố Đô",
+      "Mứt hạt sen Tịnh Tâm",
+      "Trà cung đình Huế",
+      "Hộp quà tặng Cố Đô",
+      "Thời hạn và bằng chứng tiếp nhận",
+      "1. Thời hạn thông báo",
+      "2. Yêu cầu bằng chứng hình ảnh và video",
+      "Phương án xử lý",
+      "Đổi mới sản phẩm",
+      "Hoàn tiền theo quy định",
+      "Thu hồi hàng và an toàn thực phẩm",
+      "Quy định về không tái lưu thông",
+      "Quy trình thực hiện và chi phí",
+      "Lập yêu cầu phản ánh",
+      "Cung cấp hồ sơ minh chứng",
+      "Thẩm định và xác nhận phương án",
+      "Chi phí chuyển phát",
+      "Thời gian phản hồi và khiếu nại",
+      "Thông tin liên hệ",
+      "Hotline chăm sóc khách hàng",
+      "Cổng quản trị đơn hàng",
+      "Văn phòng điều phối Gói Huế"
+    ],
+    "tables": 0,
+    "dialogs": 0
+  },
+  {
+    "route": "/products/[slug]",
+    "title": "Gói Huế - Chi Tiết Sản Phẩm (/products/[slug])",
+    "screen": "projects/3762085109118983605/screens/98dcf3ae28d14b38b59f1033d4764716",
+    "htmlResource": "projects/3762085109118983605/files/2735274002669476639",
+    "headings": [
+      "Mè Xửng Giòn Gói Huế - Mạch Nha &amp; Mè Rang Thủ Công",
+      "Nếp quà tao nhã bên dòng Hương Giang",
+      "Có thể bạn cũng thích",
+      "Mè xửng dẻo Gói Huế",
+      "Mứt sen Tịnh Tâm ngào đường phèn",
+      "Trà Cung Đình Huế cao cấp",
+      "Hộp quà Đoàn Viên Cố Đô",
+      "Khám phá",
+      "Chính sách &amp; Hỗ trợ",
+      "Thông tin liên hệ"
+    ],
+    "tables": 0,
+    "dialogs": 0
+  },
+  {
+    "route": "/privacy-policy",
+    "title": "Gói Huế - Chính Sách Bảo Mật (/privacy-policy)",
+    "screen": "projects/3762085109118983605/screens/1dd7f395db494860baa1b8db9fed77cc",
+    "htmlResource": "projects/3762085109118983605/files/16651286570486146173",
+    "headings": [
+      "Chính sách bảo mật thông tin &amp; Dữ liệu cá nhân",
+      "Mục lục điều hướng",
+      "Mục đích thu thập thông tin khách hàng",
+      "Xử lý và hoàn thiện bưu kiện",
+      "Giao nhận COD &amp; Đồng kiểm",
+      "Phạm vi thông tin thu thập",
+      "Thời gian lưu trữ &amp; Bảo hộ dữ liệu",
+      "Chia sẻ dữ liệu đối tác bưu chính COD",
+      "Quyền của chủ thể dữ liệu cá nhân",
+      "Biện pháp an toàn &amp; Mã hóa thông tin",
+      "Thông tin đơn vị quản trị &amp; Liên hệ"
+    ],
+    "tables": 0,
+    "dialogs": 0
+  },
+  {
+    "route": "/account/orders",
+    "title": "Gói Huế - Đơn Hàng Của Tôi (/account/orders)",
+    "screen": "projects/3762085109118983605/screens/2c84b4a50af14e06bb9df5abaaad737c",
+    "htmlResource": "projects/3762085109118983605/files/14681782816938953889",
+    "headings": [
+      "Tài Khoản Của Tôi",
+      "Đơn hàng của tôi"
+    ],
+    "tables": 0,
+    "dialogs": 0
+  },
+  {
+    "route": "/admin/policies",
+    "title": "Quản lý nội dung chính sách (/admin/policies)",
+    "screen": "projects/3762085109118983605/screens/f7f7400c5a6c4b4fb6e950a68f292fce",
+    "htmlResource": "projects/3762085109118983605/files/2881828790742302791",
+    "headings": [
+      "QUẢN TRỊ GÓI HUẾ",
+      "Quản lý chính sách bảo mật",
+      "Lưu ý quản trị: Chế độ Bản Thảo Thử Nghiệm (Draft Status)",
+      "Lịch sử phiên bản chính sách",
+      "Trình biên tập nội dung",
+      "Khung xem trước chính sách",
+      "Chính Sách Bảo Mật Quyền Riêng Tư &amp; Dữ Liệu Khách Hàng Gói Huế",
+      "$1",
+      "$1"
+    ],
+    "tables": 0,
+    "dialogs": 0
+  },
+  {
+    "route": "/admin/orders",
+    "title": "Quản lý đơn hàng (/admin/orders)",
+    "screen": "projects/3762085109118983605/screens/83b2dad878f8419f83ac0dd9c8a0ad4d",
+    "htmlResource": "projects/3762085109118983605/files/11269831561132643441",
+    "headings": [
+      "QUẢN TRỊ GÓI HUẾ",
+      "Quản lý đơn hàng",
+      "Chi tiết đơn #GH-8902"
+    ],
+    "tables": 1,
+    "dialogs": 0
+  },
+  {
+    "route": "/cart",
+    "title": "Gói Huế - Giỏ Hàng (/cart)",
+    "screen": "projects/3762085109118983605/screens/7962a539975e4ecb9a3de7f8557fb535",
+    "htmlResource": "projects/3762085109118983605/files/15040787723181560643",
+    "headings": [
+      "Giỏ Hàng Cố Đô",
+      "Tóm tắt đơn hàng",
+      "Khám phá",
+      "Chính sách &amp; Hỗ trợ",
+      "Thông tin liên hệ"
+    ],
+    "tables": 0,
+    "dialogs": 0
+  },
+  {
+    "route": "/admin/privacy",
+    "title": "Xử lý quyền riêng tư & dữ liệu (/admin/privacy)",
+    "screen": "projects/3762085109118983605/screens/6ad8e69d922b45538c214c131595e972",
+    "htmlResource": "projects/3762085109118983605/files/1979928593076535829",
+    "headings": [
+      "QUẢN TRỊ GÓI HUẾ",
+      "Xử lý quyền riêng tư &amp; dữ liệu",
+      "Nguyên tắc xử lý quyền riêng tư &amp; dữ liệu cá nhân",
+      "Danh sách yêu cầu dữ liệu",
+      "Chi tiết yêu cầu dữ liệu"
+    ],
+    "tables": 1,
+    "dialogs": 0
+  }
+]
