@@ -1,0 +1,652 @@
+@import url("https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap");
+
+/* mon-02 visual layer. Existing DOM, grids, flex direction, dimensions,
+   responsive breakpoints, content and business behavior remain in their owners. */
+:root {
+  --surface: #fcf9f4;
+  --surface-low: #f6efe2;
+  --surface-high: #ede0cc;
+  --white: #fdfbf7;
+  --ink: #2f241c;
+  --muted: #655241;
+  --primary: #563a26;
+  --primary-soft: #70513b;
+  --gold: #d4a24c;
+  --gold-pale: #f2dfb9;
+  --brick: #8b261d;
+  --border: #dfd1be;
+  --error: #8f2817;
+  --error-pale: #f8e6df;
+  --shadow: 0 12px 30px -10px rgb(53 32 20 / 14%);
+  --font-display: "Playfair Display", Georgia, "Times New Roman", serif;
+  --font-body: "Be Vietnam Pro", "Segoe UI", sans-serif;
+  --paper: url("/goi-hue/assets/08-nen-giay-seamless.jpg");
+  --paper-face: linear-gradient(#fcf9f4e6, #f6efe2e6), var(--paper);
+  --paper-input: linear-gradient(#fcf9f4ef, #fcf9f4ef), var(--paper);
+  --frame-single: url("/goi-hue/assets/khung-don.svg");
+  --frame-gold: url("/goi-hue/assets/khung-don-vang.svg");
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--ink);
+  background-color: var(--surface);
+  background-image: linear-gradient(#fcf9f4a6, #fcf9f4a6), var(--paper);
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-body);
+}
+h1,
+h2,
+h3,
+.product-name {
+  font-family: var(--font-display);
+}
+input,
+select,
+textarea {
+  accent-color: var(--primary);
+}
+a {
+  text-underline-offset: 4px;
+}
+a:hover {
+  text-decoration-color: var(--gold);
+}
+
+/* Shared chrome keeps its original alignment and navigation sequence. */
+.site-header {
+  background: var(--paper-face);
+  box-shadow:
+    0 1px 0 var(--border),
+    0 6px 18px -14px #352014;
+  backdrop-filter: none;
+}
+.utility-bar {
+  background: linear-gradient(#ede0ccbb, #ede0ccbb), var(--paper);
+}
+.brand-seal {
+  color: transparent;
+  background: url("/goi-hue/assets/logo-goi-hue.svg") center / contain no-repeat;
+  border-radius: 0;
+  box-shadow: none;
+}
+.brand strong,
+.brand small {
+  color: var(--primary);
+}
+.header-search input,
+.header-search input:focus {
+  border-color: var(--border);
+  border-radius: 0;
+  background: var(--paper-input);
+  box-shadow: none;
+}
+.header-search input:focus {
+  border-color: var(--primary);
+}
+.header-search button {
+  border-radius: 0;
+}
+.main-nav nav a {
+  color: var(--primary);
+}
+.main-nav nav a:hover {
+  color: var(--brick);
+}
+.account-button,
+.account-button.authenticated {
+  background: var(--primary);
+  color: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--gold);
+}
+.user-dropdown-menu {
+  background: var(--paper-face);
+  border-color: var(--border);
+  border-radius: 0;
+  box-shadow: var(--shadow);
+}
+.user-dropdown-menu a,
+.user-dropdown-menu button {
+  border-radius: 0;
+}
+.user-dropdown-menu a:hover,
+.user-dropdown-menu button:hover {
+  background: #ede0ccaa;
+}
+.site-footer {
+  background:
+    linear-gradient(#f6efe2eb, #f6efe2eb),
+    url("/goi-hue/assets/11-cau-truong-tien.svg") right bottom / 520px auto
+      no-repeat,
+    var(--paper);
+  box-shadow: inset 0 1px 0 var(--border);
+}
+.footer-grid h2,
+.footer-bottom a {
+  color: var(--primary);
+}
+
+/* Functional surfaces: paper, restrained edges and a folded honey corner. */
+.store-page {
+  background:
+    linear-gradient(#fcf9f4ed, #fcf9f4ed),
+    url("/goi-hue/assets/09-cong-thanh.svg") right top / 420px auto no-repeat;
+}
+.store-card,
+.store-row,
+.store-payment,
+.store-empty,
+.store-return-line,
+.store-address-options label,
+.store-checkout-address {
+  background: var(--paper-face);
+  border-color: var(--border);
+  border-radius: 0;
+  box-shadow: none;
+}
+.store-card,
+.store-row {
+  position: relative;
+}
+.store-card::before,
+.store-row::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto auto;
+  width: 12px;
+  height: 12px;
+  background: var(--gold);
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+  pointer-events: none;
+}
+.store-detail {
+  border-top-color: var(--gold);
+}
+.store-card h2,
+.store-card h3,
+.store-heading h1,
+.store-product-detail h1,
+.store-products .product-name {
+  color: var(--primary);
+}
+.store-heading .eyebrow,
+.section-kicker,
+.eyebrow {
+  color: var(--primary-soft);
+}
+.store-policy {
+  color: var(--ink);
+}
+.store-card details {
+  border-color: var(--border);
+}
+.store-card summary {
+  color: var(--primary);
+  cursor: pointer;
+}
+.store-card details[open] > summary {
+  color: var(--brick);
+}
+.store-timeline {
+  border-color: var(--border);
+}
+.store-timeline strong {
+  color: var(--primary);
+}
+.store-address-options label:has(input:checked) {
+  border-color: var(--primary);
+  background: linear-gradient(#ede0ccd9, #ede0ccd9), var(--paper);
+}
+.store-tabs a {
+  color: var(--primary);
+  background: var(--paper-face);
+  border-color: var(--border);
+  border-radius: 0;
+}
+.store-tabs a:hover {
+  border-color: var(--primary-soft);
+}
+.store-tabs a.active {
+  background: var(--primary);
+  color: var(--surface);
+  border-color: var(--gold);
+}
+.store-management-row,
+.store-address,
+.store-cart-line,
+.store-return-form,
+.store-checkout-address {
+  border-color: var(--border);
+}
+.store-management-row img,
+.store-cart-product img,
+.store-evidence-gallery img {
+  border-radius: 0;
+}
+.store-evidence-gallery img {
+  background: var(--paper-face);
+  border-color: var(--border);
+}
+.store-status-chip,
+.store-badge {
+  border-radius: 2px;
+  color: var(--primary);
+  background: var(--gold-pale);
+}
+.store-profile-heading span {
+  color: var(--surface);
+  background: var(--primary);
+}
+
+/* Input geometry and form order stay owned by the existing stylesheets. */
+.store-form input,
+.store-form textarea,
+.store-form select,
+.store-filters input,
+.store-filters select,
+.store-cart-line input,
+.store-products input,
+.store-product-detail input {
+  background: var(--paper-input);
+  border-color: var(--border);
+  border-radius: 0;
+  color: var(--ink);
+}
+.store-form input:focus,
+.store-form textarea:focus,
+.store-form select:focus,
+.store-filters input:focus,
+.store-filters select:focus {
+  border-color: var(--primary);
+}
+.store-form label,
+.store-filters label {
+  color: var(--primary);
+}
+.store-form input:disabled,
+.store-form select:disabled,
+.store-form textarea:disabled {
+  color: var(--muted);
+  background: var(--surface-high);
+}
+
+/* Action hierarchy: brown on paper, honey on dark hero, paper for secondary. */
+.store-form button,
+.store-card > button:not(.store-row),
+.store-cart-line button,
+.store-products button,
+.store-product-detail button,
+.primary-button,
+.primary-link,
+.hero-feature > a,
+.store-product-action {
+  border-radius: 0;
+  color: var(--surface);
+  background: var(--primary);
+  box-shadow:
+    inset 0 0 0 1px var(--primary),
+    inset 0 0 0 3px #d4a24c88;
+  font-family: var(--font-body);
+  transition:
+    background-color 160ms,
+    box-shadow 160ms,
+    transform 160ms;
+}
+.store-list-heading button,
+.store-row-actions button,
+.store-filters button,
+.store-pagination button,
+.store-close {
+  border-radius: 0;
+  border-color: var(--primary-soft);
+  color: var(--primary);
+  background: var(--paper-face);
+  font-family: var(--font-body);
+}
+.store-form button:hover:not(:disabled),
+.primary-button:hover:not(:disabled),
+.primary-link:hover,
+.store-products button:hover:not(:disabled),
+.store-product-detail button:hover:not(:disabled),
+.store-product-action:hover,
+.hero-feature > a:hover {
+  background: var(--primary-soft);
+}
+.store-row-actions button:hover:not(:disabled),
+.store-filters button:hover:not(:disabled),
+.store-list-heading button:hover:not(:disabled),
+.store-pagination button:hover:not(:disabled) {
+  background: #ede0cc;
+  border-color: var(--gold);
+}
+button:disabled,
+.store-form button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.store-danger {
+  color: var(--brick) !important;
+}
+.store-form .store-danger {
+  background: var(--error-pale);
+  box-shadow: inset 0 0 0 1px var(--brick);
+}
+.store-row:hover {
+  border-color: var(--gold);
+}
+:is(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--primary-soft);
+  outline-offset: 3px;
+}
+
+/* Semantic states remain recognizable and readable on textured paper. */
+.store-messages p {
+  border-radius: 0;
+  border: 1px solid var(--border);
+  background: var(--paper-face);
+}
+.store-error {
+  color: #842018;
+  background: #f8e6df !important;
+  border-radius: 0;
+}
+.store-success {
+  color: #2c4d2d;
+  background: #e7eedf !important;
+  border-radius: 0;
+}
+.store-warning {
+  color: #674513;
+  background: #f5e9cf;
+  border-radius: 0;
+}
+
+/* Authentication: the same two-column composition, now dark wood + paper. */
+.auth-frame {
+  position: relative;
+  border-radius: 0;
+  background: var(--paper-face);
+  box-shadow: var(--shadow);
+}
+.auth-story {
+  background: linear-gradient(#352014ed, #563a26ed), var(--paper);
+}
+.auth-story::before {
+  content: "";
+  position: absolute;
+  inset: 16px;
+  border: 12px solid transparent;
+  border-image: url("/goi-hue/assets/khung-doi.svg") 14 stretch;
+  opacity: 0.65;
+  pointer-events: none;
+}
+.auth-story::after {
+  inset: 0;
+  opacity: 0.16;
+  background: url("/goi-hue/assets/01-hien-nha.png") right bottom / 480px auto
+    no-repeat;
+}
+.auth-story h2 {
+  color: var(--surface);
+}
+.auth-story .story-kicker {
+  color: var(--gold-pale);
+}
+.auth-content h1 {
+  color: var(--primary);
+}
+.story-badge {
+  color: var(--surface);
+  background: var(--primary-soft);
+  border-radius: 0;
+}
+
+/* Home: dark double frame, stepped display cards and quiet Huế motifs. */
+.heritage-home {
+  background: transparent;
+}
+.heritage-hero {
+  position: relative;
+  background-image:
+    linear-gradient(#352014f0, #352014f0), var(--paper) !important;
+  background-color: #352014;
+}
+.hero-grid {
+  position: relative;
+  z-index: 1;
+}
+.hero-grid::before {
+  content: "";
+  position: absolute;
+  inset: 16px -16px;
+  border: 12px solid transparent;
+  border-image: url("/goi-hue/assets/khung-doi.svg") 14 stretch;
+  opacity: 0.45;
+  pointer-events: none;
+}
+.heritage-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("/goi-hue/assets/01-hien-nha.png") right bottom / 650px auto
+    no-repeat;
+  opacity: 0.1;
+  z-index: 0;
+  pointer-events: none;
+}
+.hero-copy h1 {
+  color: var(--surface);
+  text-shadow: none;
+}
+.hero-copy h1 em,
+.hero-metrics dt {
+  color: var(--gold-pale);
+}
+.heritage-pill {
+  color: var(--gold-pale);
+  border-radius: 0;
+  background: #70513b88;
+}
+.hero-buttons a,
+.hero-buttons a:last-child {
+  color: var(--ink);
+  background: var(--gold);
+  border-radius: 0;
+  box-shadow:
+    inset 0 0 0 1px var(--gold),
+    inset 0 0 0 3px #35201455;
+  backdrop-filter: none;
+}
+.hero-buttons a:hover,
+.hero-buttons a:last-child:hover {
+  background: #e6bc6a;
+}
+.hero-feature {
+  background: var(--paper-face);
+  border-radius: 0;
+  backdrop-filter: none;
+  box-shadow: var(--shadow);
+}
+.hero-feature > div,
+.heritage-categories > a > div,
+.product-visual {
+  border-radius: 0;
+}
+.hero-feature h2,
+.home-heading h2,
+.story-copy h2,
+.newsletter-panel h2 {
+  color: var(--primary);
+}
+.hero-feature header b,
+.heritage-products article > div b,
+.store-product-meta strong {
+  color: var(--brick);
+}
+.popular-section {
+  background: linear-gradient(#ede0cc99, #ede0cc99), var(--paper);
+}
+.heritage-categories > a,
+.heritage-products > article {
+  position: relative;
+  border-radius: 0;
+  background: var(--paper-face);
+  box-shadow: none;
+}
+.heritage-categories > a::after,
+.heritage-products > article::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 9px solid transparent;
+  border-image: var(--frame-single) 14 stretch;
+  pointer-events: none;
+}
+.heritage-categories > a:hover::after,
+.heritage-products > article:hover::after {
+  border-image-source: var(--frame-gold);
+}
+.heritage-categories > a:hover,
+.heritage-products > article:hover {
+  box-shadow: var(--shadow);
+  transform: translateY(-4px);
+}
+.heritage-categories h3,
+.product-name {
+  color: var(--primary);
+}
+.heritage-categories small,
+.heritage-products article > small {
+  color: var(--primary-soft);
+}
+.story-image > img {
+  border-radius: 0;
+  box-shadow: var(--shadow);
+}
+.story-section {
+  background:
+    linear-gradient(#fcf9f4e8, #fcf9f4e8),
+    url("/goi-hue/assets/03-canh-tra.png") right bottom / 330px auto no-repeat;
+}
+.newsletter-section {
+  background: transparent;
+}
+.newsletter-panel {
+  background:
+    linear-gradient(#f6efe2e8, #f6efe2e8),
+    url("/goi-hue/assets/12-hoa-sen-cung-dinh.svg") right center / 250px auto
+      no-repeat,
+    var(--paper);
+  border-radius: 0;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.store-product-detail > article {
+  border-radius: 0;
+  background: var(--paper-face);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+/* Typography changes naturally reflow text; no layout or breakpoint overrides. */
+.store-form button,
+.store-row-actions button,
+.store-list-heading button,
+.store-products button,
+.store-product-detail button {
+  font-size: 14px;
+}
+.store-subtle,
+.store-form small,
+.store-filters label,
+.store-row small,
+.store-timeline small {
+  font-size: 13px;
+}
+.heritage-categories p,
+.heritage-products article > p,
+.hero-feature p {
+  font-size: 14px;
+}
+.heritage-categories small,
+.heritage-products article > small,
+.heritage-categories b,
+.hero-feature > a,
+.store-product-action,
+.home-heading span,
+.section-kicker,
+.newsletter-panel > div > span {
+  font-size: 12px;
+}
+.heritage-categories h3,
+.hero-feature h2,
+.product-name {
+  font-size: 18px;
+}
+.heritage-products article > div b {
+  font-size: 20px;
+}
+.store-product-meta strong {
+  font-family: var(--font-body);
+}
+.hero-metrics dd {
+  font-size: 12px;
+}
+
+.hero-copy > p,
+.story-copy p {
+  font-size: 16px;
+  line-height: 1.75;
+}
+.hero-buttons a,
+.hero-buttons a:last-child,
+.home-heading > p,
+.newsletter-panel p {
+  font-size: 14px;
+}
+.newsletter-panel,
+.store-order-summary {
+  position: relative;
+}
+.newsletter-panel::after,
+.store-order-summary::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border: 10px solid transparent;
+  border-image: url("/goi-hue/assets/khung-kien-truc.svg") 14 stretch;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .brand-seal {
+    color: CanvasText;
+    background: none;
+  }
+  .store-card::before,
+  .store-row::before,
+  .hero-grid::before,
+  .heritage-hero::after,
+  .auth-story::before,
+  .auth-story::after,
+  .heritage-categories > a::after,
+  .heritage-products > article::after {
+    opacity: 0;
+  }
+}

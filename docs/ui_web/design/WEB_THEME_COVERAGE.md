@@ -37,4 +37,3 @@ Shared mon-02 palette, Playfair Display/Be Vietnam Pro, layered Dó paper, actua
 ## Acceptance evidence
 
 Before/after browser evidence and limitations are recorded in docs/CURRENT_STATE.md. The fixture browser suite checks every reference route at desktop/mobile and compares main DOM order and layout modes. Screenshots are local ignored QA artifacts. No Stitch writes, server calls, production deployment or live persistence acceptance are claimed.
-

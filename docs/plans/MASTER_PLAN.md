@@ -11,3 +11,5 @@ Base: origin/main 837098cfbd6e98bdd873fbc2ffcb1c29c030a609. Branch: feature/web-
 4. Focused lint/typecheck/build, local diff/BE boundary audit, committed/pushed checkpoints and handoff.
 
 The current phase plan is active/WEB_HERITAGE_THEME.md. Current handoff is ../CURRENT_STATE.md. Route/reference evidence is ../ui_web/design/WEB_THEME_COVERAGE.md.
+
+Status (2026-11-17): all four milestones complete. The 23 reference routes exist; material composition differences are documented and preserved. Shared theme, 46 before/after browser comparisons, interaction/state checks, typecheck/build and scoped lint have passed. Next: user review of the pushed feature branch.

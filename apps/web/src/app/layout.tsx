@@ -7,6 +7,7 @@ import {
 } from "@/components/site-shell";
 import "@/styles/heritage.css";
 import "@/styles/store.css";
+import "@/styles/web-theme.css";
 
 export const metadata: Metadata = {
   title: { default: "Gói Huế · Phong vị Cố Đô", template: "%s · Gói Huế" },

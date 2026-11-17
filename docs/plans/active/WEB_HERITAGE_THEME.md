@@ -31,9 +31,12 @@ All 23 routes render under the same theme; fixture-backed interactions still sub
 ## Progress
 - [x] Branch and read-only Stitch/route audit
 - [x] Baseline captured
-- [ ] Theme implementation
-- [ ] Browser/structure/interaction verification
-- [ ] Final validation and remote checkpoint
+- [x] Theme implementation
+- [x] Browser/structure/interaction verification
+- [x] Final validation and remote checkpoint
 
 ## Next step
-Baseline complete for 23 routes at 1440/390px. Import the prepared web-theme.css visual layer and run before/after DOM/layout comparison.
+Review the pushed feature branch; no further implementation is required in this visual phase. Refer to CURRENT_STATE.md for validation evidence and baseline reproduction.
+
+## Completed validation
+46/46 before/after DOM/order/layout/heading/overflow/theme checks PASS. Synthetic account/admin/commerce state checks PASS. Typecheck/build and focused lint/format checks PASS. Full lint retains only the recorded pre-existing errors. No changes under components, lib/store, app/api or backend. Native confirmation behavior and source policy content retained.
