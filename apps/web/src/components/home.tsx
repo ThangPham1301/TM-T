@@ -31,6 +31,20 @@ export function HomeExperience() {
       live = false;
     };
   }, [attempt]);
+  const [recs, setRecs] = useState<Row[]>([]);
+  useEffect(() => {
+    let live = true;
+    api("products/recommended?surface=home&limit=4")
+      .then((r) => {
+        if (live) setRecs(r.items ?? []);
+      })
+      .catch(() => {
+        if (live) setRecs([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
   const visible = products
     .filter((p) => !category || p.category === category)
     .slice(0, 6);
@@ -129,6 +143,30 @@ export function HomeExperience() {
           </div>
         </div>
       </section>
+      {recs.length > 0 && (
+        <section className="lan-section lan-recs">
+          <header className="lan-section-heading">
+            <div>
+              <small>GỢI Ý TỪ CỬA HÀNG</small>
+              <h2>Được khách chọn mua nhiều nhất</h2>
+              <p>Xếp theo số lượng đã bán tại cửa hàng.</p>
+            </div>
+            <Link href="/products">Xem tất cả →</Link>
+          </header>
+          <div className="lan-products">
+            {recs.map((p) => (
+              <ProductCard
+                key={p.id}
+                product={p}
+                category={String(
+                  categories.find((c) => c.code === p.category)?.name ??
+                    p.category,
+                )}
+              />
+            ))}
+          </div>
+        </section>
+      )}
       <section className="lan-section lan-gifts">
         <header className="lan-section-heading lan-centered">
           <div>

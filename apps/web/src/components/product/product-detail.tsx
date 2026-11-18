@@ -23,21 +23,38 @@ export function ProductDetail({ slug }: { slug: string }) {
     [tab, setTab] = useState(0);
   const zoom = useRef<HTMLDialogElement>(null),
     tabList = useRef<HTMLDivElement>(null);
+  const [relatedStrategy, setRelatedStrategy] = useState("");
   const { state, busy, run, mutate } = useStore();
   const router = useRouter();
   useEffect(() => {
     let live = true;
     Promise.all([
       api(`products/${encodeURIComponent(slug)}`),
-      api("products"),
       api("categories"),
     ])
-      .then(([p, all, c]) => {
-        if (live) {
-          setProduct(p);
-          setRelated(all.filter((r: Row) => r.id !== p.id).slice(0, 4));
-          setCategories(c);
-          setError("");
+      .then(async ([p, c]) => {
+        if (!live) return;
+        setProduct(p);
+        setCategories(c);
+        setError("");
+        try {
+          const rec = await api(
+            `products/recommended?surface=product&productId=${encodeURIComponent(p.id)}&limit=4`,
+          );
+          if (live) {
+            setRelated(rec.items ?? []);
+            setRelatedStrategy(String(rec.strategy ?? ""));
+          }
+        } catch {
+          try {
+            const all = await api("products");
+            if (live) {
+              setRelated(all.filter((r: Row) => r.id !== p.id).slice(0, 4));
+              setRelatedStrategy("");
+            }
+          } catch {
+            // Keep the block empty rather than failing the page.
+          }
         }
       })
       .catch((e) => {
@@ -331,11 +348,19 @@ export function ProductDetail({ slug }: { slug: string }) {
               )}
             </div>
           </section>
+          {related.length > 0 && (
           <section className="lan-section">
             <header className="lan-section-heading">
               <div>
                 <small>MỸ VỊ TIẾN CUNG</small>
-                <h2>Có thể bạn cũng thích</h2>
+                <h2>
+                  {relatedStrategy === "BOUGHT_TOGETHER"
+                    ? "Thường được mua cùng"
+                    : "Có thể bạn cũng thích"}
+                </h2>
+                {relatedStrategy === "BOUGHT_TOGETHER" && (
+                  <p>Dựa trên các đơn đã giao tại cửa hàng.</p>
+                )}
               </div>
               <Link href="/products">Xem tất cả →</Link>
             </header>
@@ -352,6 +377,7 @@ export function ProductDetail({ slug }: { slug: string }) {
               ))}
             </div>
           </section>
+          )}
           <dialog className="lan-zoom" ref={zoom}>
             <button
               className="lan-button"
