@@ -66,6 +66,16 @@ paths:
       security: []
       responses:
         '200': {description: Active catalog array}
+  /products/recommended:
+    get:
+      operationId: recommendedProducts
+      security: []
+      parameters:
+        - {in: query, name: surface, required: false, schema: {type: string, enum: [home, product], default: home}}
+        - {in: query, name: productId, required: false, schema: {type: string, format: uuid}}
+        - {in: query, name: limit, required: false, schema: {type: integer, minimum: 1, maximum: 8, default: 4}}
+      responses:
+        '200': {description: Ranked sellable products with the strategy that produced them (POPULAR, or BOUGHT_TOGETHER on the product surface from DELIVERED orders)}
   /products/{slug}:
     get:
       operationId: productDetail

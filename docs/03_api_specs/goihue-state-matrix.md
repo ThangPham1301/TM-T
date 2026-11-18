@@ -1,6 +1,6 @@
 # Hợp đồng API và trạng thái Gói Huế
 
-Hợp đồng của khung thống nhất sau xây dựng lại. Trạng thái DRAFT vì chính sách, SLA và retention còn chờ phê duyệt. BFF `/api/store/*` forward đến Spring `/api/v1/*`. Không dùng Mockoon hoặc Identity cũ. Chức năng hoạt động trên dữ liệu PostgreSQL; các thao tác thanh toán/giao vận là ghi nhận thủ công, không phải simulator/provider API.
+Hợp đồng của khung thống nhất sau xây dựng lại. Trạng thái DRAFT vì chính sách, SLA và retention còn chờ phê duyệt. BFF `/api/store/*` forward đến Spring `/api/v1/*`, giữ nguyên query string; đường dẫn `agent/chat` nằm trong danh sách cho phép của BFF và có timeout riêng (180s) phục vụ streaming SSE. Không dùng Mockoon hoặc Identity cũ. Chức năng hoạt động trên dữ liệu PostgreSQL; các thao tác thanh toán/giao vận là ghi nhận thủ công, không phải simulator/provider API.
 
 ## Xác thực và quyền
 
@@ -17,6 +17,7 @@ Mọi thao tác ghi yêu cầu Origin tin cậy. BFF chỉ chấp nhận same-or
 | --- | --- | --- |
 | GET products | Không | Catalog đang active, public |
 | GET products/{slug} | Slug | Chi tiết public hoặc 404 |
+| GET products/recommended | surface=home\|product, productId, limit | Gợi ý xếp hạng từ dữ liệu đơn hàng: POPULAR (số lượng đã bán, đơn chưa hủy) hoặc BOUGHT_TOGETHER (đồng xuất hiện trong đơn DELIVERED, cho surface=product); chỉ trả sản phẩm còn bán được (active + danh mục active + còn tồn); public |
 | GET admin/products | Không | Toàn bộ sản phẩm, catalog.manage |
 | GET categories / admin/categories | Không | Danh mục active public / toàn bộ danh mục cho catalog.manage |
 | GET shipping | Không | Phí cơ bản, ngưỡng miễn phí, enabled, revision và pauseMessage nếu đã lưu; public |
