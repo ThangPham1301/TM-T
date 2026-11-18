@@ -18,6 +18,7 @@ Mọi thao tác ghi yêu cầu Origin tin cậy. BFF chỉ chấp nhận same-or
 | GET products | Không | Catalog đang active, public |
 | GET products/{slug} | Slug | Chi tiết public hoặc 404 |
 | GET products/recommended | surface=home\|product, productId, limit | Gợi ý xếp hạng từ dữ liệu đơn hàng: POPULAR (số lượng đã bán, đơn chưa hủy) hoặc BOUGHT_TOGETHER (đồng xuất hiện trong đơn DELIVERED, cho surface=product); chỉ trả sản phẩm còn bán được (active + danh mục active + còn tồn); public |
+| POST agent/chat | message, history? | Trợ lý mua sắm: stream SSE (token/product_cards/citations/correction/done/error); trả lời bám dữ liệu thật (danh mục còn bán được, phí giao hàng, đơn của chính khách) qua Bedrock Nova Lite, có mẫu trả lời xác định dự phòng khi Bedrock không khả dụng; public, đơn hàng chỉ trong phạm vi owner |
 | GET admin/products | Không | Toàn bộ sản phẩm, catalog.manage |
 | GET categories / admin/categories | Không | Danh mục active public / toàn bộ danh mục cho catalog.manage |
 | GET shipping | Không | Phí cơ bản, ngưỡng miễn phí, enabled, revision và pauseMessage nếu đã lưu; public |

@@ -7,6 +7,7 @@ import {
   StatusMessages,
   StorePauseBanner,
 } from "@/components/site-shell";
+import { AssistantWidget } from "@/components/assistant-widget";
 import "@/styles/heritage.css";
 import "@/styles/tokens.css";
 import "@/styles/store.css";
@@ -51,6 +52,7 @@ export default function RootLayout({
           <StatusMessages />
           {children}
           <SiteFooter />
+          <AssistantWidget />
         </StoreProvider>
       </body>
     </html>
