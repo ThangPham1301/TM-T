@@ -7,7 +7,7 @@ async function proxy(
 ) {
   const path = (await ctx.params).path.join("/");
   if (
-    !/^(policy|state|password|command|commerce|cart(?:\/summary)?|shipping|categories|products(?:\/[a-z0-9-]+)?|admin\/(products|categories)|catalog\/images\/[a-f0-9-]{36}(?:\/content)?|auth\/(login|register|logout)|evidence\/intents|evidence\/[a-f0-9-]{36}\/content|privacy\/[a-f0-9-]{36}\/export)$/u.test(
+    !/^(policy|state|password|command|commerce|agent\/chat|cart(?:\/summary)?|shipping|categories|products(?:\/[a-z0-9-]+)?|admin\/(products|categories)|catalog\/images\/[a-f0-9-]{36}(?:\/content)?|auth\/(login|register|logout)|evidence\/intents|evidence\/[a-f0-9-]{36}\/content|privacy\/[a-f0-9-]{36}\/export)$/u.test(
       path,
     )
   )
@@ -41,14 +41,15 @@ async function proxy(
     if (body && body.byteLength > 5 * 1024 * 1024 + 32768)
       return Response.json({ message: "Nội dung quá lớn." }, { status: 413 });
     const upstream = await fetch(
-      `${process.env.API_UPSTREAM_URL ?? "http://127.0.0.1:8088/api/v1"}/${path}`,
+      `${process.env.API_UPSTREAM_URL ?? "http://127.0.0.1:8088/api/v1"}/${path}${req.nextUrl.search}`,
       {
         method: req.method,
         body,
         headers,
         cache: "no-store",
         redirect: "manual",
-        signal: AbortSignal.timeout(20000),
+        // The AI chat streams over SSE and may run longer than a normal call.
+        signal: AbortSignal.timeout(path === "agent/chat" ? 180000 : 20000),
       },
     );
     const out = new Headers({
