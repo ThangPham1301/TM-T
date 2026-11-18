@@ -1,0 +1,21 @@
+# Local demo wiring for the AI assistant: the API reads the developer's
+# own AWS profile (read-only) so Bedrock can be called without putting
+# any credential in the repo. Point AWS_SHARED_DIR at your ~/.aws in
+# .env; the default keeps other machines working with the assistant in
+# deterministic fallback mode.
+#
+# AWS_CONFIG_FILE deliberately points at an empty file: the developer
+# config carries an `aws login` session property that makes the Java
+# SDK reject the whole profile, while the credentials file on its own
+# holds plain static keys that work everywhere. The region is set
+# explicitly in code, so nothing is lost.
+services:
+  api:
+    environment:
+      APP_BEDROCK_MODEL: ${APP_BEDROCK_MODEL:-amazon.nova-lite-v1:0}
+      APP_BEDROCK_REGION: ${APP_BEDROCK_REGION:-ap-southeast-2}
+      AWS_SHARED_CREDENTIALS_FILE: /aws/credentials
+      AWS_CONFIG_FILE: /aws-config/config
+    volumes:
+      - ${AWS_SHARED_DIR:-./.aws-empty}:/aws:ro
+      - ./.aws-empty:/aws-config:ro
