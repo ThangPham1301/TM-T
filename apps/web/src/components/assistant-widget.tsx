@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { api, money, type Row, useStore } from "@/lib/store";
 import { ProductImage } from "./product/product-image";
 import { AiPreferences } from "./ai-preferences";
@@ -16,6 +16,17 @@ type Msg = {
   failed?: boolean;
   steps?: { id: string; name: string; summary?: string; ok?: boolean }[];
   request?: ChatRequest;
+  comparison?: { items: Row[]; priceDifference: number };
+};
+
+type CartProposal = {
+  productId: string;
+  slug: string;
+  name: string;
+  price: number;
+  image: string;
+  stock: number;
+  quantity: number;
 };
 
 type ChatRequest = {
@@ -27,6 +38,8 @@ type ChatRequest = {
 
 const TOOL_NAMES: Record<string, string> = {
   recommend_products: "Tìm sản phẩm phù hợp",
+  compare_products: "So sánh sản phẩm",
+  add_to_cart: "Chuẩn bị thêm vào giỏ",
   get_shipping: "Kiểm tra phí giao hàng",
   lookup_order: "Tra cứu đơn của bạn",
   get_policy: "Tra cứu chính sách",
@@ -80,7 +93,13 @@ export function AssistantWidget() {
 }
 
 function ChatSession({ customer }: { customer: boolean }) {
+  const { state, mutate } = useStore();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [proposal, setProposal] = useState<CartProposal | null>(null);
+  const [proposalQty, setProposalQty] = useState(1);
+  const [adding, setAdding] = useState(false);
+  const pendingProposal = useRef<CartProposal | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -150,6 +169,52 @@ function ChatSession({ customer }: { customer: boolean }) {
     setStreaming(false);
     setMessages([]);
     setProvider("");
+    pendingProposal.current = null;
+    setProposal(null);
+  }
+
+  function noteLocal(text: string) {
+    setMessages((prev) => [...prev, { role: "assistant", text }]);
+  }
+
+  async function confirmProposal() {
+    if (!proposal || adding) return;
+    const p = proposal;
+    if (!state) {
+      setProposal(null);
+      router.push("/login");
+      return;
+    }
+    if (state.user.role !== "CUSTOMER") {
+      setProposal(null);
+      noteLocal("Tài khoản của bạn không dùng giỏ hàng khách.");
+      return;
+    }
+    setAdding(true);
+    try {
+      const summary = await api("cart/summary");
+      const current = (summary.items as Row[]).find(
+        (c) => c.productId === p.productId,
+      );
+      const next = Number(current?.quantity ?? 0) + proposalQty;
+      if (
+        !Number.isInteger(proposalQty) ||
+        proposalQty < 1 ||
+        next > Math.min(100, p.stock)
+      )
+        throw new Error("Số lượng vượt tồn kho hoặc giới hạn giỏ hàng.");
+      await mutate("commerce", "cart-set", {
+        productId: p.productId,
+        quantity: next,
+        cartToken: summary.cartToken,
+      });
+      setProposal(null);
+      noteLocal(`Đã thêm ${proposalQty} × ${p.name} vào giỏ hàng.`);
+    } catch {
+      noteLocal("Chưa thêm được vào giỏ, bạn thử lại giúp mình nhé.");
+    } finally {
+      setAdding(false);
+    }
   }
 
   async function send(
@@ -252,8 +317,36 @@ function ChatSession({ customer }: { customer: boolean }) {
                   : step,
               ),
             }));
+          } else if (ev === "comparison") {
+            patchLast((msg) => ({
+              ...msg,
+              comparison: {
+                items: (data.items as Row[]) ?? [],
+                priceDifference: Number(data.priceDifference ?? 0),
+              },
+            }));
+          } else if (ev === "cart_proposal") {
+            pendingProposal.current = {
+              productId: String(data.productId ?? ""),
+              slug: String(data.slug ?? ""),
+              name: String(data.name ?? ""),
+              price: Number(data.price ?? 0),
+              image: String(data.image ?? ""),
+              stock: Number(data.stock ?? 0),
+              quantity: Number(data.quantity ?? 1),
+            };
           } else if (ev === "done") {
             completed = true;
+            if (
+              generation.current === currentGeneration &&
+              pendingProposal.current
+            ) {
+              setProposal(pendingProposal.current);
+              setProposalQty(
+                Math.max(1, pendingProposal.current.quantity),
+              );
+              pendingProposal.current = null;
+            }
           } else if (ev === "memory") {
             if (generation.current === currentGeneration)
               window.dispatchEvent(new Event("ai-memory-updated"));
@@ -413,7 +506,7 @@ function ChatSession({ customer }: { customer: boolean }) {
                       </ol>
                     </details>
                   )}
-                  {msg.cards && msg.cards.length > 0 && (
+                  {msg.cards && msg.cards.length > 0 && !msg.comparison && (
                     <div className={styles.cards}>
                       {msg.cards.map((p) => (
                         <Link
@@ -443,6 +536,60 @@ function ChatSession({ customer }: { customer: boolean }) {
                           </span>
                         </Link>
                       ))}
+                    </div>
+                  )}
+                  {msg.comparison && msg.comparison.items.length >= 2 && (
+                    <div className={styles.compare}>
+                      <div className={styles.compareGrid}>
+                        <span aria-hidden="true" />
+                        {msg.comparison.items.slice(0, 2).map((p) => (
+                          <span key={String(p.id)} className={styles.compareHead}>
+                            <span className={styles.compareThumb}>
+                              <ProductImage
+                                src={String(p.image ?? "")}
+                                alt={String(p.name)}
+                                fill
+                                sizes="64px"
+                              />
+                            </span>
+                            <span className={styles.compareName}>
+                              {String(p.name)}
+                            </span>
+                          </span>
+                        ))}
+                        <span className={styles.compareLabel}>Giá</span>
+                        {msg.comparison.items.slice(0, 2).map((p) => (
+                          <span key={String(p.id)} className={styles.comparePrice}>
+                            {money(Number(p.price))}
+                          </span>
+                        ))}
+                        <span className={styles.compareLabel}>Còn hàng</span>
+                        {msg.comparison.items.slice(0, 2).map((p) => (
+                          <span key={String(p.id)}>
+                            Còn {Number(p.stock)} sản phẩm
+                          </span>
+                        ))}
+                        <span className={styles.compareLabel}>Đã giao</span>
+                        {msg.comparison.items.slice(0, 2).map((p) => (
+                          <span key={String(p.id)}>
+                            {Number(p.deliveredQuantity ?? 0)} sản phẩm
+                          </span>
+                        ))}
+                      </div>
+                      <p className={styles.compareDiff}>
+                        Chênh lệch giá: {money(msg.comparison.priceDifference)}
+                      </p>
+                      <div className={styles.compareActions}>
+                        {msg.comparison.items.slice(0, 2).map((p) => (
+                          <Link
+                            key={String(p.id)}
+                            className={styles.compareBtn}
+                            href={`/products/${String(p.slug)}`}
+                          >
+                            Xem sản phẩm
+                          </Link>
+                        ))}
+                      </div>
                     </div>
                   )}
                   {msg.sources && msg.sources.length > 0 && (
@@ -513,6 +660,96 @@ function ChatSession({ customer }: { customer: boolean }) {
             </button>
           </form>
         </section>
+      )}
+      {proposal && (
+        <div
+          className={styles.modalBackdrop}
+          onClick={() => {
+            if (!adding) setProposal(null);
+          }}
+        >
+          <div
+            className={styles.modal}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Xác nhận thêm vào giỏ hàng"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3>Thêm vào giỏ hàng?</h3>
+            <div className={styles.modalProduct}>
+              <span className={styles.thumb}>
+                <ProductImage
+                  src={proposal.image}
+                  alt={proposal.name}
+                  fill
+                  sizes="64px"
+                />
+              </span>
+              <span className={styles.cardBody}>
+                <span className={styles.cardName}>{proposal.name}</span>
+                <span className={styles.cardMeta}>
+                  {money(proposal.price)} · Còn {proposal.stock} sản phẩm
+                </span>
+              </span>
+            </div>
+            <div className={styles.modalQty}>
+              <span>Số lượng</span>
+              <span className={styles.stepper}>
+                <button
+                  type="button"
+                  aria-label="Giảm số lượng"
+                  disabled={adding || proposalQty <= 1}
+                  onClick={() =>
+                    setProposalQty((q) => Math.max(1, q - 1))
+                  }
+                >
+                  −
+                </button>
+                <span aria-live="polite">{proposalQty}</span>
+                <button
+                  type="button"
+                  aria-label="Tăng số lượng"
+                  disabled={
+                    adding ||
+                    proposalQty >= Math.min(100, proposal.stock)
+                  }
+                  onClick={() =>
+                    setProposalQty((q) =>
+                      Math.min(Math.min(100, proposal.stock), q + 1),
+                    )
+                  }
+                >
+                  +
+                </button>
+              </span>
+            </div>
+            <p className={styles.modalTotal}>
+              Tạm tính mục này:{" "}
+              <strong>{money(proposal.price * proposalQty)}</strong>
+            </p>
+            <p className={styles.modalWarn}>
+              Trợ lý chỉ đề xuất — bạn xác nhận thì món mới vào giỏ.
+            </p>
+            <div className={styles.modalActions}>
+              <button
+                type="button"
+                className={styles.modalCancel}
+                disabled={adding}
+                onClick={() => setProposal(null)}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                className={styles.modalConfirm}
+                disabled={adding}
+                onClick={() => void confirmProposal()}
+              >
+                {adding ? "Đang thêm…" : "Thêm vào giỏ"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       <div className={styles.launcher}>
         {!open && (
