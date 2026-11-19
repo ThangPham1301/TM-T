@@ -6,12 +6,15 @@ async function proxy(
   ctx: { params: Promise<{ path: string[] }> },
 ) {
   const path = (await ctx.params).path.join("/");
+  const webhook = path === "payments/sepay/webhook" && req.method === "POST";
   if (
-    !/^(policy|state|password|command|commerce|agent\/(chat|consent|history)|recommendations\/consent|cart(?:\/summary)?|shipping|categories|products(?:\/[a-z0-9-]+)?|admin\/(products|categories)|catalog\/images\/[a-f0-9-]{36}(?:\/content)?|auth\/(login|register|logout)|evidence\/intents|evidence\/[a-f0-9-]{36}\/content|privacy\/[a-f0-9-]{36}\/export)$/u.test(
+    !/^(policy|state|password|command|commerce|agent\/(chat|consent|history)|recommendations\/consent|payments\/sepay\/webhook|cart(?:\/summary)?|shipping|categories|products(?:\/[a-z0-9-]+)?|admin\/(products|categories)|catalog\/images\/[a-f0-9-]{36}(?:\/content)?|auth\/(login|register|logout)|evidence\/intents|evidence\/[a-f0-9-]{36}\/content|privacy\/[a-f0-9-]{36}\/export)$/u.test(
       path,
     )
   )
     return Response.json({ message: "Không tìm thấy API." }, { status: 404 });
+  if (path === "payments/sepay/webhook" && !webhook)
+    return Response.json({ message: "Phương thức không được hỗ trợ." }, { status: 405 });
   const write = !["GET", "HEAD"].includes(req.method),
     origin = req.headers.get("origin");
   const publicOrigins = new Set([
@@ -25,19 +28,24 @@ async function proxy(
   const proto = req.headers.get("x-forwarded-proto") ?? "http";
   const sameHost = origin === `${proto}://${req.headers.get("host") ?? ""}`;
   // Compare the browser-facing Host, not Docker's internal server hostname.
-  if (write && (!origin || !publicOrigins.has(origin) || !sameHost))
+  if (write && !webhook && (!origin || !publicOrigins.has(origin) || !sameHost))
     return Response.json(
       { message: "Nguồn yêu cầu không hợp lệ." },
       { status: 403 },
     );
   const headers = new Headers();
-  for (const name of ["cookie", "content-type", "idempotency-key"]) {
+  const forwardedHeaders = webhook
+    ? ["content-type", "x-sepay-signature", "x-sepay-timestamp"]
+    : ["cookie", "content-type", "idempotency-key"];
+  for (const name of forwardedHeaders) {
     const value = req.headers.get(name);
     if (value) headers.set(name, value);
   }
   if (origin) headers.set("Origin", origin);
   try {
     const body = write ? await req.arrayBuffer() : undefined;
+    if (webhook && body && body.byteLength > 65536)
+      return Response.json({ message: "Nội dung webhook quá lớn." }, { status: 413 });
     if (body && body.byteLength > 5 * 1024 * 1024 + 32768)
       return Response.json({ message: "Nội dung quá lớn." }, { status: 413 });
     const upstream = await fetch(

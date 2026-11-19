@@ -29,6 +29,7 @@ public class PlatformApi {
     @Value("${ADMIN_EMAIL:admin@goihue.local}") String adminEmail;
     @Value("${ADMIN_PASSWORD}") String adminPassword;
     @Value("${APP_ORIGINS:http://localhost:3000}") String origins;
+    @Value("${APP_COOKIE_SECURE:false}") boolean secureCookie;
     public PlatformApi(JdbcTemplate db, ObjectMapper json, StoreLive live) { this.db=db; this.json=json; this.live=live; }
     static class Problem extends RuntimeException {
         final int status;
@@ -44,7 +45,7 @@ public class PlatformApi {
     String hash(String x) {try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(x.getBytes(java.nio.charset.StandardCharsets.UTF_8)));}catch(Exception e){throw new IllegalStateException(e);} }
     String token() {byte[] b=new byte[32];random.nextBytes(b);return HexFormat.of().formatHex(b);}
     void lock() {db.execute("SELECT pg_advisory_xact_lock(728124)");}
-    void origin(HttpServletRequest r) { if(!Arrays.asList(origins.split(",")).contains(r.getHeader("Origin"))) throw new Problem(403,"Nguồn yêu cầu không được phép."); }
+    void origin(HttpServletRequest r) { if(Arrays.stream(origins.split(",")).map(String::trim).noneMatch(value -> value.equals(r.getHeader("Origin")))) throw new Problem(403,"Nguồn yêu cầu không được phép."); }
     Map<String,Object> actor(HttpServletRequest r) {
         return sessionActor(sessionToken(r));
     }
@@ -62,7 +63,7 @@ public class PlatformApi {
         if(!granted.contains(p))throw new Problem(403,"Bạn không có quyền thực hiện thao tác này.");
     }
     Map<String,Object> safe(Map<String,Object> a) {var m=new LinkedHashMap<>(a);m.remove("password_hash");return m;}
-    void cookie(HttpServletResponse res,String t,int age) {res.addHeader("Set-Cookie",ResponseCookie.from("goihue_session",t).httpOnly(true).sameSite("Strict").path("/api/store").maxAge(age).build().toString());}
+    void cookie(HttpServletResponse res,String t,int age) {res.addHeader("Set-Cookie",ResponseCookie.from("goihue_session",t).httpOnly(true).secure(secureCookie).sameSite("Strict").path("/api/store").maxAge(age).build().toString());}
     void audit(Map<String,Object> a,String subject,String action) {db.update("INSERT INTO audit(actor_id,subject,action) VALUES(?,?,?)",a.get("id"),subject,action);}
     Map<String,Object> save(String kind,UUID owner,Map<String,Object> data) {
         if(!data.containsKey("id")){data.put("id",UUID.randomUUID().toString());data.put("createdAt",Instant.now().toString());data.put("revision",1);}

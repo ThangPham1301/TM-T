@@ -8,9 +8,17 @@
 # is wired into the container and the assistant answers with its
 # deterministic fallback.
 services:
+  web:
+    build:
+      args:
+        API_WEBSOCKET_UPSTREAM: ${API_WEBSOCKET_UPSTREAM:-http://api:8088}
+        NEXT_PUBLIC_RECOMMENDATIONS_ENABLED: ${NEXT_PUBLIC_RECOMMENDATIONS_ENABLED:-true}
+        NEXT_PUBLIC_AI_CHAT_ENABLED: ${NEXT_PUBLIC_AI_CHAT_ENABLED:-true}
   api:
     environment:
+      APP_AGENT_PROVIDER: ${APP_AGENT_PROVIDER:-auto}
       APP_BEDROCK_MODEL: ${APP_BEDROCK_MODEL:-amazon.nova-lite-v1:0}
       APP_BEDROCK_REGION: ${APP_BEDROCK_REGION:-ap-southeast-2}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}

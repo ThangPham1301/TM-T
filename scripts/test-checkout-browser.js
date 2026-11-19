@@ -1,0 +1,61 @@
+// Playwright CLI run-code fixture. Run only against test-system-demo.py --keep.
+// npx @playwright/cli -s=system-https run-code --filename=scripts/test-checkout-browser.js
+async (page) => {
+  const origin = "https://127.0.0.1:13443";
+  if (!page.url().startsWith(origin + "/")) throw new Error("Open the disposable HTTPS fixture first");
+  const errors = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.context().clearCookies();
+  await page.goto(origin + "/register");
+  await page.getByRole("textbox", { name: "Họ và tên", exact: true }).fill("Browser QA");
+  await page.getByRole("textbox", { name: "Địa chỉ email", exact: true }).fill(`browser-${Date.now()}@example.invalid`);
+  await page.getByRole("textbox", { name: "Mật khẩu", exact: true }).fill("disposable-browser-password");
+  await page.getByRole("button", { name: "Tạo tài khoản", exact: true }).click();
+  await page.waitForURL(origin + "/account");
+  const socketReady = page.waitForEvent("websocket");
+  await page.reload();
+  const socket = await socketReady;
+  if (socket.url() !== "wss://127.0.0.1:13443/api/store/live") throw new Error("Wrong public WebSocket URL");
+  await page.getByRole("heading", { name: "Hồ sơ cá nhân", exact: true }).waitFor();
+  await page.goto(origin + "/products/me-xung-gion");
+  const added = page.waitForResponse(response => response.url().endsWith("/api/store/commerce") && response.request().method() === "POST");
+  await page.getByRole("button", { name: /Thêm vào giỏ hàng/ }).click();
+  if (!(await added).ok()) throw new Error("Add to cart failed");
+  await page.goto(origin + "/checkout");
+  await page.locator('input[name="phone"]').fill("0900000000");
+  await page.locator('textarea[name="address"]').fill("Synthetic browser address, Hue");
+  await page.getByRole("radio", { name: /VietQR/ }).check();
+  await page.getByRole("button", { name: /Xác nhận đặt hàng/ }).click();
+  await page.waitForURL(/\/account\/orders\?order=/);
+  const orderId = new URL(page.url()).searchParams.get("order");
+  const qr = page.getByRole("img", { name: "Mã VietQR của đơn hàng", exact: true });
+  await qr.waitFor({ state: "visible" });
+  const card = page.locator(".orders-article-card").first();
+  if (!(await card.locator(".orders-payment-pill").innerText()).includes("VietQR")) throw new Error("VietQR order mislabeled as COD");
+  await card.getByRole("button", { name: /Thu gọn/ }).click();
+  await qr.waitFor({ state: "hidden" });
+  await card.getByRole("button", { name: /Xem chi tiết/ }).click();
+  await qr.waitFor({ state: "visible" });
+  await page.reload();
+  await qr.waitFor({ state: "visible" });
+  const navigationCount = { value: 0 };
+  page.on("framenavigated", frame => { if (frame === page.mainFrame()) navigationCount.value++; });
+  await page.evaluate(async ({ orderId }) => {
+    const state = await (await fetch("/api/store/state")).json();
+    const order = state.orders.find(row => row.id === orderId);
+    if (!order || order.paymentMethod !== "VIETQR") throw new Error("Wrong checkout method");
+    const raw = JSON.stringify({ id: Date.now(), gateway: "MBBank", accountNumber: "0000123456789", transferType: "in", transferAmount: order.total, content: order.number });
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey("raw", encoder.encode("synthetic-sepay-secret-for-local-tests"), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const signature = Array.from(new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(timestamp + "." + raw))), byte => byte.toString(16).padStart(2, "0")).join("");
+    const response = await fetch("/api/store/payments/sepay/webhook", { method: "POST", headers: { "Content-Type": "application/json", "X-SePay-Timestamp": timestamp, "X-SePay-Signature": "sha256=" + signature }, body: raw });
+    if (!response.ok || !(await response.json()).success) throw new Error("Synthetic provider callback failed");
+  }, { orderId });
+  await qr.waitFor({ state: "hidden" });
+  await page.getByText(/Đã thanh toán lúc/).waitFor({ state: "visible" });
+  if (navigationCount.value) throw new Error("Payment required a navigation/reload");
+  if (errors.length) throw new Error(errors.join("\n"));
+  await page.screenshot({ path: "output/playwright/checkout-paid-https.png", fullPage: true });
+  return { passed: true, orderId, checks: ["UI signup", "Secure session after reload", "same-origin WSS", "UI cart and VietQR checkout", "QR opens from checkout and after reload", "accordion can collapse/reopen", "correct payment method badge", "signed callback updates payment without reload", "no browser runtime errors"] };
+}

@@ -3,6 +3,12 @@ const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   output: "standalone",
+  async rewrites() {
+    const upstream = process.env.API_WEBSOCKET_UPSTREAM ?? "http://127.0.0.1:8088";
+    return {
+      beforeFiles: [{ source: "/api/store/live", destination: `${upstream}/api/store/live` }],
+    };
+  },
   allowedDevOrigins: ["127.0.0.1"],
   experimental: {
     cpus: 1,
