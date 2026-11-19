@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Goi Hue Unified Store API
-  version: 1.3.0-draft
+  version: 1.3.1-draft
   description: Unified persistence API. VietQR/IPN operations are experimental demo flows; shipping and refunds are recorded manually. See goihue-state-matrix.md.
 servers:
   - url: /api/store
@@ -91,9 +91,9 @@ paths:
         - {in: query, name: surface, required: false, schema: {type: string, enum: [home, product, cart], default: home}}
         - {in: query, name: productId, required: false, schema: {type: string, format: uuid}}
         - {in: query, name: limit, required: false, schema: {type: integer, minimum: 1, maximum: 8, default: 4}}
-        - {in: query, name: budget, required: false, schema: {type: integer, minimum: 0, maximum: 100000000}}
+        - {in: query, name: budget, required: false, description: 'VND upper bound. Omitted, zero and negative values mean no budget filter.', schema: {type: integer, maximum: 100000000}}
       responses:
-        '200': {description: 'strategy (BOUGHT_TOGETHER then consent-gated PERSONALIZED then POPULAR), surface, items, generatedAt. Only DELIVERED orders contribute scores. Product/cart context is excluded. Budget filters before ranking. Empty results have items=[]; cart requires the current customer session.'}
+        '200': {description: 'strategy (BOUGHT_TOGETHER then consent-gated PERSONALIZED then POPULAR), surface, items, generatedAt, budgetApplied (positive VND or null), rankingBasis (DELIVERED_ORDERS or CATALOG). Items include description and deliveredQuantity. Only DELIVERED orders contribute scores. CATALOG or a zero deliveredQuantity does not establish bestseller status. Product/cart context is excluded. Positive budgets filter before ranking; nonpositive values leave filtering disabled. Empty results have items=[]; cart requires the current customer session.'}
         '401': {$ref: '#/components/responses/Error'}
         '403': {$ref: '#/components/responses/Error'}
         '422': {$ref: '#/components/responses/Error'}
@@ -202,7 +202,7 @@ paths:
                       content: {type: string}
       responses:
         '200':
-          description: 'Bounded Bedrock Converse tool loop (max 4 model rounds and 8 tool calls, 60s deadline) or explicit deterministic fallback. SSE meta identifies provider and conversationId; tool_call/tool_result contain safe execution status, token contains final answer deltas, product_cards and citations derive from tool results, memory describes consented structured preferences, done marks success, error marks failure. No hidden model reasoning is exposed. Completed owned saved turns replay for the same key/body; concurrent requests with the same key return 409. Guests and consent-off turns are never persisted. History is capped at 20 turns per owner. Memory persists until revoked or forgotten. Session is rechecked at completion.'
+          description: 'Bounded Bedrock Converse tool loop (max 4 model rounds and 8 tool calls, 60s deadline) or explicit deterministic fallback. Recommendation budget comes from parsed customer context or consented memory; an invented model budget is ignored. Nonpositive budgets never filter products. The recommendation tool accepts a product-name query and recovers names accidentally supplied as productId. Product questions require fresh catalog evidence even if the model first answers without a tool. Two-product comparisons derive names, prices, descriptions, stock and the price difference from retrieved items; insufficient bestseller evidence is disclosed. SSE meta identifies provider and conversationId; tool_call/tool_result contain safe execution status, token contains final answer deltas, product_cards and citations derive from tool results, memory describes consented structured preferences, done marks success, error marks failure. No hidden model reasoning is exposed. Completed owned saved turns replay for the same key/body; concurrent requests with the same key return 409. Guests and consent-off turns are never persisted. History is capped at 20 turns per owner. Memory persists until revoked or forgotten. Session is rechecked at completion.'
           content:
             text/event-stream:
               schema: {type: string}

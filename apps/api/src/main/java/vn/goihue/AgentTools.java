@@ -10,6 +10,7 @@ import java.util.regex.Pattern;
 
 @Service
 public class AgentTools {
+    private static final Set<String> GIFT_PREFERENCES = Set.of("qua", "tang", "bieu", "cho", "me", "bo", "ba", "ong", "gia", "dinh", "ban", "be", "nguoi", "than", "sinh", "nhat", "tet", "phu", "hop", "duoi", "tam", "ngan", "sach", "dong", "vnd", "k", "goi", "hang", "dang", "chay", "so", "sanh", "san", "pham", "mon", "cac", "nhung", "loai", "duoc", "nhieu", "pho", "bien", "combo", "popular", "bestseller", "best", "selling", "gift", "products");
     private final PlatformApi app;
     private final JdbcTemplate db;
     private final CatalogService catalog;
@@ -67,8 +68,8 @@ public class AgentTools {
 
     List<Tool> definitions() {
         return List.of(
-            definition("recommend_products", "Tìm quà còn bán được, xếp theo đơn đã giao và lựa chọn cá nhân hóa đã đồng ý. Ngân sách budget tính bằng VND. Hỏi bổ sung khi thiếu ngân sách.",
-                Map.of("budget", Map.of("type", "integer", "minimum", 0, "maximum", 100000000), "surface", Map.of("type", "string", "enum", List.of("home", "product", "cart")), "productId", Map.of("type", "string")), List.of()),
+            definition("recommend_products", "Tìm sản phẩm còn bán được. budget là số tiền VND, chỉ truyền khi khách nêu rõ số tiền, không truyền 0; không có budget vẫn tìm được sản phẩm. Tra tên bằng query (tên ngắn, ví dụ Hương Huế), không đưa tên vào productId. productId chỉ là UUID ngữ cảnh mua cùng. rankingBasis=CATALOG nghĩa là chưa có dữ liệu bán chạy; deliveredQuantity=0 không chứng minh sản phẩm bán chạy.",
+                Map.of("budget", Map.of("type", "integer", "minimum", 1, "maximum", 100000000), "query", Map.of("type", "string", "maxLength", 120), "surface", Map.of("type", "string", "enum", List.of("home", "product", "cart")), "productId", Map.of("type", "string", "format", "uuid")), List.of()),
             definition("get_shipping", "Đọc phí giao hàng hiện tại, trạng thái nhận đơn và điều kiện miễn phí. Ngưỡng 0 nghĩa là chưa áp dụng miễn phí theo giá trị đơn. subtotal tùy chọn tính bằng VND.",
                 Map.of("subtotal", Map.of("type", "integer", "minimum", 0, "maximum", 100000000)), List.of()),
             definition("lookup_order", "Tra đúng mã GH-XXXXXXXX thuộc khách đã đăng nhập. Quyền chủ sở hữu do backend xác định. Hỏi mã đơn trước khi tra cứu.",
@@ -100,7 +101,7 @@ public class AgentTools {
 
     Result execute(String name, Map<String, Object> input, Map<String, Object> actor) {
         Set<String> fields = switch (name) {
-            case "recommend_products" -> Set.of("budget", "surface", "productId");
+            case "recommend_products" -> Set.of("budget", "query", "surface", "productId");
             case "get_shipping" -> Set.of("subtotal");
             case "lookup_order" -> Set.of("number");
             case "get_policy" -> Set.of("topic");
@@ -123,15 +124,31 @@ public class AgentTools {
 
     @SuppressWarnings("unchecked")
     private Result gifts(Map<String, Object> actor, Map<String, Object> input) {
-        Integer budget = input.containsKey("budget") ? integer(input, "budget") : null;
+        Integer budget = input.get("budget") == null ? null : app.number(input, "budget");
+        if (budget != null && budget <= 0) budget = null;
+        app.require(budget == null || budget <= 100_000_000, "Ngân sách không hợp lệ.");
         String surface = app.str(input, "surface");
         if (surface.isEmpty()) surface = "home";
         String productId = app.str(input, "productId");
-        var result = recommendations.rank(actor, surface, productId.isEmpty() ? null : productId, 4, budget);
+        String query = app.str(input, "query");
+        // Recover a model-supplied product name without treating an invalid UUID as a missing record.
+        if (!productId.isEmpty() && !productId.matches("(?i)[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}")) {
+            if (query.isEmpty()) query = productId;
+            productId = "";
+            surface = "home";
+        }
+        app.require(query.length() <= 120, "Tên tìm kiếm quá dài.");
+        // Recipient/occasion phrases are gift preferences, not literal product names.
+        String normalizedQuery = normalized(query);
+        if (Arrays.stream(normalizedQuery.split("[^a-z0-9]+")).allMatch(word -> word.isEmpty() || GIFT_PREFERENCES.contains(word) || word.matches("[0-9]+(?:k|tr|vnd|d)?"))) query = "";
+        var result = recommendations.rank(actor, surface, productId.isEmpty() ? null : productId, 4, budget, query);
+        result.put("query", query);
         var cards = (List<Map<String, Object>>) result.get("items");
-        String text = cards.isEmpty() ? "Hiện chưa có sản phẩm còn hàng phù hợp ngân sách. Bạn có muốn đổi ngân sách?" :
+        String text = cards.isEmpty() ?
+            (budget == null ? "Hiện chưa tìm thấy sản phẩm còn hàng" + (query.isEmpty() ? " để gợi ý." : " khớp tên bạn hỏi.") : "Hiện chưa có sản phẩm còn hàng phù hợp ngân sách " + money(budget) + ". Bạn có muốn đổi ngân sách?") :
             "Bạn tham khảo các món còn hàng" + (budget == null ? " dưới đây." : " trong ngân sách " + money(budget) + " dưới đây.");
-        return new Result(result, text, "Danh mục và gợi ý theo đơn đã giao · " + result.get("strategy"), cards);
+        String source = result.get("rankingBasis").equals("CATALOG") ? "Danh mục hiện đang bán · chưa có dữ liệu bán chạy từ đơn đã giao" : "Danh mục và gợi ý theo đơn đã giao · " + result.get("strategy");
+        return new Result(result, text, source, cards);
     }
 
     private int integer(Map<String, Object> input, String field) {
@@ -198,8 +215,22 @@ public class AgentTools {
         if (text.contains("doi tra") || text.contains("tra hang") || text.contains("hoan tien")) calls.add(new Call("get_policy", Map.of("topic", "returns")));
         if (text.contains("bao mat") || text.contains("rieng tu")) calls.add(new Call("get_policy", Map.of("topic", "privacy")));
         if (text.contains("ghi nho") || text.contains("so thich")) calls.add(new Call("get_memory", Map.of()));
-        boolean gifts = text.contains("qua") || text.contains("tang") || text.contains("bieu") || giftContext;
-        if (gifts && slots.containsKey("budget")) calls.add(new Call("recommend_products", Map.of("budget", slots.get("budget"))));
+        var products = productLookup(message, slots, giftContext);
+        if (products != null) calls.add(products);
         return calls;
+    }
+
+    Call productLookup(String message, Map<String, Object> slots, boolean giftContext) {
+        String text = normalized(message);
+        if (!(giftContext || text.contains("qua") || text.contains("tang") || text.contains("bieu")
+                || text.contains("san pham") || text.contains("ban chay") || text.contains("so sanh"))) return null;
+        var input = new LinkedHashMap<String, Object>();
+        if (slots.containsKey("budget")) input.put("budget", slots.get("budget"));
+        var named = Pattern.compile("\\b(hop qua|san pham)\\s+(.+?)(?=\\s+(?:cho|duoc|gia|con|bao nhieu)\\b|[?!.]|$)").matcher(text);
+        if (named.find() && !named.group(2).matches(".*\\b(nao|ban chay|phu hop|duoi|ngan sach)\\b.*")) {
+            String query = (named.group(1).equals("hop qua") ? "hop qua " : "") + named.group(2);
+            input.put("query", query.substring(0, Math.min(query.length(), 120)));
+        }
+        return new Call("recommend_products", input);
     }
 }

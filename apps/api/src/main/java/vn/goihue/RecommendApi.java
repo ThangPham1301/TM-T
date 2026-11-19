@@ -42,9 +42,14 @@ public class RecommendApi {
     }
 
     Map<String, Object> rank(Map<String, Object> actor, String surface, String productId, int limit, Integer budget) {
+        return rank(actor, surface, productId, limit, budget, null);
+    }
+
+    Map<String, Object> rank(Map<String, Object> actor, String surface, String productId, int limit, Integer budget, String query) {
         app.require(Set.of("home", "product", "cart").contains(surface), "Vị trí gợi ý không hợp lệ.");
         app.require(limit >= 1 && limit <= 8, "Số lượng gợi ý từ 1 đến 8.");
-        app.require(budget == null || budget >= 0 && budget <= 100_000_000, "Ngân sách không hợp lệ.");
+        app.require(budget == null || budget <= 100_000_000, "Ngân sách không hợp lệ.");
+        Integer maximum = budget != null && budget > 0 ? budget : null;
         if (productId != null) app.uuid(productId);
         var context = new HashSet<String>();
         if (surface.equals("product") && productId != null) context.add(productId);
@@ -80,7 +85,8 @@ public class RecommendApi {
         }
         var available = sellable().stream()
             .filter(product -> !context.contains(app.str(product, "id")))
-            .filter(product -> budget == null || app.number(product, "price") <= budget)
+            .filter(product -> maximum == null || app.number(product, "price") <= maximum)
+            .filter(product -> matches(product, query))
             .toList();
         var ranked = new ArrayList<>(available.stream().filter(product -> pairs.containsKey(app.str(product, "id"))).toList());
         String strategy = "BOUGHT_TOGETHER";
@@ -96,13 +102,31 @@ public class RecommendApi {
             }
             ranked.sort(popularity);
         }
-        var result = ranked.stream().limit(limit).map(this::card).toList();
-        return Map.of("strategy", strategy, "surface", surface, "items", result, "generatedAt", Instant.now().toString());
+        var result = ranked.stream().limit(limit).map(product -> {
+            var item = card(product);
+            item.put("deliveredQuantity", sold.getOrDefault(app.str(product, "id"), 0));
+            return item;
+        }).toList();
+        var response = new LinkedHashMap<String, Object>();
+        response.put("strategy", strategy);
+        response.put("surface", surface);
+        response.put("items", result);
+        response.put("budgetApplied", maximum);
+        response.put("rankingBasis", available.stream().anyMatch(product -> sold.getOrDefault(app.str(product, "id"), 0) > 0) ? "DELIVERED_ORDERS" : "CATALOG");
+        response.put("generatedAt", Instant.now().toString());
+        return response;
+    }
+
+    private boolean matches(Map<String, Object> product, String query) {
+        if (query == null || query.isBlank()) return true;
+        String name = AgentTools.normalized(app.str(product, "name") + " " + app.str(product, "slug")).replace('-', ' ');
+        return Arrays.stream(AgentTools.normalized(query).split("[^a-z0-9]+"))
+            .filter(word -> !word.isEmpty()).allMatch(name::contains);
     }
 
     Map<String, Object> card(Map<String, Object> product) {
         var result = new LinkedHashMap<String, Object>();
-        for (String field : List.of("id", "slug", "name", "price", "image", "stock", "category")) result.put(field, product.get(field));
+        for (String field : List.of("id", "slug", "name", "price", "image", "stock", "category", "description")) result.put(field, product.get(field));
         return result;
     }
 }

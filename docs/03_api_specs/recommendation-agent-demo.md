@@ -18,6 +18,10 @@ Hai cờ `NEXT_PUBLIC_RECOMMENDATIONS_ENABLED` và `NEXT_PUBLIC_AI_CHAT_ENABLED`
 
 Bedrock nhận schema của năm công cụ `recommend_products`, `get_shipping`, `lookup_order`, `get_policy` và `get_memory`. Model chọn công cụ và tham số. Backend xác thực tham số, lấy owner từ session, thực thi, đưa `toolResult` trở lại model và lặp tối đa bốn vòng với tám lần gọi công cụ. Mỗi lượt có deadline 60 giây. Các kết quả được gửi qua SSE để widget hiển thị các bước kiểm tra dữ liệu. Câu trả lời cuối được gửi bằng các sự kiện `token` sau vòng lặp.
 
+Ngân sách chỉ áp dụng khi dương. API coi 0/âm là chưa đặt giới hạn; dispatcher dùng số tiền đọc từ lời khách hoặc memory đã đồng ý, không dùng ngân sách model tự điền. Vì vậy model gửi 0, âm hoặc sai đơn vị không ghi đè ngân sách khách đã nêu. Không có ngân sách vẫn tìm sản phẩm; kết quả rỗng chỉ nhắc ngân sách nếu thực sự đã áp dụng giới hạn. Công cụ nhận thêm `query` để tìm tên không phân biệt dấu, trả mô tả và số lượng đã giao. Tên bị model điền nhầm vào `productId` được chuyển sang tìm tên thay vì trả lỗi hồ sơ. `rankingBasis=CATALOG` là hàng đang có, chưa chứng minh bán chạy; chỉ dùng nhận xét bán chạy khi số lượng đã giao lớn hơn 0.
+
+Nếu model định trả lời câu hỏi sản phẩm mà chưa gọi công cụ trong lượt hiện tại, dispatcher bổ sung lookup và đưa toolResult lại vào vòng lặp; lịch sử không thay cho kiểm tra giá/tồn mới. So sánh hai sản phẩm dựng từ tên, mô tả, giá, tồn và chênh lệch giá trong các kết quả vừa tra. Nếu chưa có hai món với số đã giao dương, trả rõ chưa đủ dữ liệu xác nhận hai món bán chạy và so sánh hàng đang có.
+
 Chế độ theo luật dùng cùng dispatcher và trả `provider=deterministic`. Có thể trình diễn gợi ý, phí ship, tra đơn và bộ nhớ khi mất kết nối tới model. Trình diễn việc model tự chọn công cụ cần một model Bedrock hoạt động. Mẫu vòng lặp theo Converse API được đối chiếu với ví dụ AWS. [Ví dụ Java của AWS](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/java_bedrock-runtime_code_examples.html)
 
 ## Kịch bản trình diễn

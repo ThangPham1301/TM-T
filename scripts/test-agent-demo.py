@@ -25,11 +25,14 @@ import uuid
 ORIGIN = "http://127.0.0.1:13097"
 BASE = ORIGIN + "/api/store/"
 PASSWORD = "disposable-review-password"
+CHECKS = 0
 
 
 def check(condition, message):
+    global CHECKS
     if not condition:
         raise AssertionError(message)
+    CHECKS += 1
     print("PASS " + message, flush=True)
 
 
@@ -103,6 +106,9 @@ class ModelFixture(http.server.BaseHTTPRequestHandler):
             self.release.wait(15)
             content = [{"text": "Đã xử lý lượt kiểm tra đồng thời."}]
             stop = "end_turn"
+        elif "MODEL_NO_TOOL" in prompt:
+            content = [{"text": "Đã kiểm tra sản phẩm trong danh mục hiện tại."}]
+            stop = "end_turn"
         elif "MODEL_TOOL_LOOP" in prompt:
             if not results:
                 content = [
@@ -121,6 +127,24 @@ class ModelFixture(http.server.BaseHTTPRequestHandler):
             else:
                 check(results[0]["status"] == "error", "untrusted model owner arguments are rejected")
                 content = [{"text": "Tham số công cụ đã bị từ chối."}]
+                stop = "end_turn"
+        elif "MODEL_BUDGET_" in prompt:
+            if not results:
+                budget = 0 if "MODEL_BUDGET_ZERO" in prompt else -1 if "MODEL_BUDGET_NEGATIVE" in prompt else 1
+                arguments = {"budget": budget}
+                if "NAME_LOOKUP" in prompt:
+                    arguments["productId"] = "Hương Huế"
+                if "MISSING_PRODUCT" in prompt:
+                    arguments["query"] = "synthetic-nonexistent-product"
+                if "RECIPIENT_QUERY" in prompt:
+                    arguments["query"] = "quà tặng cho mẹ"
+                if "POPULAR_QUERY" in prompt:
+                    arguments["query"] = "2 gói hàng đang bán chạy"
+                content = [{"toolUse": {"toolUseId": "fixture-budget", "name": "recommend_products", "input": arguments}}]
+                stop = "tool_use"
+            else:
+                data = results[0]["content"][0]["json"]
+                content = [{"text": "Dữ liệu sản phẩm đã kiểm tra: " + json.dumps(data, ensure_ascii=False)}]
                 stop = "end_turn"
         elif "MODEL_UNAVAILABLE" in prompt:
             self.send_response(400)
@@ -209,6 +233,16 @@ def main():
             sql(f"INSERT INTO records(id,kind,owner_id,data,created_at) VALUES(gen_random_uuid(),'order','{owner}','{payload}',now()-interval '{age} day');")
         popular = alice.request("products/recommended?surface=home")
         check(popular["strategy"] == "POPULAR" and popular["items"][0]["id"] == bestseller["id"], "popular counts delivered orders and ignores returned orders")
+        for value in (0, -1):
+            unlimited = guest.request("products/recommended?surface=home&budget=" + str(value))
+            check([item["id"] for item in unlimited["items"]] == [item["id"] for item in popular["items"]] and unlimited["budgetApplied"] is None, "nonpositive API budget is unspecified rather than an empty price filter: " + str(value))
+        under_limit = guest.request("products/recommended?budget=100000")
+        check(under_limit["items"] and all(item["price"] <= 100000 for item in under_limit["items"]) and under_limit["budgetApplied"] == 100000, "positive API budgets still filter products by the requested amount")
+        guest.request("products/recommended?budget=100000001", expected=422)
+        sql("UPDATE records SET data=jsonb_set(data,'{status}','\"CONFIRMED\"'::jsonb) WHERE kind='order' AND data->>'status'='DELIVERED';")
+        cold_start = guest.request("products/recommended")
+        check(cold_start["items"] and cold_start["rankingBasis"] == "CATALOG" and all(item["deliveredQuantity"] == 0 for item in cold_start["items"]), "missing delivered sales still returns catalog products with explicit non-bestseller evidence")
+        sql("UPDATE records SET data=jsonb_set(data,'{status}','\"DELIVERED\"'::jsonb) WHERE kind='order' AND data->>'number' IN ('GH-AAAAAAAA','GH-CCCCCCCC');")
         consent = alice.request("recommendations/consent")
         check(not consent["granted"] and consent["revision"] == 0, "separate personalization consent defaults off")
         alice.request("command", "POST", {"action": "consent", "granted": True}, str(uuid.uuid4()))
@@ -237,6 +271,8 @@ def main():
         events, _ = bob.chat("Tra cứu GH-AAAAAAAA")
         check("Không tìm thấy" in answer(events), "another customer cannot read the requested order")
         check(sql("SELECT count(*) FROM records WHERE kind IN ('chat','ai_memory');") == "0", "guest and consent-off chats leave no persistent chat or memory")
+        no_budget, _ = guest.chat("so sánh 2 gói hàng đang bán chạy")
+        check(len(event_data(no_budget, "product_cards")[0]["items"]) == 2 and "Chênh lệch giá" in answer(no_budget), "budget-free comparisons return two grounded products and their price difference")
         for phrase in ("Quà cho mẹ dưới 200.000đ", "Quà dưới 200,000 VND", "Quà dưới 200 000 đồng", "Phí ship 30k và quà dưới 200k", "Quà dưới 200k và tiền hàng 150000 đồng"):
             formatted, _ = bob.chat(phrase)
             check("200.000đ" in answer(formatted) and event_data(formatted, "product_cards")[0]["items"], "gift budget parsing preserves the requested amount for " + phrase)
@@ -274,6 +310,27 @@ def main():
             "AWS_SECRET_ACCESS_KEY": "synthetic-secret", "AWS_ENDPOINT_URL_BEDROCK_RUNTIME": f"http://host.docker.internal:{model.server_port}"})
         compose("up", "-d", "--force-recreate", "api")
         wait_ready()
+        for marker in ("MODEL_BUDGET_ZERO", "MODEL_BUDGET_NEGATIVE", "MODEL_BUDGET_INVENTED"):
+            unbounded, _ = guest.chat(marker + " gợi ý sản phẩm bán chạy")
+            cards = event_data(unbounded, "product_cards")[0]["items"]
+            expected_cards = guest.request("products/recommended")["items"]
+            check(cards and [item["id"] for item in cards] == [item["id"] for item in expected_cards], "model budget defaults cannot invent a customer price filter: " + marker)
+        corrected, _ = guest.chat("MODEL_BUDGET_ZERO quà cho mẹ dưới 100k")
+        check(event_data(corrected, "product_cards")[0]["items"] and all(item["price"] <= 100000 for item in event_data(corrected, "product_cards")[0]["items"]) and "100.000đ" in event_data(corrected, "tool_result")[0]["summary"], "a zero model budget cannot override the customer's explicit positive budget")
+        small, _ = guest.chat("MODEL_BUDGET_INVENTED quà cho mẹ dưới 200k")
+        check(event_data(small, "product_cards")[0]["items"] and "200.000đ" in event_data(small, "tool_result")[0]["summary"], "an incorrectly scaled model budget cannot shrink the customer's stated amount")
+        recipient, _ = guest.chat("MODEL_BUDGET_ZERO RECIPIENT_QUERY quà cho mẹ ngân sách 500000 đồng")
+        check(event_data(recipient, "product_cards")[0]["items"] and "500.000đ" in event_data(recipient, "tool_result")[0]["summary"], "recipient preferences are not mistaken for a literal product-name filter")
+        popular_query, _ = guest.chat("MODEL_BUDGET_ZERO POPULAR_QUERY so sánh 2 gói hàng đang bán chạy")
+        check(len(event_data(popular_query, "product_cards")[0]["items"]) == 2 and "Chênh lệch giá" in answer(popular_query), "bestseller and comparison phrases are not mistaken for literal product names")
+        missing, _ = guest.chat("MODEL_BUDGET_ZERO MISSING_PRODUCT")
+        check(not event_data(missing, "product_cards")[0]["items"] and "ngân sách" not in event_data(missing, "tool_result")[0]["summary"], "empty results do not invent a budget that the customer never supplied")
+        named = admin.request("commerce", "POST", {"action": "product-save", "name": "Hộp Quà Hương Huế", "slug": "synthetic-huong-hue", "category": first["category"], "description": "Synthetic box with tea and confectionery", "price": 320000, "stock": 7, "active": True}, str(uuid.uuid4()))
+        found, _ = guest.chat("MODEL_BUDGET_ZERO NAME_LOOKUP tôi mua hộp quà Hương Huế cho mẹ được không")
+        check([item["id"] for item in event_data(found, "product_cards")[0]["items"]] == [named["id"]] and event_data(found, "tool_result")[0]["ok"], "a product name in the model UUID field recovers as a name search without a false missing-record error")
+        check(event_data(found, "product_cards")[0]["items"][0]["description"] == named["description"] and '"rankingBasis": "CATALOG"' in answer(found), "named lookup supplies product descriptions and distinguishes unsold catalog stock from bestsellers")
+        refresh, _ = guest.chat("MODEL_NO_TOOL tôi mua hộp quà Hương Huế cho mẹ được không")
+        check(event_data(refresh, "tool_call") and [item["id"] for item in event_data(refresh, "product_cards")[0]["items"]] == [named["id"]], "product answers must refresh catalog evidence even when the model tries to answer without a tool")
         events, _ = alice.chat("MODEL_TOOL_LOOP tìm quà dưới 200k và phí ship")
         check(event_data(events, "meta")[0]["provider"] == "bedrock" and len(event_data(events, "tool_call")) == 2 and ModelFixture.tool_results_seen and ModelFixture.tool_schema_seen,
               "Bedrock protocol loop sends tool schemas, executes model-chosen tools, and feeds both results back")
@@ -325,7 +382,7 @@ def main():
             compose("up", "-d", "--force-recreate", "api")
             wait_ready()
         succeeded = True
-        print("ALL AGENT DEMO CHECKS PASSED", flush=True)
+        print(f"ALL {CHECKS} AGENT DEMO CHECKS PASSED", flush=True)
         if args.keep:
             print(f"Isolated demo left on {ORIGIN}; synthetic login alice@example.invalid / {PASSWORD}", flush=True)
             print(f"Cleanup with docker compose -p {project} -f {compose_path} down --volumes", flush=True)
