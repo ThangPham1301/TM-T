@@ -11,6 +11,7 @@ import { AssistantWidget } from "@/components/assistant-widget";
 import "@/styles/heritage.css";
 import "@/styles/tokens.css";
 import "@/styles/store.css";
+import "@/styles/web-theme.css";
 import "@/styles/lan.css";
 import "@/styles/account-figma.css";
 
