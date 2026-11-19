@@ -9,6 +9,7 @@ import styles from "./cart-view.module.css";
 
 type CartSummary = { items: Row[]; subtotal: number; shippingFee: number; total: number; shipping: Row };
 type CartViewProps = {
+  recommendations?: React.ReactNode;
   summary: CartSummary | null;
   fetching: boolean;
   error: string;
@@ -21,7 +22,7 @@ type CartViewProps = {
 function Icon({ name }: { name: string }) {
   return <span className={`material-symbols-outlined ${styles.icon}`} aria-hidden="true">{name}</span>;
 }
-export function CartView({ summary, fetching, error, disabled, blocked, refresh, update, checkout }: CartViewProps) {
+export function CartView({ summary, fetching, error, disabled, blocked, refresh, update, checkout, recommendations }: CartViewProps) {
   const [confirmClear, setConfirmClear] = useState(false);
   const rows = summary?.items ?? [];
   const threshold = Number(summary?.shipping.freeShippingThreshold ?? 0);
@@ -85,6 +86,7 @@ export function CartView({ summary, fetching, error, disabled, blocked, refresh,
       </div>}
     </section>
     {summary && rows.length > 0 && <div className={styles.mobileBar}><div><small>Tổng thanh toán</small><strong>{money(summary.total)}</strong></div><button type="button" className={styles.primary} disabled={!canCheckout} onClick={checkout}>Tiến hành đặt hàng →</button></div>}
+    {summary && recommendations}
     <Dialog open={confirmClear} title="Xóa tất cả sản phẩm?" closeLabel="Đóng" onClose={() => setConfirmClear(false)}>
       <p>Bạn có chắc muốn xóa toàn bộ {rows.length} sản phẩm khỏi giỏ hàng?</p>
       <p className={styles.dialogHint}>Bạn có thể thêm lại sản phẩm từ bộ sưu tập.</p>

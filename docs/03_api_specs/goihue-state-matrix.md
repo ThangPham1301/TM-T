@@ -4,12 +4,12 @@ Hợp đồng của khung thống nhất sau xây dựng lại. Trạng thái DR
 
 ## Xác thực và quyền
 
-Opaque session lưu hash trong DB, cookie `goihue_session`, HttpOnly/SameSite Strict, path `/api/store`, 8 giờ. Logout hủy phiên hiện tại; đóng tài khoản hủy toàn bộ phiên. Mật khẩu BCrypt, tối thiểu 12 ký tự/tối đa 72 byte UTF-8; kiểm tra email trùng. Rate limit login theo email trong bộ nhớ, 12 lần/15 phút; reset sau thành công/restart. Local HTTP; triển khai public cần TLS/Secure cookie.
+Opaque session lưu hash trong DB, cookie `goihue_session`, HttpOnly/SameSite Strict, path `/api/store`, 8 giờ. APP_COOKIE_SECURE=true bật Secure cookie cho HTTPS; compose.coolify.yml bật sẵn. Logout hủy phiên hiện tại; đóng tài khoản hủy toàn bộ phiên. Mật khẩu BCrypt, tối thiểu 12 ký tự/tối đa 72 byte UTF-8; kiểm tra email trùng. Rate limit login theo email trong bộ nhớ, 12 lần/15 phút; reset sau thành công/restart.
 
 - CUSTOMER: self.manage, cart.manage, order.create, privacy.create, return.create; chỉ hồ sơ/đơn/ảnh của mình.
 - ADMIN: catalog.manage, order.manage, policy.manage, privacy.decide, return.decide, audit.read; không mặc định là khách để tạo giỏ/đơn.
 
-Mọi thao tác ghi yêu cầu Origin tin cậy. BFF chỉ chấp nhận same-origin, backend allowlist localhost/127.0.0.1:3000. Mã đơn/hồ sơ không phải thông tin xác thực; API trả 404 chung cho sai ownership.
+Các thao tác ghi của trình duyệt yêu cầu Origin tin cậy và same-origin tại BFF. APP_PUBLIC_ORIGINS được truyền tới cả web và API trong cấu hình Coolify. Webhook SePay có route POST riêng, giữ raw body và hai header HMAC, xác thực chữ ký thay cho Origin/cookie. Mã đơn/hồ sơ không phải thông tin xác thực; API trả 404 chung cho sai ownership.
 
 ## API
 
@@ -17,8 +17,12 @@ Mọi thao tác ghi yêu cầu Origin tin cậy. BFF chỉ chấp nhận same-or
 | --- | --- | --- |
 | GET products | Không | Catalog đang active, public |
 | GET products/{slug} | Slug | Chi tiết public hoặc 404 |
-| GET products/recommended | surface=home\|product, productId, limit | Gợi ý xếp hạng từ dữ liệu đơn hàng: POPULAR (số lượng đã bán, đơn chưa hủy) hoặc BOUGHT_TOGETHER (đồng xuất hiện trong đơn DELIVERED, cho surface=product); chỉ trả sản phẩm còn bán được (active + danh mục active + còn tồn); public |
-| POST agent/chat | message, history? | Trợ lý mua sắm: stream SSE (token/product_cards/citations/correction/done/error); trả lời bám dữ liệu thật (danh mục còn bán được, phí giao hàng, đơn của chính khách) qua Bedrock Nova Lite, có mẫu trả lời xác định dự phòng khi Bedrock không khả dụng; public, đơn hàng chỉ trong phạm vi owner |
+| GET products/recommended | surface=home\|product\|cart, productId?, budget?, limit=1..8 | BOUGHT_TOGETHER → PERSONALIZED khi có consent riêng → POPULAR. Điểm chỉ từ đơn DELIVERED. Lọc tồn/active/danh mục và ngân sách trước khi xếp hạng; loại sản phẩm trong ngữ cảnh. Cart cần cart.manage. 200 items=[] khi trống, 401 phiên thiếu/hết hạn, 403 sai quyền, 422 tham số sai. Rail có loading/empty/error và nút thử lại. |
+| GET/PUT recommendations/consent | granted, revision; PUT cần Idempotency-Key | self.manage, owner-only. Mặc định false, consent tiếp thị cũ không áp dụng. Revision dùng chung với agent/consent, stale hoặc key dùng sai nội dung trả 409. |
+| GET/PUT agent/consent | historyUse, memoryUse, revision; PUT cần Idempotency-Key | self.manage, hai lựa chọn riêng mặc định false. Rút đồng ý xóa chat hoặc ai_memory trong cùng transaction. Revision chặn lượt đang chạy lưu lại dữ liệu sau khi rút đồng ý. 401/403/409/422 dùng Error envelope. |
+| GET agent/history | conversationId? | self.manage; chủ sở hữu và consent được kiểm tra ở server. Trả hội thoại gần nhất hoặc UUID chỉ định, messages tối đa 40, memory và revision. Consent tắt trả danh sách/memory rỗng. Không lấy dữ liệu tài khoản khác. |
+| DELETE agent/history | Idempotency-Key | self.manage; xóa toàn bộ chat và ai_memory của chính khách, tăng revision; giữ lựa chọn đồng ý. Gửi lại cùng key trả kết quả cũ. UI xóa hội thoại tạm sau thao tác này. |
+| POST agent/chat | message, history? ≤6, conversationId?, Idempotency-Key | Public, Origin tin cậy. SSE meta ghi provider/conversationId; tool_call/tool_result ghi công cụ và tóm tắt thực thi; token, product_cards, citations, memory, done hoặc error. Bedrock Converse tool loop ≤4 vòng, ≤8 calls, deadline 60s; fallback deterministic ghi rõ provider. Chỉ tool lookup_order được đọc đúng mã đơn + owner; không đưa hàng loạt đơn vào prompt. 30 lượt/phút/identity, 4 workers + queue16; quá tải 429. Cùng key đang chạy 409; lượt đã lưu được replay theo owner/key/fingerprint. Lượt consent tắt/guest không lưu. |
 | GET admin/products | Không | Toàn bộ sản phẩm, catalog.manage |
 | GET categories / admin/categories | Không | Danh mục active public / toàn bộ danh mục cho catalog.manage |
 | GET shipping | Không | Phí cơ bản, ngưỡng miễn phí, enabled, revision và pauseMessage nếu đã lưu; public |
@@ -46,9 +50,9 @@ POST commerce/command bắt buộc `Idempotency-Key` 16–80 chữ/số/gạch n
 | --- | --- | --- |
 | cart-set | cartToken, productId UUID, quantity 0..100 | 0 xóa dòng; kiểm tra active của sản phẩm/danh mục và tồn; giá lấy server; một dòng/product/customer |
 | cart-clear / cart-refresh | cartToken | Xóa toàn giỏ / chủ động nhận snapshot giá mới; không tự giảm số lượng |
-| checkout | cartToken, shippingRevision, recipient ≤100, phone 8..30, address ≤400, paymentMethod tùy chọn COD/VIETQR | Kiểm tra giỏ, giá/tồn và phí; mặc định COD. VietQR demo tạo thông tin thanh toán PENDING, có hạn; giảm tồn và xóa giỏ atomically. |
+| checkout | cartToken, shippingRevision, recipient ≤100, phone 8..30 ký tự với ít nhất 8 chữ số, address ≤400, paymentMethod tùy chọn COD/VIETQR | Kiểm tra giỏ, giá/tồn và phí; mặc định COD. VietQR demo tạo thông tin thanh toán PENDING, có hạn; giảm tồn và xóa giỏ atomically. |
 
-VietQR/IPN là luồng demo chưa xác nhận phù hợp giao thức nhà cung cấp; không dùng để xác nhận thanh toán thật. IPN demo bị tắt nếu chưa cấu hình secret riêng; thông báo sai số tiền, đến muộn hoặc đến sau hủy được đưa vào REVIEW. Bộ quét không hoàn tồn lần nữa cho đơn đã hủy/hoàn về/giao thành công. Admin có thể thực hiện payment-resolve (REFUNDED hoặc PAID_RECORDED, có reference, revision và note). Giao thất bại: SHIPPED → DELIVERY_FAILED → SHIPPED hoặc RETURNED; kiểm tra điều kiện thanh toán và hoàn tồn khi RETURNED. Các trạng thái này cần kiểm thử tích hợp.
+VietQR/IPN trên giao diện là luồng demo. SePay HMAC được đối chiếu với tài liệu nhà cung cấp và kiểm tra bằng callback mô phỏng có chữ ký; delivery từ dashboard SePay trên domain triển khai còn cần kiểm chứng sau deploy. POST /payments/sepay/webhook đi qua BFF, không cần browser Origin, giữ raw body và X-SePay-Signature/X-SePay-Timestamp. Tài khoản nhận phải khớp snapshot payment.bankAccount. Số tiền VND dạng số nguyên hoặc decimal có phần lẻ bằng 0 được chấp nhận. Transaction ID được chống lặp toàn cục bằng payment-event, có kiểm tra reference ở đơn cũ; một mã giao dịch không ghi nhận cho hai đơn. Body webhook tối đa 64KiB. IPN demo chỉ dùng trực tiếp backend với secret riêng. Sai số tiền, tiền đến muộn hoặc giao dịch thứ hai vào đơn đã trả tiền chuyển REVIEW. Bộ quét không hoàn tồn lần nữa cho đơn đã hủy/hoàn về/giao thành công. Admin có thể payment-resolve với reference/revision/note. VietQR chưa PAID bị chặn chuyển PACKED/SHIPPED/DELIVERED. order-paid thủ công đồng bộ payment.status=RESOLVED_PAID để dừng màn hình QR. Giao thất bại dùng SHIPPED → DELIVERY_FAILED → SHIPPED hoặc RETURNED.
 | order-cancel | id, revision, note ≤2000 | Owner hoặc ADMIN; PLACED/CONFIRMED và chưa PAID; trả tồn đúng một lần |
 | order-recipient | id, revision, recipient, phone, address, note | Owner hoặc ADMIN; PLACED/CONFIRMED; không đổi giá/phí/items |
 | order-status | id, revision, status, note, reference khi SHIPPED | ADMIN; PLACED→CONFIRMED→PACKED→SHIPPED→DELIVERED; lưu deliveredAt bằng thời gian server |
@@ -87,6 +91,8 @@ Return: REQUESTED→REVIEWING→EVIDENCE_REQUIRED/APPROVED/REJECTED. Nếu cần
 
 ## Giao diện và lỗi
 
+Trang `/account/orders?order={id}` tự mở chi tiết đơn vừa đặt, hiển thị `PaymentPanel` cho VietQR với QR/countdown hoặc PAID/REVIEW/EXPIRED/RESOLVED_PAID/REFUNDED. Nhãn thanh toán dùng phương thức và trạng thái thật của đơn. Bộ lọc gồm UNPAID/PAID/REVIEW/REFUNDED. WebSocket cập nhật trạng thái và dừng hiển thị QR khi có kết quả; người dùng vẫn có thể thu gọn/mở chi tiết.
+
 | Trạng thái | Phản hồi |
 | --- | --- |
 | Loading | Busy/loading message, disabled mutation buttons |
@@ -111,7 +117,7 @@ Error từ backend gồm code, message, requestId. BFF có thể trả message r
 | CUSTOMER address-delete | Supply id and revision. If the default is deleted, another remaining address becomes default. Existing order snapshots retain recipient details. | 401/403/404/409 as above. |
 | Checkout | Send owned addressId or manual recipient, phone and address. Server snapshots destination. | 404 for unowned or removed address. Existing cart/pricing rules still apply. |
 | Password | Send currentPassword and newPassword. Current session survives; other sessions are revoked. | 401 expired session, 403 bad origin, 422 wrong current password or invalid replacement. |
-| WebSocket | Connect at :8088/api/store/live with valid session cookie and a configured storefront Origin. After commit, order and return invalidations reach the owner and admins. Fetch GET /state for the latest records. | Upgrade denied for invalid sessions/origins. Clients reconnect and refresh state after opening. |
+| WebSocket | Connect at same-origin /api/store/live using ws/wss from the page protocol and its public port. Next.js beforeFiles rewrite proxies upgrades to internal API_WEBSOCKET_UPSTREAM. After commit, order and return invalidations reach owner/admin. Fetch GET /state for current data. Server pings every 25s and rechecks sessions. | Upgrade denied for invalid sessions/origins. Revoked sessions close on invalidation or next ping. Clients reconnect and refresh state after opening. |
 
 ### Multi-item returns
 - CUSTOMER return-submit takes orderId, items (1–50 rows of lineId, quantity, reason, resolution and description), and optional shared evidenceIds. Each product can occur only once per submission (422 otherwise). The submission is atomic and returns id (first row), caseId and items. Legacy return-create remains supported.

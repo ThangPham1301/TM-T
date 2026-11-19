@@ -7,7 +7,7 @@ async function proxy(
 ) {
   const path = (await ctx.params).path.join("/");
   if (
-    !/^(policy|state|password|command|commerce|agent\/chat|cart(?:\/summary)?|shipping|categories|products(?:\/[a-z0-9-]+)?|admin\/(products|categories)|catalog\/images\/[a-f0-9-]{36}(?:\/content)?|auth\/(login|register|logout)|evidence\/intents|evidence\/[a-f0-9-]{36}\/content|privacy\/[a-f0-9-]{36}\/export)$/u.test(
+    !/^(policy|state|password|command|commerce|agent\/(chat|consent|history)|recommendations\/consent|cart(?:\/summary)?|shipping|categories|products(?:\/[a-z0-9-]+)?|admin\/(products|categories)|catalog\/images\/[a-f0-9-]{36}(?:\/content)?|auth\/(login|register|logout)|evidence\/intents|evidence\/[a-f0-9-]{36}\/content|privacy\/[a-f0-9-]{36}\/export)$/u.test(
       path,
     )
   )
@@ -56,6 +56,7 @@ async function proxy(
       "Cache-Control": "no-store",
       "X-Content-Type-Options": "nosniff",
     });
+    if (path === "agent/chat") out.set("X-Accel-Buffering", "no");
     for (const name of ["content-type", "content-disposition", "set-cookie"]) {
       const value = upstream.headers.get(name);
       if (value) out.set(name, value);
@@ -71,4 +72,4 @@ async function proxy(
     );
   }
 }
-export { proxy as GET, proxy as POST, proxy as PUT };
+export { proxy as GET, proxy as POST, proxy as PUT, proxy as DELETE };

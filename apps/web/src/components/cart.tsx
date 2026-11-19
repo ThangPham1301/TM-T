@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CartView } from "./cart-view";
 import { CheckoutView } from "./checkout-view";
+import { RecommendationRail } from "./recommendation-rail";
 import { api, fields, type Row, useStore } from "@/lib/store";
 type Summary = {
   items: Row[];
@@ -87,7 +88,7 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
   if (!checkout) {
     return <CartView summary={summary} fetching={fetching} error={error} disabled={disabled} blocked={blocked}
       refresh={() => void refresh()} update={(action, data) => void run(() => update(action, data))}
-      checkout={() => router.push("/checkout")} />;
+      checkout={() => router.push("/checkout")} recommendations={<RecommendationRail surface="cart" refreshKey={summary?.cartToken} />} />;
   }
   return <CheckoutView
     summary={summary} user={state.user} addresses={state.addresses} selectedAddress={selectedAddress}

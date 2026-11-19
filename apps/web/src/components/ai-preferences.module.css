@@ -1,0 +1,55 @@
+.panel {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #e5dac8;
+  border-radius: 12px;
+  background: #fbf7f0;
+  color: #573722;
+  font-size: 13px;
+}
+.panel summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.panel p {
+  line-height: 1.5;
+  margin: 10px 0;
+}
+.panel fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.panel label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 0;
+  line-height: 1.5;
+}
+.panel input {
+  margin-top: 3px;
+  accent-color: #573722;
+}
+.panel button {
+  cursor: pointer;
+  padding: 8px 10px;
+  color: #573722;
+  background: #fffdf8;
+  border: 1px solid #e5dac8;
+  border-radius: 8px;
+}
+.panel button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

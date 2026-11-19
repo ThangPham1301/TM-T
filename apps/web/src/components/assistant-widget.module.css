@@ -2,6 +2,22 @@
    (tokens.css / lan.css): brown #573722, gold #c99643, canvas #fbf7f0,
    surface #f4ebdd, line #e5dac8, ink #2d2016, muted #7d6a58. */
 
+.trace {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.trace summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.trace ol {
+  padding-left: 18px;
+}
+.trace p {
+  margin: 4px 0 10px;
+}
+
 .launcher {
   position: fixed;
   right: 20px;
@@ -200,7 +216,9 @@
 }
 
 @keyframes blink {
-  0%, 80%, 100% {
+  0%,
+  80%,
+  100% {
     opacity: 0.25;
   }
   40% {
