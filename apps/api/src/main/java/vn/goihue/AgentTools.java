@@ -7,6 +7,7 @@ import software.amazon.awssdk.services.bedrockruntime.model.*;
 import java.text.Normalizer;
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Service
 public class AgentTools {
@@ -70,6 +71,10 @@ public class AgentTools {
         return List.of(
             definition("recommend_products", "Tìm sản phẩm còn bán được. budget là số tiền VND, chỉ truyền khi khách nêu rõ số tiền, không truyền 0; không có budget vẫn tìm được sản phẩm. Tra tên bằng query (tên ngắn, ví dụ Hương Huế), không đưa tên vào productId. productId chỉ là UUID ngữ cảnh mua cùng. rankingBasis=CATALOG nghĩa là chưa có dữ liệu bán chạy; deliveredQuantity=0 không chứng minh sản phẩm bán chạy.",
                 Map.of("budget", Map.of("type", "integer", "minimum", 1, "maximum", 100000000), "query", Map.of("type", "string", "maxLength", 120), "surface", Map.of("type", "string", "enum", List.of("home", "product", "cart")), "productId", Map.of("type", "string", "format", "uuid")), List.of()),
+            definition("compare_products", "So sánh đúng hai sản phẩm còn bán được theo tên ngắn hoặc UUID: giá, tồn kho, số lượng đã giao và chênh lệch giá. Dùng khi khách nêu hai sản phẩm hoặc hỏi so sánh hai món cụ thể. first/second là tên sản phẩm ngắn, ví dụ 'Mè Xửng Gừng' và 'Hộp Quà Hương Huế', hoặc UUID.",
+                Map.of("first", Map.of("type", "string", "maxLength", 120), "second", Map.of("type", "string", "maxLength", 120)), List.of("first", "second")),
+            definition("add_to_cart", "Đề xuất thêm một sản phẩm vào giỏ với số lượng. Công cụ KHÔNG tự thêm vào giỏ: hệ thống hiện hộp xác nhận và khách bấm đồng ý thì món mới vào giỏ. Chỉ gọi khi khách nói rõ muốn thêm/mua/bỏ vào giỏ một sản phẩm cụ thể. product là tên sản phẩm ngắn hoặc UUID; quantity mặc định 1.",
+                Map.of("product", Map.of("type", "string", "maxLength", 120), "quantity", Map.of("type", "integer", "minimum", 1, "maximum", 100)), List.of("product")),
             definition("get_shipping", "Đọc phí giao hàng hiện tại, trạng thái nhận đơn và điều kiện miễn phí. Ngưỡng 0 nghĩa là chưa áp dụng miễn phí theo giá trị đơn. subtotal tùy chọn tính bằng VND.",
                 Map.of("subtotal", Map.of("type", "integer", "minimum", 0, "maximum", 100000000)), List.of()),
             definition("lookup_order", "Tra đúng mã GH-XXXXXXXX thuộc khách đã đăng nhập. Quyền chủ sở hữu do backend xác định. Hỏi mã đơn trước khi tra cứu.",
@@ -102,6 +107,8 @@ public class AgentTools {
     Result execute(String name, Map<String, Object> input, Map<String, Object> actor) {
         Set<String> fields = switch (name) {
             case "recommend_products" -> Set.of("budget", "query", "surface", "productId");
+            case "compare_products" -> Set.of("first", "second");
+            case "add_to_cart" -> Set.of("product", "quantity");
             case "get_shipping" -> Set.of("subtotal");
             case "lookup_order" -> Set.of("number");
             case "get_policy" -> Set.of("topic");
@@ -111,6 +118,8 @@ public class AgentTools {
         app.require(fields.containsAll(input.keySet()), "Tham số công cụ không hợp lệ.");
         return switch (name) {
             case "recommend_products" -> gifts(actor, input);
+            case "compare_products" -> compareProducts(input);
+            case "add_to_cart" -> proposeCart(input);
             case "get_shipping" -> shipping(input);
             case "lookup_order" -> order(actor, app.str(input, "number"));
             case "get_policy" -> policy(app.str(input, "topic"));
@@ -149,6 +158,118 @@ public class AgentTools {
             "Bạn tham khảo các món còn hàng" + (budget == null ? " dưới đây." : " trong ngân sách " + money(budget) + " dưới đây.");
         String source = result.get("rankingBasis").equals("CATALOG") ? "Danh mục hiện đang bán · chưa có dữ liệu bán chạy từ đơn đã giao" : "Danh mục và gợi ý theo đơn đã giao · " + result.get("strategy");
         return new Result(result, text, source, cards);
+    }
+
+    /** Resolve a customer/model-supplied product reference (UUID or name) against the sellable catalog. */
+    private Map<String, Object> resolveProduct(String reference) {
+        String ref = reference == null ? "" : reference.trim();
+        app.require(!ref.isEmpty(), "Chưa rõ sản phẩm cần tra.");
+        app.require(ref.length() <= 120, "Tên sản phẩm quá dài.");
+        var sellable = recommendations.sellable();
+        if (ref.matches("(?i)[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}"))
+            return sellable.stream().filter(p -> ref.equalsIgnoreCase(app.str(p, "id"))).findFirst().orElse(null);
+        var words = Arrays.stream(normalized(ref).split("[^a-z0-9]+")).filter(w -> !w.isEmpty()).toList();
+        app.require(!words.isEmpty(), "Chưa rõ sản phẩm cần tra.");
+        var matches = sellable.stream().filter(p -> {
+            String candidate = normalized(app.str(p, "name") + " " + app.str(p, "slug")).replace('-', ' ');
+            return words.stream().allMatch(candidate::contains);
+        }).toList();
+        if (matches.size() <= 1) return matches.isEmpty() ? null : matches.getFirst();
+        // Prefer the tightest name when several products contain the phrase.
+        return matches.stream().min(Comparator.comparingInt(p -> normalized(app.str(p, "name")).length())).orElse(null);
+    }
+
+    private int deliveredQuantity(String productId) {
+        int total = 0;
+        for (var row : db.queryForList("SELECT data::text FROM records WHERE kind='order' AND data->>'status'='DELIVERED'")) {
+            var order = app.decode((String) row.get("data"));
+            for (var item : RecommendApi.items(order))
+                if (productId.equals(app.str(item, "productId"))) total += app.number(item, "quantity");
+        }
+        return total;
+    }
+
+    private Map<String, Object> comparisonCard(Map<String, Object> product) {
+        var card = recommendations.card(product);
+        card.put("deliveredQuantity", deliveredQuantity(app.str(product, "id")));
+        return card;
+    }
+
+    private Result compareProducts(Map<String, Object> input) {
+        var first = resolveProduct(app.str(input, "first"));
+        var second = resolveProduct(app.str(input, "second"));
+        if (first == null || second == null) {
+            String missing = first == null ? app.str(input, "first") : app.str(input, "second");
+            return new Result(Map.of("code", "NOT_FOUND"), "Chưa tìm thấy sản phẩm còn hàng khớp '" + missing + "' để so sánh.", "Danh mục hiện đang bán", List.of());
+        }
+        app.require(!app.str(first, "id").equals(app.str(second, "id")), "Hai sản phẩm cần so sánh đang trùng nhau.");
+        var a = comparisonCard(first);
+        var b = comparisonCard(second);
+        int difference = Math.abs(app.number(a, "price") - app.number(b, "price"));
+        var data = new LinkedHashMap<String, Object>();
+        data.put("items", List.of(a, b));
+        data.put("priceDifference", difference);
+        String text = "**" + app.str(a, "name") + "**: " + money(app.number(a, "price")) + " · Còn " + app.number(a, "stock") + " sản phẩm.\n"
+            + "**" + app.str(b, "name") + "**: " + money(app.number(b, "price")) + " · Còn " + app.number(b, "stock") + " sản phẩm.\n"
+            + "Chênh lệch giá: " + money(difference) + ".";
+        return new Result(data, text, "Danh mục hiện đang bán · so sánh hai sản phẩm", List.of());
+    }
+
+    private Result proposeCart(Map<String, Object> input) {
+        var product = resolveProduct(app.str(input, "product"));
+        if (product == null)
+            return new Result(Map.of("code", "NOT_FOUND"), "Chưa tìm thấy sản phẩm còn hàng khớp '" + app.str(input, "product") + "' để thêm vào giỏ.", "Danh mục hiện đang bán", List.of());
+        int stock = app.number(product, "stock");
+        int quantity = input.get("quantity") == null ? 1 : app.number(input, "quantity");
+        app.require(quantity >= 1 && quantity <= Math.min(100, stock), "Số lượng thêm vào giỏ phải từ 1 tới " + Math.min(100, stock) + " theo tồn kho hiện tại.");
+        var proposal = new LinkedHashMap<String, Object>();
+        proposal.put("productId", app.str(product, "id"));
+        proposal.put("slug", app.str(product, "slug"));
+        proposal.put("name", app.str(product, "name"));
+        proposal.put("price", app.number(product, "price"));
+        proposal.put("image", app.str(product, "image"));
+        proposal.put("stock", stock);
+        proposal.put("quantity", quantity);
+        var data = new LinkedHashMap<String, Object>();
+        data.put("proposal", proposal);
+        String text = "Bạn xác nhận giúp mình nhé: thêm " + quantity + " × " + app.str(product, "name") + " (" + money(app.number(product, "price") * quantity) + ") vào giỏ. Món chỉ vào giỏ khi bạn bấm xác nhận.";
+        return new Result(data, text, "Danh mục hiện đang bán · đề xuất thêm giỏ chờ xác nhận", List.of());
+    }
+
+    /** Products named in the (normalized) message, by full name or by all distinctive name words. */
+    private List<Map<String, Object>> namedProducts(String text) {
+        var tokens = new HashSet<>(Arrays.asList(text.split("[^a-z0-9]+")));
+        var found = new ArrayList<Map<String, Object>>();
+        for (var product : recommendations.sellable()) {
+            String fullName = normalized(app.str(product, "name"));
+            if (!fullName.isEmpty() && text.contains(fullName)) {
+                found.add(product);
+                continue;
+            }
+            var distinctive = Arrays.stream(fullName.split("[^a-z0-9]+"))
+                .filter(w -> !w.isEmpty() && !GIFT_PREFERENCES.contains(w) && !w.equals("hue") && !w.matches("\\d+(g|kg|ml|l)?"))
+                .collect(Collectors.toSet());
+            if (!distinctive.isEmpty() && tokens.containsAll(distinctive)) found.add(product);
+        }
+        return found;
+    }
+
+    private boolean cartIntent(String text) {
+        return text.contains("vao gio") && (text.contains("them") || text.contains("bo") || text.contains("cho"));
+    }
+
+    private int cartQuantity(String text) {
+        var sized = Pattern.compile("(\\d{1,3})\\s*(hop|goi|cai|san pham|phan)\\b").matcher(text);
+        if (sized.find()) {
+            int q = Integer.parseInt(sized.group(1));
+            if (q >= 1 && q <= 100) return q;
+        }
+        var times = Pattern.compile("\\bx\\s*(\\d{1,3})\\b").matcher(text);
+        if (times.find()) {
+            int q = Integer.parseInt(times.group(1));
+            if (q >= 1 && q <= 100) return q;
+        }
+        return 1;
     }
 
     private int integer(Map<String, Object> input, String field) {
@@ -215,8 +336,17 @@ public class AgentTools {
         if (text.contains("doi tra") || text.contains("tra hang") || text.contains("hoan tien")) calls.add(new Call("get_policy", Map.of("topic", "returns")));
         if (text.contains("bao mat") || text.contains("rieng tu")) calls.add(new Call("get_policy", Map.of("topic", "privacy")));
         if (text.contains("ghi nho") || text.contains("so thich")) calls.add(new Call("get_memory", Map.of()));
-        var products = productLookup(message, slots, giftContext);
-        if (products != null) calls.add(products);
+        var named = namedProducts(text);
+        Call structured = null;
+        if (text.contains("so sanh") && named.size() == 2)
+            structured = new Call("compare_products", Map.of("first", app.str(named.get(0), "name"), "second", app.str(named.get(1), "name")));
+        else if (cartIntent(text) && named.size() == 1)
+            structured = new Call("add_to_cart", Map.of("product", app.str(named.get(0), "name"), "quantity", cartQuantity(text)));
+        if (structured != null) calls.add(structured);
+        else {
+            var products = productLookup(message, slots, giftContext);
+            if (products != null) calls.add(products);
+        }
         return calls;
     }
 
