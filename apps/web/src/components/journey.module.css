@@ -314,10 +314,117 @@
 }
 
 /* --- payment panel --- */
+.paymentPanel {
+  container: vietqr / inline-size;
+}
+
+.paymentLayout {
+  display: grid;
+  gap: var(--gh-space-4);
+  align-items: center;
+}
+
+.paymentCode {
+  display: flex;
+  justify-content: center;
+}
+
 .qrFrame {
   display: inline-block;
+  min-width: 0;
+  max-width: 100%;
   padding: var(--gh-space-3);
   background: #fff;
   border: 1px solid var(--gh-border);
   border-radius: var(--gh-radius-md);
+}
+
+.qrFrame img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.qrDownload {
+  color: var(--gh-primary);
+  font-size: var(--gh-text-sm);
+  text-decoration: underline;
+}
+
+.paymentTools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gh-space-2);
+  margin-top: var(--gh-space-3);
+  font-size: var(--gh-text-sm);
+}
+
+.paymentBody {
+  min-width: 0;
+}
+
+.paymentHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 var(--gh-space-4);
+}
+
+.paymentDetails {
+  display: grid;
+  gap: var(--gh-space-2) var(--gh-space-4);
+  margin: var(--gh-space-3) 0 0;
+}
+
+.paymentDetails > div {
+  display: grid;
+  align-content: start;
+  gap: .2rem;
+  min-width: 0;
+  padding: .45rem .65rem;
+  background: var(--gh-background);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-sm);
+}
+
+.paymentDetails dt {
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-muted);
+}
+
+.paymentDetails dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.paymentDeadline {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+@container vietqr (max-width: 22.99rem) {
+  .paymentDetails > div {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: var(--gh-space-2);
+  }
+
+  .paymentDetails dd {
+    text-align: end;
+  }
+}
+
+@container vietqr (min-width: 23rem) {
+  .paymentLayout {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+}
+
+@container vietqr (min-width: 42rem) {
+  .paymentDetails {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.3fr);
+  }
 }

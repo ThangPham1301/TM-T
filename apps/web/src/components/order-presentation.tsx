@@ -1,5 +1,6 @@
 import { StatusBadge } from "@/shared/ui";
 import { label, type Row } from "@/lib/store";
+import { codNeedsReceipt, needsPaymentReview, orderPaymentLabel, orderPaymentStatus } from "@/lib/order-payment";
 import styles from "./journey.module.css";
 
 type Tone = "neutral" | "success" | "warning" | "errorTone";
@@ -24,22 +25,29 @@ const PAYMENT_TONES: Record<string, Tone> = {
   REFUNDED: "success",
   RESOLVED_PAID: "success",
   EXPIRED: "errorTone",
+  CANCELLED: "errorTone",
 };
+
+export function OrderStatusBadge({ order }: { order: Row }) {
+  return <StatusBadge tone={ORDER_TONES[String(order.status)] ?? "neutral"}>{label(order.status)}</StatusBadge>;
+}
+
+export function OrderPaymentBadge({ order }: { order: Row }) {
+  const status = orderPaymentStatus(order);
+  return (
+    <span className={styles.badges}>
+      <StatusBadge tone={codNeedsReceipt(order) ? "warning" : PAYMENT_TONES[status] ?? "neutral"}>{orderPaymentLabel(order)}</StatusBadge>
+      {status !== "REVIEW" && needsPaymentReview(order) && <StatusBadge tone="warning">Cần đối soát khoản bổ sung</StatusBadge>}
+    </span>
+  );
+}
 
 /** Order status and payment status as two independent badges. */
 export function OrderBadges({ order }: { order: Row }) {
   return (
     <span className={styles.badges}>
-      <StatusBadge tone={ORDER_TONES[String(order.status)] ?? "neutral"}>
-        {label(order.status)}
-      </StatusBadge>
-      {order.paymentStatus != null && (
-        <StatusBadge
-          tone={PAYMENT_TONES[String(order.paymentStatus)] ?? "neutral"}
-        >
-          {label(order.paymentStatus)}
-        </StatusBadge>
-      )}
+      <OrderStatusBadge order={order} />
+      {order.paymentStatus != null && <OrderPaymentBadge order={order} />}
     </span>
   );
 }

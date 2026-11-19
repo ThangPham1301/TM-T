@@ -1,9 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type Row, api, cleanText, date, money, useStore } from "@/lib/store";
+import { PaymentPanel } from "./payment-panel";
+import { VietQrDialog } from "./checkout-payment";
+import { codDisplayAmount, codHasNoCollection, codNeedsReceipt, isCodOrder, matchesPaymentFilter, orderPaymentLabel, orderPaymentStatus, paymentDetails } from "@/lib/order-payment";
 
 const EMPTY_ORDERS: Row[] = [];
 export function AccountOrders({
@@ -17,9 +20,8 @@ export function AccountOrders({
   const [statusTab, setStatusTab] = useState<
     "ALL" | "PLACED" | "SHIPPED" | "DELIVERED" | "CANCELLED"
   >("ALL");
-  const [paymentFilter, setPaymentFilter] = useState<"ALL" | "UNPAID" | "PAID">(
-    "ALL",
-  );
+  const [paymentFilter, setPaymentFilter] = useState("");
+  const [payOrderId, setPayOrderId] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>(() => {
     if (initialOrderId) return { [initialOrderId]: true };
     if (typeof window !== "undefined") {
@@ -29,9 +31,23 @@ export function AccountOrders({
     return {};
   });
   const [currentPage, setCurrentPage] = useState(1);
+  const openedOrder = useRef(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const orders = state?.orders ?? EMPTY_ORDERS;
+  const payingOrder = orders.find((order) => order.id === payOrderId);
+  useEffect(() => {
+    if (openedOrder.current || !orders.length) return;
+    const id = initialOrderId ?? new URLSearchParams(window.location.search).get("order");
+    if (!id) return;
+    const index = orders.findIndex((order) => order.id === id);
+    if (index < 0) return;
+    openedOrder.current = true;
+    void Promise.resolve().then(() => {
+      setExpandedIds((previous) => ({ ...previous, [id]: true }));
+      setCurrentPage(Math.floor(index / 4) + 1);
+    });
+  }, [initialOrderId, orders]);
 
   // Tab counts
   const countAll = orders.length;
@@ -68,11 +84,7 @@ export function AccountOrders({
       }
 
       // 2. Payment filter
-      if (paymentFilter === "UNPAID") {
-        if (String(order.paymentStatus) !== "UNPAID") return false;
-      } else if (paymentFilter === "PAID") {
-        if (String(order.paymentStatus) !== "PAID") return false;
-      }
+      if (!matchesPaymentFilter(order, paymentFilter)) return false;
 
       // 3. Search query filter
       if (searchQuery.trim()) {
@@ -142,6 +154,7 @@ export function AccountOrders({
     void run(async () => {
       let summary = await api("cart/summary");
       if (summary.items && summary.items.length > 0) {
+        if (!window.confirm("Giỏ hàng đang có sản phẩm. Bạn muốn thay bằng các món từ đơn này?")) return;
         await mutate("commerce", "cart-clear", {
           cartToken: summary.cartToken,
         });
@@ -339,13 +352,15 @@ export function AccountOrders({
               className="orders-payment-select"
               value={paymentFilter}
               onChange={(e) => {
-                setPaymentFilter(e.target.value as "ALL" | "UNPAID" | "PAID");
+                setPaymentFilter(e.target.value);
                 setCurrentPage(1);
               }}
             >
-              <option value="ALL">Tất cả thanh toán</option>
-              <option value="UNPAID">COD - Chưa thanh toán</option>
-              <option value="PAID">Đã thanh toán COD</option>
+              <option value="">Tất cả thanh toán</option>
+              <option value="UNPAID">Chưa thanh toán</option>
+              <option value="PAID">Đã thanh toán</option>
+              <option value="EXPIRED">VietQR hết hạn</option>
+              <option value="REFUNDED">Đã hoàn tiền</option>
             </select>
           </div>
         </div>
@@ -385,7 +400,7 @@ export function AccountOrders({
                 marginBottom: "1.5rem",
               }}
             >
-              {searchQuery || statusTab !== "ALL" || paymentFilter !== "ALL"
+              {searchQuery || statusTab !== "ALL" || paymentFilter
                 ? "Không tìm thấy đơn hàng phù hợp với bộ lọc hiện tại."
                 : "Quý khách chưa có đơn đặt quà nào. Hãy cùng khám phá các thức quà đặc sản Cố Đô."}
             </p>
@@ -411,10 +426,22 @@ export function AccountOrders({
               "DELIVERY_FAILED",
               "RETURNED",
             ].includes(String(order.status));
+            const payStatus = orderPaymentStatus(order);
             const isCancellable =
               ["PLACED", "CONFIRMED"].includes(String(order.status)) &&
-              String(order.paymentStatus) !== "PAID";
-            const isPaid = String(order.paymentStatus) === "PAID";
+              !["PAID", "REVIEW"].includes(payStatus);
+            const isPaid = payStatus === "PAID";
+            const isCod = isCodOrder(order);
+            const codClosed = isCod && codHasNoCollection(order);
+            const codAmount = codDisplayAmount(order);
+            const orderTotal = Number(order.total ?? 0);
+            const showCodAmount = isCod && !codClosed;
+            const amountLabel = showCodAmount
+              ? isPaid ? "Đã thu COD" : codNeedsReceipt(order) ? "COD chưa ghi nhận thu" : "Trả khi nhận hàng"
+              : codClosed ? "Giá trị đơn hàng" : "Tổng thanh toán";
+            const displayAmount = showCodAmount ? codAmount : orderTotal;
+            const payment = paymentDetails(order);
+            const canOpenQr = payStatus === "PENDING" && payment?.status === "PENDING" && Boolean(payment.payload);
             const history = (order.history as Row[] | undefined) || [];
 
             return (
@@ -492,7 +519,7 @@ export function AccountOrders({
                             backgroundColor: "var(--af-secondary)",
                           }}
                         />
-                        Đang vận chuyển
+                        {order.status === "PACKED" ? "Đã đóng gói" : "Đang vận chuyển"}
                       </span>
                     )}
                     {isDelivered && (
@@ -510,14 +537,14 @@ export function AccountOrders({
                       </span>
                     )}
                     {isCancelled && (
-                      <span className="orders-status-pill orders-status-cancelled">
+                      <span className={`orders-status-pill ${order.status === "DELIVERY_FAILED" ? "orders-status-shipped" : "orders-status-cancelled"}`}>
                         <span
                           className="material-symbols-outlined"
                           style={{ fontSize: "16px" }}
                         >
                           cancel
                         </span>
-                        Đã hủy
+                        {order.status === "DELIVERY_FAILED" ? "Giao chưa thành công" : order.status === "RETURNED" ? "Đã hoàn về cửa hàng" : "Đã hủy"}
                       </span>
                     )}
                     {!isShipped && !isDelivered && !isCancelled && (
@@ -528,35 +555,17 @@ export function AccountOrders({
                         >
                           hourglass_empty
                         </span>
-                        Chờ xác nhận
+                        {order.status === "CONFIRMED" ? "Đã xác nhận" : "Chờ xác nhận"}
                       </span>
                     )}
 
                     {/* Payment Badge */}
-                    {isPaid ? (
-                      <span className="orders-payment-pill">
-                        <span
-                          className="material-symbols-outlined"
-                          style={{ fontSize: "15px" }}
-                        >
-                          check_circle
-                        </span>
-                        Đã thanh toán COD
+                    <span className={`orders-payment-pill${isPaid ? " orders-payment-paid" : " orders-payment-unpaid"}`}>
+                      <span className="material-symbols-outlined" style={{ fontSize: "15px" }} aria-hidden="true">
+                        {isPaid ? "check_circle" : "payments"}
                       </span>
-                    ) : (
-                      <span className="orders-payment-pill orders-payment-unpaid">
-                        <span
-                          className="material-symbols-outlined"
-                          style={{
-                            fontSize: "15px",
-                            color: "var(--af-secondary)",
-                          }}
-                        >
-                          price_check
-                        </span>
-                        COD - Chưa thanh toán
-                      </span>
-                    )}
+                      {orderPaymentLabel(order)}
+                    </span>
                   </div>
                 </div>
 
@@ -630,10 +639,10 @@ export function AccountOrders({
                       }}
                     >
                       <span className="orders-total-label">
-                        Tổng thanh toán
+                        {amountLabel}
                       </span>
                       <span className="orders-total-val">
-                        {money(Number(order.total) || 0)}
+                        {money(displayAmount)}
                       </span>
                     </div>
 
@@ -687,10 +696,16 @@ export function AccountOrders({
                           >
                             repeat
                           </span>
-                          <span>Đặt lại món này</span>
+                          <span>{payStatus === "EXPIRED" ? "Đặt lại đơn" : "Đặt lại món này"}</span>
                         </button>
                       )}
 
+                      {canOpenQr && (
+                        <button type="button" className="orders-btn-action orders-btn-detail" onClick={() => setPayOrderId(order.id)}>
+                          <span className="material-symbols-outlined" aria-hidden="true">qr_code_2</span>
+                          Mở VietQR
+                        </button>
+                      )}
                       {/* Toggle Details button */}
                       <button
                         type="button"
@@ -737,6 +752,9 @@ export function AccountOrders({
                           </span>
                         </div>
                         <div className="orders-timeline-wrapper">
+                          {order.status === "DELIVERY_FAILED" && (
+                            <p className="orders-cod-note">Giao hàng chưa thành công. Tiến trình sẽ cập nhật nếu đơn được giao lại.</p>
+                          )}
                           {history.length > 0 ? (
                             history.map((h, i) => (
                               <div key={i}>
@@ -895,19 +913,30 @@ export function AccountOrders({
                           >
                             {order.paymentMethod === "VIETQR"
                               ? "Chuyển khoản VietQR"
-                              : isPaid
-                                ? "COD - Đã thanh toán"
-                                : "COD khi nhận"}
+                              : "Tiền mặt khi nhận hàng"}
                           </span>
                         </div>
+                        {showCodAmount && codAmount < orderTotal && (
+                          <div className="orders-price-row">
+                            <span>Giảm khoản COD</span><span>−{money(orderTotal - codAmount)}</span>
+                          </div>
+                        )}
                         <div className="orders-price-row total-row">
-                          <span>Tổng thanh toán:</span>
+                          <span>{amountLabel}</span>
                           <span className="total-amount">
-                            {money(Number(order.total) || 0)}
+                            {money(displayAmount)}
                           </span>
                         </div>
+                        {isCod && isPaid && Boolean(order.paidAt) && (
+                          <p className="orders-cod-note">Ghi nhận thu tiền lúc {date(order.paidAt)}</p>
+                        )}
                       </div>
                     </div>
+                    {order.paymentMethod === "VIETQR" && (
+                      <div className="orders-vietqr">
+                        <PaymentPanel order={order} />
+                      </div>
+                    )}
                   </div>
                 )}
               </article>
@@ -966,6 +995,7 @@ export function AccountOrders({
           </nav>
         </div>
       )}
+      {payingOrder && <VietQrDialog key={payingOrder.id} order={payingOrder} open onClose={() => setPayOrderId(null)} />}
     </div>
   );
 }

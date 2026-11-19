@@ -1,0 +1,87 @@
+.page {
+  display: grid;
+  place-items: center;
+  min-height: 48vh;
+  padding: clamp(1rem, 5vw, 3rem);
+}
+
+.receipt {
+  width: min(100%, 36rem);
+  padding: clamp(1.25rem, 5vw, 2.5rem);
+  text-align: center;
+  background: var(--gh-background);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-md);
+  box-shadow: var(--gh-shadow);
+}
+
+.receipt h1 {
+  margin: var(--gh-space-3) 0;
+  color: var(--gh-primary);
+}
+
+.receipt p,
+.orderNumber {
+  color: var(--gh-text-muted);
+}
+
+.icon {
+  color: var(--gh-success);
+  font-size: 2.5rem;
+}
+
+.dialog::backdrop {
+  backdrop-filter: blur(6px);
+}
+
+.orderNumber {
+  margin: 0 0 var(--gh-space-4);
+}
+
+.orderNumber strong {
+  color: var(--gh-primary);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
+  gap: var(--gh-space-3);
+  margin-top: var(--gh-space-6);
+}
+
+.primaryLink,
+.secondaryLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: .6rem 1rem;
+  border: 1px solid var(--gh-primary);
+  border-radius: var(--gh-radius-sm);
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+}
+
+.primaryLink {
+  background: var(--gh-primary);
+  color: var(--gh-on-primary);
+}
+
+.secondaryLink {
+  color: var(--gh-primary);
+}
+
+.primaryLink:focus-visible,
+.secondaryLink:focus-visible {
+  outline: var(--gh-focus-width) solid var(--gh-focus);
+  outline-offset: var(--gh-focus-offset);
+}
+
+@media (max-width: 420px) {
+  .actions > * {
+    flex: 1 1 100%;
+  }
+}

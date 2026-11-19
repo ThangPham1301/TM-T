@@ -3,7 +3,8 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { cleanText, date, label, money, type Row } from "@/lib/store";
 import { LanAdminShell } from "./lan-admin-shell";
-import { OrderBadges } from "./order-presentation";
+import { OrderPaymentBadge, OrderStatusBadge } from "./order-presentation";
+import { codNeedsReceipt, needsPaymentReview } from "@/lib/order-payment";
 import { Pagination } from "./workspace-nav";
 import styles from "./admin-orders.module.css";
 
@@ -54,12 +55,33 @@ export function AdminOrders({ orders, filteredOrders, query, status, paymentStat
       <section className={styles.filters} aria-label="Bộ lọc đơn hàng">
         <label><span>Tìm đơn hàng</span><input type="search" value={query} onChange={(e) => onQueryChange(e.target.value)} placeholder="Mã đơn, người nhận hoặc số điện thoại" /></label>
         <label><span>Trạng thái đơn</span><select value={status} onChange={(e) => onStatusChange(e.target.value)}><option value="">Tất cả trạng thái</option>{statuses.map((s) => <option value={s} key={s}>{label(s)}</option>)}</select></label>
-        <label><span>Thanh toán</span><select value={paymentStatus} onChange={(e) => onPaymentStatusChange(e.target.value)}><option value="">Tất cả thanh toán</option><option value="UNPAID">Chưa thu tiền</option><option value="PAID">Đã thu tiền</option></select></label>
+        <label><span>Thanh toán</span>
+          <select aria-label="Thanh toán" value={paymentStatus} onChange={(e) => onPaymentStatusChange(e.target.value)}>
+            <option value="">Tất cả thanh toán</option>
+            <option value="REVIEW">Cần đối soát ({orders.filter(needsPaymentReview).length})</option>
+            <option value="COD_UNRECORDED">COD đã giao, thiếu chứng từ ({orders.filter(codNeedsReceipt).length})</option>
+            <option value="PENDING">VietQR chờ chuyển khoản</option>
+            <option value="UNPAID">Chưa thu tiền</option>
+            <option value="PAID">Đã thanh toán</option>
+            <option value="EXPIRED">VietQR hết hạn</option>
+            <option value="REFUNDED">Đã hoàn tiền</option>
+          </select>
+        </label>
       </section>
       <section className={styles.list} aria-label="Danh sách đơn hàng">
         <div className={styles.listHeading}><h2>Danh sách đơn hàng</h2><span>{filteredOrders.length} đơn</span></div>
-        <div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Mã đơn hàng</th><th>Thời gian đặt</th><th>Khách hàng / Người nhận</th><th>Trạng thái</th><th>Tổng tiền</th><th><span className={styles.srOnly}>Thao tác</span></th></tr></thead><tbody>
-          {filteredOrders.slice((page - 1) * 8, page * 8).map((order) => <tr key={order.id} className={selected?.id === order.id ? styles.selectedRow : undefined}><td><strong>{String(order.number)}</strong></td><td>{date(order.createdAt)}</td><td><strong>{cleanText(String(order.recipient ?? ""))}</strong><small>{String(order.phone ?? "")}</small><small>{cleanText(String(order.address ?? ""))}</small></td><td><OrderBadges order={order} /></td><td><strong>{money(order.total)}</strong></td><td><button type="button" className={styles.viewButton} onClick={() => onSelect(order)}>Xem chi tiết <span aria-hidden="true">→</span></button></td></tr>)}
+        <div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Mã đơn hàng</th><th>Thời gian đặt</th><th>Khách hàng / Người nhận</th><th>Giao vận</th><th>Thanh toán</th><th>Tổng tiền</th><th><span className={styles.srOnly}>Thao tác</span></th></tr></thead><tbody>
+          {filteredOrders.slice((page - 1) * 8, page * 8).map((order) => (
+            <tr key={order.id} className={selected?.id === order.id ? styles.selectedRow : undefined}>
+              <td><strong>{String(order.number)}</strong></td>
+              <td>{date(order.createdAt)}</td>
+              <td><strong>{cleanText(String(order.recipient ?? ""))}</strong><small>{String(order.phone ?? "")}</small><small>{cleanText(String(order.address ?? ""))}</small></td>
+              <td><OrderStatusBadge order={order} /></td>
+              <td><OrderPaymentBadge order={order} /></td>
+              <td><strong>{money(order.total)}</strong></td>
+              <td><button type="button" className={styles.viewButton} onClick={() => onSelect(order)}>Xem chi tiết <span aria-hidden="true">→</span></button></td>
+            </tr>
+          ))}
         </tbody></table></div>
         {filteredOrders.length === 0 && <p className={styles.empty}>{orders.length ? "Không có đơn phù hợp bộ lọc." : "Chưa có đơn hàng nào."}</p>}
         <div className={styles.pagination}><Pagination page={page} total={filteredOrders.length} pageSize={8} onChange={onPageChange} /></div>

@@ -1034,6 +1034,18 @@ body:has(.account-screen-wrapper:not(.b07-account)) footer {
   color: var(--af-primary);
 }
 
+.orders-payment-paid {
+  background-color: var(--gh-success-surface);
+  color: var(--gh-success);
+}
+
+.orders-cod-note {
+  margin: .25rem 0;
+  color: var(--af-on-surface-variant);
+  font-size: .78rem;
+  line-height: 1.5;
+}
+
 .orders-card-body {
   padding: 1.5rem;
   display: flex;
@@ -1220,6 +1232,10 @@ body:has(.account-screen-wrapper:not(.b07-account)) footer {
   display: grid;
   grid-template-columns: 1fr;
   gap: 1.5rem;
+}
+
+.orders-vietqr {
+  margin-top: 1.25rem;
 }
 
 @media (min-width: 768px) {

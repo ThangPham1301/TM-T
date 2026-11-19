@@ -238,12 +238,35 @@ public class PlatformApi {
                 && (!resolution.equals("REPLACEMENT") || !missingReturnItem(reason)),
                 "Phương án không phù hợp với lý do đổi trả.");
     }
-    private void validateReturnPayment(Map<String,Object> row,Map<String,Object> actor) {
+    private Map<String,Object> validateReturnPayment(Map<String,Object> row,Map<String,Object> actor) {
         String resolution=str(row,"resolution");
-        if(!Set.of("REFUND","ADJUST_DUE").contains(resolution)) return;
-        boolean paid=str(record(str(row,"orderId"),"order",actor),"paymentStatus").equals("PAID");
-        if(resolution.equals("REFUND")) require(paid,"Chưa xác nhận thu tiền; chưa thể hoàn tiền.");
-        else require(!paid,"Đơn đã thu tiền; cần xử lý theo phương án hoàn tiền.");
+        if (!Set.of("REFUND", "ADJUST_DUE").contains(resolution)) return null;
+        var order = record(str(row, "orderId"), "order", actor);
+        String paymentStatus = str(order, "paymentStatus");
+        if (resolution.equals("REFUND")) {
+            require(paymentStatus.equals("PAID"), "Chưa xác nhận thu tiền; chưa thể hoàn tiền.");
+        } else {
+            require(CodPayment.isCod(order) && paymentStatus.equals("UNPAID"),
+                    "Chỉ điều chỉnh khoản phải thu cho đơn COD chưa thu tiền.");
+        }
+        return order;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void adjustCodDue(Map<String,Object> order, Map<String,Object> request,
+                              Map<String,Object> actor, String now) {
+        int amount = number(request, "amount");
+        int due = CodPayment.amountDue(this, order);
+        require(amount > 0 && amount <= due, "Số tiền điều chỉnh vượt khoản COD còn phải thu.");
+        int newDue = due - amount;
+        order.put("codDueAmount", newDue);
+        order.put("revision", number(order, "revision") + 1);
+        request.put("codDueAfterAmount", newDue);
+        ((List<Object>) order.get("history")).add(Map.of(
+                "at", now, "status", str(order, "status"), "action", "order-cod-adjust",
+                "note", "Đã giảm khoản phải thu COD " + amount + " đ theo hồ sơ đổi trả. Còn phải thu " + newDue + " đ."));
+        save("order", owner(str(order, "id")), order);
+        audit(actor, str(order, "id"), "order-cod-adjust");
     }
     @SuppressWarnings("unchecked") Map<String,Object> execute(Map<String,Object> a,Map<String,Object> b) {
         String action=text(b,"action",60);UUID uid=(UUID)a.get("id");
@@ -354,13 +377,49 @@ public class PlatformApi {
                         resumed=true;
                     }
                     case "APPROVED" -> {
-                        require(status.equals("REVIEWING")||(Set.of("WAITING_STOCK","PAYMENT_REVIEW").contains(status)&&str(r,"resumeStatus").equals("APPROVED")&&str(r,"goods").equals("NOT_REQUIRED")),"Cần xem xét trước khi duyệt.");r.remove("resumeStatus");int q=number(b,"approvedQuantity");require(q>0&&q<=number(r,"quantity"),"Số lượng duyệt không hợp lệ.");if(r.containsKey("approvedQuantity"))require(q<=number(r,"approvedQuantity"),"Không thể tăng số lượng đã duyệt.");String previousResolution=str(r,"resolution");r.put("approvedQuantity",q);r.put("amount",number(r,"unitPrice")*q);r.put("resolution",text(b,"resolution",30));validateReturnResolution(str(r,"reason"),str(r,"resolution"),true);require(!Boolean.TRUE.equals(b.get("returnRequired"))||!missingReturnItem(str(r,"reason")),"Không thể thu hồi hàng chưa nhận.");r.put("goods",Boolean.TRUE.equals(b.get("returnRequired"))?"AWAITING_PICKUP":"NOT_REQUIRED");r.put("feeBearer","Gói Huế");if(!str(r,"resolution").equals(previousResolution)){r.put("proposedQuantity",r.remove("approvedQuantity"));next="CUSTOMER_CONFIRMATION";}
+                        require(status.equals("REVIEWING") || (Set.of("WAITING_STOCK","PAYMENT_REVIEW").contains(status)
+                                && str(r,"resumeStatus").equals("APPROVED") && str(r,"goods").equals("NOT_REQUIRED")),
+                                "Cần xem xét trước khi duyệt.");
+                        r.remove("resumeStatus");
+                        int q = number(b,"approvedQuantity");
+                        require(q > 0 && q <= number(r,"quantity"), "Số lượng duyệt không hợp lệ.");
+                        if (r.containsKey("approvedQuantity")) {
+                            require(q <= number(r,"approvedQuantity"), "Không thể tăng số lượng đã duyệt.");
+                        }
+                        String previousResolution = str(r,"resolution");
+                        String resolution = text(b,"resolution",30);
+                        r.put("approvedQuantity",q);
+                        r.put("amount",number(r,"unitPrice")*q);
+                        r.put("resolution",resolution);
+                        validateReturnResolution(str(r,"reason"),resolution,true);
+                        if (resolution.equals("ADJUST_DUE")) validateReturnPayment(r,a);
+                        require(!Boolean.TRUE.equals(b.get("returnRequired")) || !missingReturnItem(str(r,"reason")),
+                                "Không thể thu hồi hàng chưa nhận.");
+                        r.put("goods",Boolean.TRUE.equals(b.get("returnRequired"))?"AWAITING_PICKUP":"NOT_REQUIRED");
+                        r.put("feeBearer","Gói Huế");
+                        if (!resolution.equals(previousResolution)) {
+                            r.put("proposedQuantity", r.remove("approvedQuantity"));
+                            next = "CUSTOMER_CONFIRMATION";
+                        }
                     }
                     case "RECEIVED" -> {require(status.equals("APPROVED")&&str(r,"goods").equals("AWAITING_PICKUP"),"Chưa có thu hồi được duyệt.");int received=b.containsKey("receivedQuantity")?number(b,"receivedQuantity"):number(r,"approvedQuantity");require(received>=0&&received<=number(r,"approvedQuantity"),"Số lượng nhận không hợp lệ.");r.put("receivedQuantity",received);r.put("goods","RECEIVED");if(received<number(r,"approvedQuantity")){r.put("resumeStatus",received==0?"APPROVED":"RECEIVED");next="EXCEPTION";}}
                     case "INSPECTED" -> {require(status.equals("RECEIVED"),"Chưa nhận hàng trả.");String disposition=text(b,"disposition",30);require(Set.of("QUARANTINE","DAMAGED","DISPOSE").contains(disposition),"Thực phẩm trả không tự nhập lại tồn bán.");int inspected=b.containsKey("inspectedQuantity")?number(b,"inspectedQuantity"):number(r,"approvedQuantity");int received=r.containsKey("receivedQuantity")?number(r,"receivedQuantity"):number(r,"approvedQuantity");require(inspected>0&&inspected<=received,"Số lượng đạt kiểm hàng không hợp lệ.");if(inspected<number(r,"approvedQuantity")){r.put("approvedQuantity",inspected);r.put("amount",number(r,"unitPrice")*inspected);}r.put("goods",disposition);}
                     case "PROCESSING" -> {require((status.equals("APPROVED")&&str(r,"goods").equals("NOT_REQUIRED"))||status.equals("INSPECTED"),"Chưa đủ điều kiện thực hiện.");validateReturnPayment(r,a);r.put("fulfillment","MANUAL_PENDING");}
                     case "REPLACEMENT_SENT" -> {require(status.equals("PROCESSING")&&Set.of("REPLACEMENT","MAKE_UP").contains(str(r,"resolution")),"Chưa thể gửi hàng.");r.put("replacementTracking",text(b,"reference",200));}
-                    case "RESOLVED" -> {boolean shipment=Set.of("REPLACEMENT","MAKE_UP").contains(str(r,"resolution"));require(shipment?(status.equals("REPLACEMENT_SENT")||(status.equals("PROCESSING")&&!r.containsKey("caseId"))):status.equals("PROCESSING"),"Chưa đủ điều kiện xác nhận kết quả.");validateReturnPayment(r,a);r.put("operationReference",text(b,"reference",200));r.put("fulfillment","MANUAL_CONFIRMED");r.put("completedAt",Instant.now().toString());}
+                    case "RESOLVED" -> {
+                        boolean shipment = Set.of("REPLACEMENT", "MAKE_UP").contains(str(r, "resolution"));
+                        require(shipment ? (status.equals("REPLACEMENT_SENT") ||
+                                (status.equals("PROCESSING") && !r.containsKey("caseId"))) : status.equals("PROCESSING"),
+                                "Chưa đủ điều kiện xác nhận kết quả.");
+                        var order = validateReturnPayment(r, a);
+                        String now = Instant.now().toString();
+                        r.put("operationReference", text(b, "reference", 200));
+                        r.put("fulfillment", "MANUAL_CONFIRMED");
+                        r.put("completedAt", now);
+                        if (str(r, "resolution").equals("ADJUST_DUE")) {
+                            adjustCodDue(order, r, a, now);
+                        }
+                    }
                     default -> throw new Problem(422,"Trạng thái không hợp lệ.");
                 }
             }

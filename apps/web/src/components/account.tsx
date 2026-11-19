@@ -9,6 +9,8 @@ import { AccountSecurity } from "./account-security";
 import { AccountPrivacy } from "./account-privacy";
 import { AccountOrders } from "./account-orders";
 import { AdminOrders } from "./admin-orders";
+import { AdminCodPayment, AdminOrderPayment } from "./admin-order-payment";
+import { codAmountDue, codNeedsReceipt, isCodOrder, matchesPaymentFilter, orderPaymentStatus } from "@/lib/order-payment";
 import { AdminPrivacy } from "./admin-privacy";
 import { accountNavigation } from "@/shared/layout/navigation";
 import { PaymentPanel } from "./payment-panel";
@@ -128,7 +130,7 @@ export function Account({
           .toLocaleLowerCase("vi")
           .includes(orderQuery.toLocaleLowerCase("vi"))) &&
       (!orderStatus || o.status === orderStatus) &&
-      (!paymentStatus || o.paymentStatus === paymentStatus),
+      matchesPaymentFilter(o, paymentStatus),
   );
   const visibleOrderPage = Math.min(
     orderPage,
@@ -382,6 +384,17 @@ export function Account({
         ) : <p>Mã hồ sơ: {current.id}</p>}
         {current.items != null ? (
           <>
+            {admin && current.paymentMethod === "VIETQR" && (
+              <AdminOrderPayment
+                key={current.id + String(current.revision)}
+                order={current}
+                busy={busy}
+                onResolve={(data) => void run(async () => {
+                  await mutate("commerce", "payment-resolve", { ...data, id: current.id, revision: current.revision });
+                })}
+              />
+            )}
+            {admin && isCodOrder(current) && <AdminCodPayment order={current} />}
             <OrderTimeline order={current} />
             <p>
               {cleanText(String(current.recipient))} · {String(current.phone)}
@@ -416,8 +429,8 @@ export function Account({
               {money(current.shippingFee)} ·{" "}
               <strong>Tổng {money(current.total)}</strong>
             </p>
-            <PaymentPanel order={current} />
-            {Boolean(current.paymentReference) && (
+            {!admin && <PaymentPanel order={current} />}
+            {!admin && Boolean(current.paymentReference) && (
               <p>
                 Biên nhận thu tiền: {String(current.paymentReference)} ·{" "}
                 {date(current.paidAt)}
@@ -537,6 +550,9 @@ export function Account({
             )}
             {Boolean(current.amount) && (
               <p>Số tiền: {money(current.amount)}</p>
+            )}
+            {current.codDueAfterAmount != null && (
+              <p>Khoản COD phải thu sau điều chỉnh: <strong>{money(current.codDueAfterAmount)}</strong></p>
             )}
             <p>{String(current.description)}</p>
             {Boolean(current.reason) && <p>Lý do: {label(current.reason)}</p>}
@@ -723,7 +739,8 @@ export function Account({
               <CaseAction
                 key={current.id + String(current.revision)}
                 row={current}
-                paymentStatus={state.orders.find((order) => order.id === current.orderId)?.paymentStatus}
+                paymentStatus={linkedReturnOrder?.paymentStatus}
+                allowCodAdjustment={Boolean(linkedReturnOrder && codNeedsReceipt(linkedReturnOrder))}
                 onSave={(b) =>
                   void run(async () => {
                     await mutate(
@@ -1158,7 +1175,11 @@ function OrderAction({
   busy: boolean;
   onSave: (b: Record<string, unknown>) => void;
 }) {
-  const nextOptions = (
+  const paidStatus = orderPaymentStatus(row);
+  const isCod = isCodOrder(row);
+  const codDelivery = isCod && row.status === "SHIPPED";
+  const blockedVietQr = row.paymentMethod === "VIETQR" && paidStatus !== "PAID";
+  const nextOptions = ((
     {
       PLACED: ["CONFIRMED"],
       CONFIRMED: ["PACKED"],
@@ -1166,32 +1187,41 @@ function OrderAction({
       SHIPPED: ["DELIVERED", "DELIVERY_FAILED"],
       DELIVERY_FAILED: ["SHIPPED", "RETURNED"],
     } as Record<string, string[]>
-  )[String(row.status)] ?? [];
+  )[String(row.status)] ?? []).filter((status) =>
+    !(blockedVietQr && ["PACKED", "SHIPPED", "DELIVERED"].includes(status))
+    && !(paidStatus === "PAID" && status === "RETURNED"),
+  );
   const actions = [
-    ...(row.paymentStatus === "REVIEW" ? ["payment-resolve"] : []),
     ...(nextOptions.length ? ["order-status"] : []),
-    ...(row.paymentStatus !== "PAID" && row.status !== "CANCELLED"
-      ? ["order-paid"]
-      : []),
+    ...(codNeedsReceipt(row) ? ["order-paid"] : []),
     ...(["PLACED", "CONFIRMED"].includes(String(row.status)) &&
-    row.paymentStatus !== "PAID"
+    !["PAID", "REVIEW"].includes(paidStatus)
       ? ["order-cancel"]
       : []),
   ];
   const [action, setAction] = useState(actions[0] ?? "");
-  const [next, setNext] = useState(nextOptions[0] ?? "");
-  const nextValue = nextOptions.includes(next)
+  const [next, setNext] = useState(codDelivery ? "" : nextOptions[0] ?? "");
+  const nextValue = codDelivery || nextOptions.includes(next)
     ? next
     : (nextOptions[0] ?? "");
+  const collectsCod = action === "order-paid" ||
+    (action === "order-status" && nextValue === "DELIVERED" && codDelivery && paidStatus === "UNPAID");
+  const codDue = codAmountDue(row);
+  const deliveryLabel = (status: string) => {
+    if (status === "DELIVERED" && codDelivery) {
+      return paidStatus === "UNPAID" ? "Giao thành công và xác nhận thu COD" : "Giao thành công";
+    }
+    return label(status);
+  };
   if (!actions.length)
-    return <p>Không còn thao tác xử lý trực tiếp cho đơn này.</p>;
+    return <p>{blockedVietQr && ["CONFIRMED", "PACKED", "SHIPPED", "DELIVERY_FAILED"].includes(String(row.status))
+      ? "Cần xác nhận thanh toán VietQR trước khi tiếp tục giao vận."
+      : "Không còn thao tác xử lý trực tiếp cho đơn này."}</p>;
   const title =
-    action === "payment-resolve"
-      ? "Xử lý đối soát thanh toán (REVIEW)"
-      : action === "order-status"
-        ? `Chuyển sang ${label(nextValue)}`
+    action === "order-status"
+        ? codDelivery ? deliveryLabel(nextValue) : `Chuyển sang ${label(nextValue)}`
         : action === "order-paid"
-          ? "Xác nhận đã thu tiền"
+          ? "Bổ sung chứng từ thu COD"
           : "Hủy đơn đủ điều kiện";
   return (
     <form
@@ -1199,11 +1229,11 @@ function OrderAction({
       onSubmit={(e) => {
         const b = fields(e);
         if (window.confirm(`${title} cho đơn ${row.number}?`))
-          onSave({ ...b, status: nextValue });
+          onSave({ ...b, status: nextValue, ...(collectsCod ? { collectedAmount: Number(b.collectedAmount) } : {}) });
       }}
     >
       <h3>Xử lý đơn hàng</h3>
-      <label>
+      {codDelivery ? <input type="hidden" name="action" value="order-status" /> : <label>
         Thao tác
         <select
           name="action"
@@ -1212,54 +1242,45 @@ function OrderAction({
         >
           {actions.map((a) => (
             <option key={a} value={a}>
-              {a === "payment-resolve"
-                ? "Đối soát thanh toán (REVIEW)"
-                : a === "order-status"
+              {a === "order-status"
                   ? `Chuyển sang ${label(nextValue)}`
                   : a === "order-paid"
-                    ? "Xác nhận đã thu tiền"
+                    ? "Bổ sung chứng từ thu COD"
                     : "Hủy đơn"}
             </option>
           ))}
         </select>
-      </label>
+      </label>}
       {action === "order-status" && nextOptions.length > 1 && (
         <label>
-          Trạng thái tiếp theo
+          {codDelivery ? "Kết quả giao hàng" : "Trạng thái tiếp theo"}
           <select
             value={nextValue}
             onChange={(e) => setNext(e.target.value)}
+            required={codDelivery}
           >
+            {codDelivery && <option value="" disabled>Chọn kết quả giao hàng</option>}
             {nextOptions.map((s) => (
               <option value={s} key={s}>
-                {label(s)}
+                {deliveryLabel(s)}
               </option>
             ))}
           </select>
         </label>
       )}
-      {action === "payment-resolve" && (
+      {collectsCod && (
         <label>
-          Kết quả đối soát
-          <select name="resolution">
-            <option value="PAID_RECORDED">
-              Ghi nhận đã thu tiền — giữ đơn, tiếp tục xử lý
-            </option>
-            <option value="REFUNDED">
-              Hoàn tiền cho khách (qua kênh ngoài hệ thống)
-            </option>
-          </select>
+          Số tiền thực thu (VND)
+          <input name="collectedAmount" type="number" inputMode="numeric" min={codDue} max={codDue} step={1} required />
+          <small>Số tiền phải thu của đơn là <strong>{money(codDue)}</strong>.</small>
         </label>
       )}
-      {(action === "order-paid" ||
-        action === "payment-resolve" ||
+      {(collectsCod ||
         (action === "order-status" && nextValue === "SHIPPED")) && (
         <label>
-          {action === "order-paid"
-            ? "Mã chứng từ thu tiền"
-            : action === "payment-resolve"
-              ? "Mã chứng từ xử lý (biên nhận hoàn / đối soát)"
-              : "Mã vận đơn"}
+          {collectsCod
+            ? "Mã chứng từ thu COD"
+            : "Mã vận đơn"}
           <input name="reference" required maxLength={200} />
         </label>
       )}
@@ -1271,7 +1292,9 @@ function OrderAction({
         Chỉ xác nhận khi có bằng chứng thực tế. Giao vận và thu tiền đang được
         ghi nhận thủ công.
       </p>
-      <button disabled={busy}>Xác nhận xử lý</button>
+      <button disabled={busy || (action === "order-status" && !nextValue)}>
+        {collectsCod ? codDelivery ? "Xác nhận giao và thu COD" : "Lưu chứng từ thu COD" : "Xác nhận xử lý"}
+      </button>
     </form>
   );
 }
@@ -1283,12 +1306,14 @@ function missingReturnItem(reason: unknown) {
 function CaseAction({
   row,
   paymentStatus,
+  allowCodAdjustment,
   busy,
   onSave,
 }: {
   row: Row;
   busy: boolean;
   paymentStatus?: unknown;
+  allowCodAdjustment: boolean;
   onSave: (data: Record<string, unknown>) => void;
 }) {
   const missing = missingReturnItem(row.reason);
@@ -1313,7 +1338,7 @@ function CaseAction({
         PAYMENT_REVIEW: row.resumeStatus === "APPROVED" && row.goods === "NOT_REQUIRED" ? ["RESUME", "APPROVED"] : ["RESUME"],
         EXCEPTION: ["RESUME"],
       };
-  const paymentBlocked = row.resolution === "REFUND" ? paymentStatus !== "PAID" : row.resolution === "ADJUST_DUE" && paymentStatus === "PAID";
+  const paymentBlocked = row.resolution === "REFUND" ? paymentStatus !== "PAID" : row.resolution === "ADJUST_DUE" && !allowCodAdjustment;
   const refundAwaitingPayment = row.resolution === "REFUND" && paymentBlocked;
   const resumeNeedsPayment =
     row.status === "PAYMENT_REVIEW" ||
@@ -1357,7 +1382,7 @@ function CaseAction({
       )}
       {refundNotice}
       {paymentBlocked && !refundAwaitingPayment && (
-        <p className="store-warning">Đơn đã thu tiền. Cần chuyển sang phương án hoàn tiền.</p>
+        <p className="store-warning">Chỉ điều chỉnh khoản phải thu cho đơn COD chưa thu tiền.</p>
       )}
       {reviewingReturn ? (
         <fieldset className="returns-decisions">
@@ -1410,7 +1435,7 @@ function CaseAction({
               <option value="REFUND">Hoàn tiền</option>
               {!missing && <option value="REPLACEMENT">Đổi hàng</option>}
               {missing && <option value="MAKE_UP">Giao bù</option>}
-              <option value="ADJUST_DUE">Điều chỉnh khoản phải thu</option>
+              {allowCodAdjustment && <option value="ADJUST_DUE">Điều chỉnh khoản phải thu COD</option>}
             </select>
           </label>
           {!missing && <label className="store-check">

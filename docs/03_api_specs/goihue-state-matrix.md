@@ -46,13 +46,18 @@ POST commerce/command bắt buộc `Idempotency-Key` 16–80 chữ/số/gạch n
 | --- | --- | --- |
 | cart-set | cartToken, productId UUID, quantity 0..100 | 0 xóa dòng; kiểm tra active của sản phẩm/danh mục và tồn; giá lấy server; một dòng/product/customer |
 | cart-clear / cart-refresh | cartToken | Xóa toàn giỏ / chủ động nhận snapshot giá mới; không tự giảm số lượng |
-| checkout | cartToken, shippingRevision, recipient ≤100, phone 8..30, address ≤400, paymentMethod tùy chọn COD/VIETQR | Kiểm tra giỏ, giá/tồn và phí; mặc định COD. VietQR demo tạo thông tin thanh toán PENDING, có hạn; giảm tồn và xóa giỏ atomically. |
+| checkout | cartToken, shippingRevision, recipient ≤100, phone 8..30, address ≤400, paymentMethod tùy chọn COD/VIETQR | Kiểm tra giỏ, giá/tồn và phí; mặc định COD. VietQR demo tạo thông tin thanh toán PENDING, có hạn; giảm tồn và xóa giỏ atomically. Khi đặt thành công, khách thấy hộp thoại VietQR. Đóng hộp thoại giữ nguyên đơn và cho phép mở lại mã từ chi tiết đơn khi phiên còn hiệu lực. COD mở thẳng chi tiết đơn. |
 
-VietQR/IPN là luồng demo chưa xác nhận phù hợp giao thức nhà cung cấp; không dùng để xác nhận thanh toán thật. IPN demo bị tắt nếu chưa cấu hình secret riêng; thông báo sai số tiền, đến muộn hoặc đến sau hủy được đưa vào REVIEW. Bộ quét không hoàn tồn lần nữa cho đơn đã hủy/hoàn về/giao thành công. Admin có thể thực hiện payment-resolve (REFUNDED hoặc PAID_RECORDED, có reference, revision và note). Giao thất bại: SHIPPED → DELIVERY_FAILED → SHIPPED hoặc RETURNED; kiểm tra điều kiện thanh toán và hoàn tồn khi RETURNED. Các trạng thái này cần kiểm thử tích hợp.
+VietQR/IPN là luồng demo. IPN yêu cầu chữ ký và đối chiếu số tiền với tổng đơn. Khách thấy trạng thái VietQR trên thẻ đơn, có thể mở mã còn hạn và sao chép nội dung chuyển khoản. Admin lọc theo trạng thái và xem chứng từ tại chi tiết đơn.
+
+- VietQR yêu cầu `PAID` trước khi đóng gói, xuất giao hoặc ghi nhận đã giao. `order-paid` dành cho COD. Quét hết hạn chỉ tự hủy và trả tồn cho đơn chưa đóng gói (`PLACED` / `CONFIRMED`) có phiên `PENDING`.
+- Khoản đầu sai số tiền, đến muộn hoặc đến sau hủy vào `REVIEW`. Admin ghi nhận kết quả bằng `payment-resolve` kèm mã chứng từ, revision và ghi chú. Khoản đến muộn hoặc sai số tiền chỉ cho ghi nhận hoàn. Hoàn khoản chính trước khi giao hủy đơn và trả tồn nếu hàng chưa được xuất giao.
+- Các giao dịch bổ sung được lưu trong `payment.extraPayments` theo mã giao dịch, số tiền, thời điểm tiếp nhận và trạng thái đối soát. `EXTRA_REFUNDED` yêu cầu `transactionId` và chỉ ghi nhận hoàn khoản được chọn. Trạng thái thanh toán chính giữ nguyên khi nhận hoặc hoàn khoản bổ sung. Gửi lại thông báo cùng mã giao dịch được bỏ qua.
+- Giao thất bại: SHIPPED → DELIVERY_FAILED → SHIPPED hoặc RETURNED. Tiếp tục giao VietQR yêu cầu đã thu tiền; hoàn kho áp dụng khi đủ điều kiện thu hồi.
 | order-cancel | id, revision, note ≤2000 | Owner hoặc ADMIN; PLACED/CONFIRMED và chưa PAID; trả tồn đúng một lần |
 | order-recipient | id, revision, recipient, phone, address, note | Owner hoặc ADMIN; PLACED/CONFIRMED; không đổi giá/phí/items |
-| order-status | id, revision, status, note, reference khi SHIPPED | ADMIN; PLACED→CONFIRMED→PACKED→SHIPPED→DELIVERED; lưu deliveredAt bằng thời gian server |
-| order-paid | id, revision, note, reference ≤200 | ADMIN; chưa PAID, không CANCELLED; ghi nhận thực thu thủ công, không chuyển tiền |
+| order-status | id, revision, status, note, reference khi SHIPPED hoặc giao thành công COD chưa thu, collectedAmount khi giao thành công COD chưa thu | ADMIN; COD được xuất giao khi UNPAID. Giao thành công COD ghi nhận giao và thu trong cùng giao dịch, lưu chứng từ và thời gian server. Đơn cũ đã PAID giữ chứng từ ban đầu. |
+| order-paid | id, revision, note, reference ≤200, collectedAmount | ADMIN; chỉ bổ sung chứng từ cho đơn COD cũ đã DELIVERED nhưng UNPAID. Số thu phải bằng khoản phải thu hiện hành. Chờ giải quyết hồ sơ điều chỉnh còn mở trước khi ghi nhận. |
 | product-save | id/revision khi sửa, name≤150, slug≤120, category≤120, description≤4000, imageId tùy chọn, price 1..10.000.000, stock 0..1.000.000, active boolean | ADMIN; category active, slug duy nhất; imageId READY hoặc rỗng để gỡ ảnh; không nhận URL ảnh mới; sửa stock tuyệt đối có audit |
 | category-save / category-delete | id/revision khi sửa/xóa; code/name/description/sortOrder/active/imageId khi lưu | ADMIN; code duy nhất; đổi code cập nhật mapping product; chỉ xóa khi không có product |
 | product-delete / catalog-toggle | id/revision; kind/active khi toggle | ADMIN; chỉ xóa product chưa có cart/order tham chiếu; còn lại dùng ẩn |
@@ -62,6 +67,8 @@ VietQR/IPN là luồng demo chưa xác nhận phù hợp giao thức nhà cung c
 Không có voucher, loyalty, phí thanh toán online hay API carrier. Giá đơn hàng là snapshot, không bị đổi theo catalog sau khi đặt.
 
 Chi tiết giới hạn và trạng thái CRUD 1.1 tại [catalog-commerce-crud.md](catalog-commerce-crud.md). `state` bổ sung cartCount. Giỏ cũ hoặc cấu hình phí cũ trả 409, UI hướng dẫn tải lại. Cảnh báo giá đổi/hết hàng/ngừng bán chặn checkout đến khi người dùng xử lý. Danh sách quản trị có tìm kiếm, lọc và phân trang client 8 dòng/trang; chưa có server pagination. Ảnh catalog được decode/re-encode; ảnh evidence vẫn thuộc luồng private riêng, chưa có antivirus.
+
+COD hiển thị khoản phải thu khi giao và thời điểm thu sau khi ghi nhận. Đơn COD đã giao nhưng thiếu chứng từ xuất hiện trong bộ lọc bổ sung chứng từ của admin. Khi hồ sơ `ADJUST_DUE` của đơn COD chưa thu hoàn tất, hệ thống giảm `codDueAmount` theo số tiền duyệt, lưu chứng từ trên hồ sơ và ghi kết quả vào đơn. Giá trị gốc `total` vẫn dùng làm số tiền ban đầu. Đơn cũ chưa điều chỉnh lấy `total` làm khoản phải thu. Hoàn tiền cho đơn đã thu tiếp tục đi theo hồ sơ đổi trả.
 
 ### Platform actions
 

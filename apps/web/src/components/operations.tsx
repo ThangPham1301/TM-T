@@ -356,6 +356,7 @@ const auditActions: Record<string, [string, string]> = {
   checkout: ["Đơn hàng", "Tạo đơn hàng"],
   "order-status": ["Đơn hàng", "Cập nhật trạng thái đơn"],
   "order-paid": ["Đơn hàng", "Ghi nhận đã thu tiền"],
+  "order-cod-adjust": ["Đơn hàng", "Điều chỉnh khoản phải thu COD"],
   "order-cancel": ["Đơn hàng", "Hủy đơn hàng"],
   "order-recipient": ["Đơn hàng", "Cập nhật người nhận"],
   "payment-resolve": ["Đơn hàng", "Đối soát thanh toán"],

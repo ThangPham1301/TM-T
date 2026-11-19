@@ -85,28 +85,111 @@ public class CommerceApi {
             }
             case "order-cancel","order-status","order-paid","order-recipient","payment-resolve" -> {
                 var order=app.record(app.text(b,"id",50),"order",a);catalog.revision(order,b);String status=app.str(order,"status"),note=app.text(b,"note",2000);
+                var payment = VietQrPayment.details(order);
+                VietQrPayment.normalizeLegacyExtra(order, payment);
+                String paymentStatus = app.str(order, "paymentStatus");
                 if(action.equals("order-cancel")){
-                    app.require(Set.of("PLACED","CONFIRMED").contains(status),"Đơn không còn cho phép hủy trực tiếp.");app.require(!app.str(order,"paymentStatus").equals("PAID"),"Đơn đã thu tiền cần liên hệ hỗ trợ để xử lý hoàn.");
-                    for(var line:(List<Map<String,Object>>)order.get("items")){var p=product(app.str(line,"productId"));p.put("stock",app.number(p,"stock")+app.number(line,"quantity"));p.put("revision",app.number(p,"revision")+1);app.save("product",null,p);}order.put("status","CANCELLED");
+                    app.require(Set.of("PLACED","CONFIRMED").contains(status),"Đơn không còn cho phép hủy trực tiếp.");
+                    app.require(!Set.of("PAID", "REVIEW").contains(paymentStatus),
+                            "Đơn đã thu tiền hoặc đang đối soát. Vui lòng liên hệ hỗ trợ để xử lý.");
+                    releaseOrderStock(order);
+                    order.put("status","CANCELLED");
                 }else if(action.equals("order-recipient")){
                     app.require(Set.of("PLACED","CONFIRMED").contains(status),"Chỉ sửa thông tin nhận trước khi đóng gói.");recipient(order,b);
                 }else{
                     app.permission(a,"order.manage");
-                    if(action.equals("payment-resolve")){
-                        app.require(app.str(order,"paymentStatus").equals("REVIEW"),"Đơn không ở trạng thái đối soát thanh toán.");
-                        String resolution=app.text(b,"resolution",30);var payment=(Map<String,Object>)order.get("payment");
-                        if(resolution.equals("REFUNDED")){order.put("paymentStatus","REFUNDED");if(payment!=null)payment.put("status","REFUNDED");order.put("paymentReference",app.text(b,"reference",200));}
-                        else if(resolution.equals("PAID_RECORDED")){app.require(!status.equals("CANCELLED"),"Đơn đã hủy; chỉ có thể xử lý hoàn tiền.");order.put("paymentStatus","PAID");if(payment!=null)payment.put("status","RESOLVED_PAID");order.put("paymentReference",app.text(b,"reference",200));order.put("paidAt",Instant.now().toString());}
-                        else throw new PlatformApi.Problem(422,"Cách xử lý đối soát không hợp lệ.");
+                    if (action.equals("payment-resolve")) {
+                        resolveVietQr(order, payment, b, note);
+                    } else if (action.equals("order-paid")) {
+                        app.require(CodPayment.isCod(order) && status.equals("DELIVERED"),
+                                "Chỉ bổ sung chứng từ thu COD cho đơn đã giao. Đơn đang giao dùng thao tác xác nhận giao.");
+                        boolean adjusting = Boolean.TRUE.equals(db.queryForObject("""
+                                SELECT EXISTS (SELECT 1 FROM records WHERE kind='return'
+                                  AND data->>'orderId'=? AND data->>'resolution'='ADJUST_DUE'
+                                  AND data->>'status' NOT IN ('RESOLVED', 'REJECTED', 'WITHDRAWN'))
+                                """, Boolean.class, app.str(order, "id")));
+                        app.require(!adjusting, "Hãy hoàn tất hồ sơ điều chỉnh khoản phải thu trước khi ghi nhận COD.");
+                        CodPayment.recordCollection(app, order, b, Instant.now().toString());
+                    } else {
+                        String next = app.text(b, "status", 40);
+                        var transitions = Map.of("PLACED", Set.of("CONFIRMED"), "CONFIRMED", Set.of("PACKED"),
+                                "PACKED", Set.of("SHIPPED"), "SHIPPED", Set.of("DELIVERED", "DELIVERY_FAILED"),
+                                "DELIVERY_FAILED", Set.of("SHIPPED", "RETURNED"));
+                        app.require(transitions.getOrDefault(status, Set.of()).contains(next), "Chuyển trạng thái đơn không hợp lệ.");
+                        app.require(VietQrPayment.canFulfill(order, next), "Cần xác nhận thanh toán VietQR trước khi đóng gói hoặc giao hàng.");
+                        if (next.equals("SHIPPED")) order.put("trackingReference", app.text(b, "reference", 200));
+                        if (next.equals("DELIVERED")) {
+                            String now = Instant.now().toString();
+                            if (CodPayment.isCod(order) && !paymentStatus.equals("PAID")) {
+                                CodPayment.recordCollection(app, order, b, now);
+                            }
+                            order.put("deliveredAt", now);
+                        }
+                        if (next.equals("DELIVERY_FAILED")) order.put("deliveryFailedAt", Instant.now().toString());
+                        if (next.equals("RETURNED")) {
+                            app.require(!paymentStatus.equals("PAID"), "Đơn đã thu tiền cần xử lý qua đổi/trả và hoàn tiền.");
+                            releaseOrderStock(order);
+                            order.put("returnedAt", Instant.now().toString());
+                        }
+                        order.put("status", next);
                     }
-                    else if(action.equals("order-paid")){app.require(!status.equals("CANCELLED")&&!app.str(order,"paymentStatus").equals("PAID"),"Không thể ghi nhận thu tiền.");order.put("paymentStatus","PAID");order.put("paymentReference",app.text(b,"reference",200));order.put("paidAt",Instant.now().toString());var payment=(Map<String,Object>)order.get("payment");if(payment!=null&&app.str(payment,"status").equals("REVIEW"))payment.put("status","RESOLVED_PAID");}
-                    else{String next=app.text(b,"status",40);var transitions=Map.of("PLACED",Set.of("CONFIRMED"),"CONFIRMED",Set.of("PACKED"),"PACKED",Set.of("SHIPPED"),"SHIPPED",Set.of("DELIVERED","DELIVERY_FAILED"),"DELIVERY_FAILED",Set.of("SHIPPED","RETURNED"));app.require(transitions.getOrDefault(status,Set.of()).contains(next),"Chuyển trạng thái đơn không hợp lệ.");if(next.equals("SHIPPED"))order.put("trackingReference",app.text(b,"reference",200));if(next.equals("DELIVERED"))order.put("deliveredAt",Instant.now().toString());if(next.equals("DELIVERY_FAILED"))order.put("deliveryFailedAt",Instant.now().toString());if(next.equals("RETURNED")){app.require(!app.str(order,"paymentStatus").equals("PAID"),"Đơn đã thu tiền cần xử lý qua đổi/trả và hoàn tiền.");for(var line:(List<Map<String,Object>>)order.get("items")){var p=product(app.str(line,"productId"));p.put("stock",app.number(p,"stock")+app.number(line,"quantity"));p.put("revision",app.number(p,"revision")+1);app.save("product",null,p);}order.put("returnedAt",Instant.now().toString());}order.put("status",next);}
                 }
                 ((List<Object>)order.get("history")).add(Map.of("at",Instant.now().toString(),"status",app.str(order,"status"),"note",note,"action",action));order.put("revision",app.number(order,"revision")+1);result=app.save("order",app.owner(app.str(order,"id")),order);
             }
             default -> throw new PlatformApi.Problem(422,"Thao tác không được hỗ trợ.");
         }
         app.audit(a,app.str(result,"id"),action);db.update("INSERT INTO operations VALUES(?,?,?,?::jsonb)",uid,key,fingerprint,app.encode(result));return result;
+    }
+
+    private void resolveVietQr(Map<String, Object> order, Map<String, Object> payment,
+                               Map<String, Object> input, String note) {
+        app.require(VietQrPayment.isVietQr(order) && payment != null, "Đơn không dùng VietQR.");
+        String resolution = app.text(input, "resolution", 30);
+        String reference = app.text(input, "reference", 200);
+        String now = Instant.now().toString();
+        if (resolution.equals("EXTRA_REFUNDED")) {
+            String transactionId = app.text(input, "transactionId", 100);
+            var extra = VietQrPayment.extras(payment).stream()
+                    .filter(receipt -> transactionId.equals(receipt.get("transactionId")) && "REVIEW".equals(receipt.get("status")))
+                    .findFirst()
+                    .orElseThrow(() -> new PlatformApi.Problem(422, "Giao dịch bổ sung không còn chờ đối soát."));
+            extra.put("status", "REFUNDED");
+            extra.put("refundReference", reference);
+            extra.put("refundedAt", now);
+            extra.put("note", note);
+            return;
+        }
+
+        app.require("REVIEW".equals(order.get("paymentStatus")), "Đơn không ở trạng thái đối soát thanh toán.");
+        if (resolution.equals("PAID_RECORDED")) {
+            app.require(VietQrPayment.canRecordPrimaryPayment(order, payment),
+                    "Khoản tiền sai số tiền, đến muộn hoặc đơn đã đóng chỉ được ghi nhận hoàn.");
+            order.put("paymentStatus", "PAID");
+            payment.put("status", "RESOLVED_PAID");
+            payment.put("paidAt", now);
+            order.put("paidAt", now);
+        } else if (resolution.equals("REFUNDED")) {
+            order.put("paymentStatus", "REFUNDED");
+            payment.put("status", "REFUNDED");
+            payment.put("refundedAt", now);
+            if (Set.of("PLACED", "CONFIRMED", "PACKED").contains(order.get("status"))) {
+                releaseOrderStock(order);
+                order.put("status", "CANCELLED");
+            }
+        } else {
+            throw new PlatformApi.Problem(422, "Cách xử lý đối soát không hợp lệ.");
+        }
+        order.put("paymentReference", reference);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void releaseOrderStock(Map<String, Object> order) {
+        for (var line : (List<Map<String, Object>>) order.get("items")) {
+            var product = product(app.str(line, "productId"));
+            product.put("stock", app.number(product, "stock") + app.number(line, "quantity"));
+            product.put("revision", app.number(product, "revision") + 1);
+            app.save("product", null, product);
+        }
     }
     void recipient(Map<String,Object> order,Map<String,Object> b){order.put("recipient",app.text(b,"recipient",100));String phone=app.text(b,"phone",30);app.require(phone.matches("[+0-9() .-]{8,30}"),"Số điện thoại không hợp lệ.");order.put("phone",phone);order.put("address",app.text(b,"address",400));}
     @ExceptionHandler(Exception.class) public org.springframework.http.ResponseEntity<?> error(Exception e){return app.error(e);}

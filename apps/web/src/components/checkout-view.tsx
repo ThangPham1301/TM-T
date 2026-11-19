@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { money, shippingPauseMessage, type Row } from "@/lib/store";
 import { AddressFields } from "./account-settings";
 import { ProductImage } from "./product/product-image";
@@ -17,6 +17,7 @@ type CheckoutViewProps = {
 function Icon({ name }: { name: string }) { return <span className={`material-symbols-outlined ${styles.icon}`} aria-hidden="true">{name}</span>; }
 
 export function CheckoutView({ summary, user, addresses, selectedAddress, fetching, error, busy, disabled, blocked, addingAddress, onRefresh, onToggleAddress, onSelectAddress, onSaveAddress, onCheckout }: CheckoutViewProps) {
+  const [paymentMethod, setPaymentMethod] = useState<"COD" | "VIETQR">("COD");
   const rows = summary?.items ?? [];
   const threshold = Number(summary?.shipping.freeShippingThreshold ?? 0);
   return <main className={styles.page}>
@@ -52,10 +53,9 @@ export function CheckoutView({ summary, user, addresses, selectedAddress, fetchi
             </section>}
             <fieldset className={styles.card}><legend className={styles.visuallyHidden}>Phương thức thanh toán</legend><div className={styles.cardHeading}><span className={styles.number}>{selectedAddress ? "2" : "3"}</span><h2>Phương thức thanh toán</h2></div>
               <div className={styles.payments}>
-                <label className={styles.payment}><input type="radio" name="paymentMethod" value="COD" defaultChecked /><span><strong>Thanh toán khi nhận hàng (COD)</strong><small>Trả tiền mặt khi đơn được giao.</small></span><Icon name="payments" /></label>
-                <label className={styles.payment}><input type="radio" name="paymentMethod" value="VIETQR" /><span><strong>VietQR (demo)</strong><small>Chỉ phục vụ thử nghiệm; không chuyển tiền thật. Thông báo thanh toán demo cần được cấu hình riêng.</small></span><Icon name="qr_code_2" /></label>
+                <label className={styles.payment}><input type="radio" name="paymentMethod" value="COD" checked={paymentMethod === "COD"} onChange={() => setPaymentMethod("COD")} /><span><strong>Tiền mặt khi nhận hàng (COD)</strong><small>Thanh toán cho người giao khi nhận đơn.</small></span><Icon name="payments" /></label>
+                <label className={styles.payment}><input type="radio" name="paymentMethod" value="VIETQR" checked={paymentMethod === "VIETQR"} onChange={() => setPaymentMethod("VIETQR")} /><span><strong>VietQR (demo)</strong><small>Mã QR xuất hiện sau khi đặt hàng. Không chuyển tiền thật.</small></span><Icon name="qr_code_2" /></label>
               </div>
-              <div className={styles.paymentInfo}><Icon name="info" /><span>Vui lòng kiểm tra thông tin nhận hàng và phương thức thanh toán trước khi xác nhận.</span></div>
             </fieldset>
           </form>}
         </section>
@@ -71,8 +71,14 @@ export function CheckoutView({ summary, user, addresses, selectedAddress, fetchi
           </article>)}</div>
           <dl className={styles.prices}><div><dt>Tạm tính ({rows.length} món)</dt><dd>{money(summary.subtotal)}</dd></div><div><dt>Phí vận chuyển</dt><dd>{money(summary.shippingFee)}</dd></div></dl>
           {threshold > 0 && <p className={styles.shipping}>{summary.subtotal >= threshold ? "Đơn hàng đủ điều kiện miễn phí giao hàng." : `Còn ${money(threshold - summary.subtotal)} nữa để được miễn phí giao hàng.`}</p>}
-          <div className={styles.total}><div><strong>Tổng thanh toán</strong><small>Giá và phí được kiểm tra khi đặt hàng</small></div><strong>{money(summary.total)}</strong></div>
-          <button type="submit" form="goihue-checkout" className={styles.primary} disabled={disabled || blocked || !summary.shipping.enabled || addingAddress}><Icon name="verified" /> Xác nhận đặt hàng</button>
+          <div className={styles.total}>
+            <div>
+              <strong>{paymentMethod === "COD" ? "Trả khi nhận hàng" : "Tổng thanh toán"}</strong>
+              <small>{paymentMethod === "COD" ? "Tiền mặt · Đã gồm phí giao hàng" : "Giá và phí được kiểm tra khi đặt hàng"}</small>
+            </div>
+            <strong aria-live="polite">{money(summary.total)}</strong>
+          </div>
+          <button type="submit" form="goihue-checkout" className={styles.primary} disabled={disabled || blocked || !summary.shipping.enabled || addingAddress}><Icon name={paymentMethod === "VIETQR" ? "qr_code_2" : "verified"} />{paymentMethod === "VIETQR" ? "Đặt hàng & mở VietQR" : "Xác nhận đặt hàng"}</button>
           <p className={styles.policy}>Xem <Link href="/privacy-policy">Chính sách bảo mật</Link> và <Link href="/return-policy">Chính sách đổi trả</Link> trước khi đặt hàng.</p>
           <div className={styles.assurances}><span><Icon name="local_shipping" /> Giao hàng theo thông tin đã chọn</span><Link href="/return-policy">Chính sách đổi trả</Link></div>
           <button type="button" className={styles.refresh} disabled={disabled} onClick={onRefresh}><Icon name="refresh" /> Tải lại giỏ &amp; phí giao</button>

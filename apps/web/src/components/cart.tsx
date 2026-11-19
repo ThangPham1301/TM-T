@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CartView } from "./cart-view";
 import { CheckoutView } from "./checkout-view";
+import { CheckoutPayment } from "./checkout-payment";
 import { api, fields, type Row, useStore } from "@/lib/store";
 type Summary = {
   items: Row[];
@@ -21,6 +22,7 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
     [fetching, setFetching] = useState(false);
   const [addressChoice, setAddressChoice] = useState<string | null>(null);
   const [addingAddress, setAddingAddress] = useState(false);
+  const [placedVietQrOrder, setPlacedVietQrOrder] = useState<Row | null>(null);
   async function refresh() {
     setFetching(true);
     try {
@@ -89,6 +91,10 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
       refresh={() => void refresh()} update={(action, data) => void run(() => update(action, data))}
       checkout={() => router.push("/checkout")} />;
   }
+  if (placedVietQrOrder) {
+    const order = state.orders.find(({ id }) => id === placedVietQrOrder.id) ?? placedVietQrOrder;
+    return <CheckoutPayment key={order.id} order={order} />;
+  }
   return <CheckoutView
     summary={summary} user={state.user} addresses={state.addresses} selectedAddress={selectedAddress}
     fetching={fetching} error={error} busy={busy} disabled={disabled} blocked={blocked} addingAddress={addingAddress}
@@ -111,7 +117,11 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
           cartToken: summary.cartToken,
           shippingRevision: summary.shipping.revision,
         });
-        router.push(`/account/orders?order=${order.id}`);
+        if (order.paymentMethod === "VIETQR") {
+          setPlacedVietQrOrder(order);
+          return;
+        }
+        router.push(`/account/orders?order=${encodeURIComponent(order.id)}`);
       });
     }}
   />;

@@ -158,7 +158,7 @@ paths:
   /commerce:
     post:
       operationId: commerceMutation
-      description: Action-specific required fields, money limits and permissions are in the state matrix. Owner and monetary values are server-controlled.
+      description: Action-specific fields and permissions are in the state matrix. VietQR requires confirmed payment before packing or dispatch. For unpaid COD, delivery confirmation records collection in the same transaction. Direct order-paid only supplements an already-delivered unpaid COD order.
       parameters:
         - {$ref: '#/components/parameters/Idempotency'}
       requestBody:
@@ -173,9 +173,12 @@ paths:
                     pauseMessage: {type: string, maxLength: 250, description: Optional customer-facing notice for shipping-save when new orders are paused}
                     addressId: {type: string, format: uuid, description: Optional saved CUSTOMER destination for checkout in place of manual recipient fields}
                     paymentMethod: {type: string, enum: [COD, VIETQR], description: Optional; defaults to COD. VietQR is a demo integration.}
+                    resolution: {type: string, enum: [PAID_RECORDED, REFUNDED, EXTRA_REFUNDED], description: Outcome for payment-resolve}
+                    transactionId: {type: string, maxLength: 100, description: Required for EXTRA_REFUNDED. Identifies the pending additional receipt on this order.}
+                    collectedAmount: {type: integer, minimum: 0, description: Required to close an unpaid COD delivery or supplement a legacy delivery. Must equal the current COD amount due.}
                     action: {type: string, enum: [cart-set, cart-clear, cart-refresh, checkout, order-cancel, order-status, order-paid, order-recipient, payment-resolve, product-save, product-delete, category-save, category-delete, catalog-toggle, shipping-save, catalog-image-intent]}
       responses:
-        '200': {description: Persisted record or acknowledgement}
+        '200': {description: 'Persisted record or acknowledgement. COD orders may include codDueAmount after adjustment and codCollectedAmount after collection.'}
         '401': {$ref: '#/components/responses/Error'}
         '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
@@ -195,11 +198,11 @@ paths:
               required: [orderNumber, amount, transactionId, signature]
               properties:
                 orderNumber: {type: string}
-                amount: {type: integer, format: int64}
+                amount: {type: integer, format: int64, minimum: 1}
                 transactionId: {type: string}
                 signature: {type: string, description: HMAC-SHA256 hex of orderNumber pipe amount pipe transactionId}
       responses:
-        '200': {description: PAID, DUPLICATE_IGNORED, REVIEW_AMOUNT, REVIEW_LATE, REVIEW_DOUBLE or ALREADY_REVIEW}
+        '200': {description: 'PAID, DUPLICATE_IGNORED, REVIEW_AMOUNT, REVIEW_LATE or REVIEW_DOUBLE. REVIEW_DOUBLE records an additional receipt without changing the primary payment status.'}
         '401': {$ref: '#/components/responses/Error'}
         '503': {$ref: '#/components/responses/Error'}
   /payments/sepay/webhook:
