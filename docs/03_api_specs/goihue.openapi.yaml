@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Goi Hue Unified Store API
-  version: 1.3.1-draft
+  version: 1.3.2-draft
   description: Unified persistence API. VietQR/IPN operations are experimental demo flows; shipping and refunds are recorded manually. See goihue-state-matrix.md.
 servers:
   - url: /api/store
@@ -202,7 +202,7 @@ paths:
                       content: {type: string}
       responses:
         '200':
-          description: 'Bounded Bedrock Converse tool loop (max 4 model rounds and 8 tool calls, 60s deadline) or explicit deterministic fallback. Recommendation budget comes from parsed customer context or consented memory; an invented model budget is ignored. Nonpositive budgets never filter products. The recommendation tool accepts a product-name query and recovers names accidentally supplied as productId. Product questions require fresh catalog evidence even if the model first answers without a tool. Two-product comparisons derive names, prices, descriptions, stock and the price difference from retrieved items; insufficient bestseller evidence is disclosed. SSE meta identifies provider and conversationId; tool_call/tool_result contain safe execution status, token contains final answer deltas, product_cards and citations derive from tool results, memory describes consented structured preferences, done marks success, error marks failure. No hidden model reasoning is exposed. Completed owned saved turns replay for the same key/body; concurrent requests with the same key return 409. Guests and consent-off turns are never persisted. History is capped at 20 turns per owner. Memory persists until revoked or forgotten. Session is rechecked at completion.'
+          description: 'Bounded Bedrock Converse tool loop (max 4 model rounds and 8 tool calls, 60s deadline) or explicit deterministic fallback. Recommendation budget comes from parsed customer context or consented memory; an invented model budget is ignored. Nonpositive budgets never filter products. The recommendation tool accepts a product-name query and recovers names accidentally supplied as productId. Product questions require fresh catalog evidence even if the model first answers without a tool. Two-product comparisons derive names, prices, descriptions, stock and the price difference from retrieved items; insufficient bestseller evidence is disclosed. The compare_products tool resolves two named products against the sellable catalog and emits an SSE comparison event carrying both product cards and the price difference. The add_to_cart tool is proposal-only: it validates product and quantity against live stock and emits an SSE cart_proposal event; the cart itself is written through the storefront commerce API only after the customer confirms in the UI, never by the agent backend. SSE meta identifies provider and conversationId; tool_call/tool_result contain safe execution status, token contains final answer deltas, product_cards and citations derive from tool results, memory describes consented structured preferences, done marks success, error marks failure. No hidden model reasoning is exposed. Completed owned saved turns replay for the same key/body; concurrent requests with the same key return 409. Guests and consent-off turns are never persisted. History is capped at 20 turns per owner. Memory persists until revoked or forgotten. Session is rechecked at completion.'
           content:
             text/event-stream:
               schema: {type: string}

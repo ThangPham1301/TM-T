@@ -97,7 +97,7 @@ class ModelFixture(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-        ModelFixture.tool_schema_seen = len(body.get("toolConfig", {}).get("tools", [])) == 5
+        ModelFixture.tool_schema_seen = len(body.get("toolConfig", {}).get("tools", [])) == 7
         messages = body["messages"]
         prompt = next(block["text"] for msg in reversed(messages) for block in msg["content"] if "text" in block and msg["role"] == "user")
         results = [block["toolResult"] for block in messages[-1]["content"] if "toolResult" in block]
@@ -145,6 +145,23 @@ class ModelFixture(http.server.BaseHTTPRequestHandler):
             else:
                 data = results[0]["content"][0]["json"]
                 content = [{"text": "Dữ liệu sản phẩm đã kiểm tra: " + json.dumps(data, ensure_ascii=False)}]
+                stop = "end_turn"
+        elif "MODEL_COMPARE::" in prompt:
+            if not results:
+                names = prompt.split("MODEL_COMPARE::", 1)[1].split("::")
+                content = [{"toolUse": {"toolUseId": "fixture-compare", "name": "compare_products", "input": {"first": names[0].strip(), "second": names[1].strip()}}}]
+                stop = "tool_use"
+            else:
+                data = results[0]["content"][0]["json"]
+                content = [{"text": "Đã so sánh hai sản phẩm: " + json.dumps(data, ensure_ascii=False)}]
+                stop = "end_turn"
+        elif "MODEL_CART::" in prompt:
+            if not results:
+                parts = prompt.split("MODEL_CART::", 1)[1].split("::")
+                content = [{"toolUse": {"toolUseId": "fixture-cart", "name": "add_to_cart", "input": {"product": parts[0].strip(), "quantity": int(parts[1])}}}]
+                stop = "tool_use"
+            else:
+                content = [{"text": "Bạn xác nhận giúp mình nhé."}]
                 stop = "end_turn"
         elif "MODEL_UNAVAILABLE" in prompt:
             self.send_response(400)
@@ -273,6 +290,15 @@ def main():
         check(sql("SELECT count(*) FROM records WHERE kind IN ('chat','ai_memory');") == "0", "guest and consent-off chats leave no persistent chat or memory")
         no_budget, _ = guest.chat("so sánh 2 gói hàng đang bán chạy")
         check(len(event_data(no_budget, "product_cards")[0]["items"]) == 2 and "Chênh lệch giá" in answer(no_budget), "budget-free comparisons return two grounded products and their price difference")
+        compared, _ = guest.chat("So sánh " + first["name"] + " với " + partner["name"] + " giúp mình")
+        comparison = event_data(compared, "comparison")
+        check(comparison and {item["id"] for item in comparison[0]["items"]} == {first["id"], partner["id"]} and comparison[0]["priceDifference"] == abs(first["price"] - partner["price"]), "named comparison emits a structured two-product comparison event")
+        cart_before = alice.request("cart/summary")
+        proposed, _ = alice.chat("Thêm 2 hộp " + first["name"] + " vào giỏ giúp mình")
+        proposal = event_data(proposed, "cart_proposal")
+        check(proposal and proposal[0]["productId"] == first["id"] and proposal[0]["quantity"] == 2, "add-to-cart intent emits a confirmation proposal with product and quantity")
+        cart_after = alice.request("cart/summary")
+        check(json.dumps(cart_before["items"], sort_keys=True) == json.dumps(cart_after["items"], sort_keys=True), "the assistant proposal never writes the cart before confirmation")
         for phrase in ("Quà cho mẹ dưới 200.000đ", "Quà dưới 200,000 VND", "Quà dưới 200 000 đồng", "Phí ship 30k và quà dưới 200k", "Quà dưới 200k và tiền hàng 150000 đồng"):
             formatted, _ = bob.chat(phrase)
             check("200.000đ" in answer(formatted) and event_data(formatted, "product_cards")[0]["items"], "gift budget parsing preserves the requested amount for " + phrase)
@@ -331,6 +357,12 @@ def main():
         check(event_data(found, "product_cards")[0]["items"][0]["description"] == named["description"] and '"rankingBasis": "CATALOG"' in answer(found), "named lookup supplies product descriptions and distinguishes unsold catalog stock from bestsellers")
         refresh, _ = guest.chat("MODEL_NO_TOOL tôi mua hộp quà Hương Huế cho mẹ được không")
         check(event_data(refresh, "tool_call") and [item["id"] for item in event_data(refresh, "product_cards")[0]["items"]] == [named["id"]], "product answers must refresh catalog evidence even when the model tries to answer without a tool")
+        compared_model, _ = guest.chat("MODEL_COMPARE::" + named["name"] + "::" + first["name"])
+        comparison = event_data(compared_model, "comparison")
+        check(comparison and {item["id"] for item in comparison[0]["items"]} == {named["id"], first["id"]}, "model-chosen compare_products emits the structured comparison event")
+        proposed_model, _ = guest.chat("MODEL_CART::" + named["name"] + "::3")
+        proposal = event_data(proposed_model, "cart_proposal")
+        check(proposal and proposal[0]["productId"] == named["id"] and proposal[0]["quantity"] == 3, "model-chosen add_to_cart emits a proposal and never writes the cart itself")
         events, _ = alice.chat("MODEL_TOOL_LOOP tìm quà dưới 200k và phí ship")
         check(event_data(events, "meta")[0]["provider"] == "bedrock" and len(event_data(events, "tool_call")) == 2 and ModelFixture.tool_results_seen and ModelFixture.tool_schema_seen,
               "Bedrock protocol loop sends tool schemas, executes model-chosen tools, and feeds both results back")
