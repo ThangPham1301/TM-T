@@ -97,6 +97,12 @@ Không nhận số tiền refund/owner/role được browser quyết định. Gi
 
 ## State machine
 
+### Agent catalog search
+
+Model tự chèn phí giao hàng khi chưa gọi get_shipping trong lượt hiện tại sẽ bị thay bằng nội dung từ các kết quả công cụ đã kiểm tra. Trên điện thoại, panel chat nằm trên nút nổi để nút gửi không bị che; hộp xác nhận thêm giỏ vẫn nằm trên panel.
+
+`search_products` tìm theo query hoặc tên/mã category, không cần budget. Chỉ dùng budget dương trong câu khách hiện tại; không áp ngân sách trong memory cho yêu cầu khám phá loại hàng mới. Success trả items với description/categoryName/available, categories, totalMatches, outOfStockMatches và budgetApplied. Empty dùng NO_MATCH/UNKNOWN_CATEGORY; inStockOnly lọc hết hàng nhưng OUT_OF_STOCK vẫn phân biệt món tồn tại. Không trả sản phẩm hoặc nhóm hàng ẩn. Widget hiển thị bước tìm tên/loại sản phẩm và thẻ kết quả; tra cứu khách chưa đăng nhập vẫn được dùng, còn thêm giỏ thật cần CUSTOMER và xác nhận. Nhập tên mơ hồ vào compare_products/add_to_cart trả AMBIGUOUS cùng các lựa chọn, không phát comparison/cart_proposal. Công cụ đã tra danh mục hợp lệ được tính là dữ kiện mới, không gọi thêm recommendation chỉ để vượt điều kiện kiểm tra dữ liệu.
+
 Privacy: SUBMITTED→REVIEWING→EVIDENCE_REQUIRED/COMPLETED/REJECTED. EVIDENCE_REQUIRED→REVIEWING. ACCESS/EXPORT tạo snapshot profile/order/cart/consent/return/privacy không lồng export cũ. RESTRICT tắt marketing và phản hồi rõ các xử lý còn lại cần xem xét. DELETE không cho hoàn tất khi còn đơn đang xử lý hoặc Return chưa kết thúc; hủy phiên, đóng login, xóa liên hệ/ảnh/consent/cart, ẩn danh yêu cầu và địa chỉ giao; giữ số liệu giao dịch/identifier/audit theo phạm vi thông báo. Xóa file không thể rollback cùng SQL; cần xử lý thủ công nếu filesystem lỗi.
 
 Return: REQUESTED→REVIEWING→EVIDENCE_REQUIRED/APPROVED/REJECTED. Nếu cần thu hồi: APPROVED→RECEIVED→INSPECTED; nếu miễn thu hồi đi thẳng PROCESSING. Inspection: QUARANTINE/DAMAGED/DISPOSE; không tự restock. PROCESSING→RESOLVED bắt buộc reference chứng từ/vận đơn. Refund chỉ bắt đầu khi đơn PAID. Chưa có provider tự xác minh chứng từ; ADMIN chịu trách nhiệm ghi nhận đúng thực tế. Không có simulated success tự động.

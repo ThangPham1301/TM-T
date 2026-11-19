@@ -16,7 +16,29 @@ Hai cờ `NEXT_PUBLIC_RECOMMENDATIONS_ENABLED` và `NEXT_PUBLIC_AI_CHAT_ENABLED`
 
 ## Công cụ và vòng lặp
 
-Bedrock nhận schema của bảy công cụ `recommend_products`, `compare_products`, `add_to_cart`, `get_shipping`, `lookup_order`, `get_policy` và `get_memory`. Model chọn công cụ và tham số. Backend xác thực tham số, lấy owner từ session, thực thi, đưa `toolResult` trở lại model và lặp tối đa bốn vòng với tám lần gọi công cụ. Mỗi lượt có deadline 60 giây. Các kết quả được gửi qua SSE để widget hiển thị các bước kiểm tra dữ liệu. Câu trả lời cuối được gửi bằng các sự kiện `token` sau vòng lặp.
+Bedrock nhận schema của tám công cụ `search_products`, `recommend_products`, `compare_products`, `add_to_cart`, `get_shipping`, `lookup_order`, `get_policy` và `get_memory`. Model chọn công cụ và tham số. Backend xác thực tham số, lấy owner từ session, thực thi, đưa `toolResult` trở lại model và lặp tối đa bốn vòng với tám lần gọi công cụ. Mỗi lượt có deadline 60 giây. Các kết quả được gửi qua SSE để widget hiển thị các bước kiểm tra dữ liệu. Câu trả lời cuối được gửi bằng các sự kiện `token` sau vòng lặp.
+
+`search_products` phục vụ khám phá danh mục, khác với `recommend_products` dùng điểm bán chạy/mua cùng/cá nhân hóa. Có thể hỏi “Tôi muốn chọn một loại trà”, “Cửa hàng có những loại trà nào?”, “Tôi muốn mua bánh mè xửng”, “me xung”, hoặc tên riêng. Tìm từ khóa có/không dấu, tên/mã nhóm hàng và mô tả; nhận diện nhóm trà/mè xửng để tránh lấy hộp quà chỉ nhắc tới trà trong mô tả. Ngân sách không bắt buộc, chỉ áp dụng khi nêu trong câu hiện tại, không tự giới hạn bằng ngân sách tặng quà cũ. Kết quả gồm mô tả, categoryName, available và số lượng khớp. Hàng đang hiển thị nhưng hết tồn được phân biệt với không tìm thấy; sản phẩm/nhóm hàng ẩn không được trả về.
+
+Nếu tên ngắn như “Trà” khớp nhiều món, so sánh hoặc thêm giỏ trả các lựa chọn `AMBIGUOUS` để khách chọn. Không chọn mặc định món có tên ngắn nhất. Tên đầy đủ hoặc UUID xác định đúng món mới tạo bảng so sánh/đề xuất giỏ; đề xuất vẫn cần xác nhận trên giao diện.
+
+## Kiểm thử tìm kiếm và giỏ hàng
+
+Trước bổ sung search, 59 kiểm tra cũ vẫn đạt nhưng bốn câu “chọn một loại trà”, “mua bánh mè xửng”, “me xung”, “cửa hàng có những loại trà nào” không gọi công cụ trong fallback. Bộ kiểm tra mở rộng kiểm tra tìm theo loại/tên không dấu, ngân sách hiện tại thay vì memory cũ, nhóm hàng ẩn, món hết kho, tên thêm giỏ mơ hồ và dữ kiện phí giao hàng. Trình duyệt kiểm tra khách xem/hủy đề xuất, CUSTOMER xác nhận mới ghi giỏ, thêm tiếp cộng dồn số lượng, bảng so sánh và gửi tin nhắn trên màn hình điện thoại.
+
+```powershell
+docker build -t goihue-tools-api:review apps/api
+docker build -t goihue-tools-web:review apps/web
+python scripts/test-agent-demo.py --keep --api-image goihue-tools-api:review --web-image goihue-tools-web:review
+npx @playwright/cli -s=tools-qa open http://127.0.0.1:13097
+npx @playwright/cli -s=tools-qa run-code --filename=scripts/test-agent-shopping-browser.js
+```
+
+Các thao tác này dùng database riêng và dữ liệu mô phỏng; script trình duyệt chỉ cho chạy ở fixture localhost. Dọn bằng lệnh cleanup do script API in sau khi hoàn tất. Ảnh kiểm tra được lưu ở `output/playwright/agent-shopping-tools-mobile.png` và không đưa vào Git. Bật `--keep` chiếm cổng 13097 đến khi cleanup, nên dọn fixture trước khi chạy lại toàn bộ script.
+
+Kết quả ngày 19/11/2026: 76 kiểm tra API/AI đạt, 12 kiểm tra trình duyệt đạt, build API/web và lint/typecheck frontend đạt. Năm kịch bản dùng Bedrock thật trên database fixture đã chọn đúng search/compare/proposal; kiểm tra thêm bản cuối xác nhận câu tìm trà không chèn phí giao hàng chưa tra. Stack mô phỏng đã dọn, không kiểm tra hay triển khai bản VPS trong đợt này. Contract runtime `goihue.openapi.yaml` lint hợp lệ với 7 cảnh báo hiện có.
+
+Kiểm tra bốn contract handoff: hai file draft-planned hợp lệ; `customer-stable.openapi.yaml` còn 11 lỗi/22 cảnh báo và `admin-stable.openapi.yaml` còn 21 lỗi/15 cảnh báo có sẵn (nullable/security và ví dụ), như báo cáo deploy trước. Các file stable này không thay đổi trong phần bổ sung search.
 
 Ngân sách chỉ áp dụng khi dương. API coi 0/âm là chưa đặt giới hạn; dispatcher dùng số tiền đọc từ lời khách hoặc memory đã đồng ý, không dùng ngân sách model tự điền. Vì vậy model gửi 0, âm hoặc sai đơn vị không ghi đè ngân sách khách đã nêu. Không có ngân sách vẫn tìm sản phẩm; kết quả rỗng chỉ nhắc ngân sách nếu thực sự đã áp dụng giới hạn. Công cụ nhận thêm `query` để tìm tên không phân biệt dấu, trả mô tả và số lượng đã giao. Tên bị model điền nhầm vào `productId` được chuyển sang tìm tên thay vì trả lỗi hồ sơ. `rankingBasis=CATALOG` là hàng đang có, chưa chứng minh bán chạy; chỉ dùng nhận xét bán chạy khi số lượng đã giao lớn hơn 0.
 

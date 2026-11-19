@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Goi Hue Unified Store API
-  version: 1.3.2-draft
+  version: 1.4.0-draft
   description: Unified persistence API. VietQR/IPN operations are experimental demo flows; shipping and refunds are recorded manually. See goihue-state-matrix.md.
 servers:
   - url: /api/store
@@ -179,6 +179,17 @@ paths:
     post:
       operationId: agentChat
       summary: Agent chat
+      description: >-
+        Eight tools are available, including search_products for public catalog discovery independently of recommendation ranking.
+        Search accepts optional query, category code/name, inStockOnly, limit (1..8) and positive budget.
+        Its budget is taken only from the current customer message, never silently inherited from older gift preferences.
+        Results include items, categories, totalMatches, outOfStockMatches, budgetApplied and code
+        (MATCHED, NO_MATCH, OUT_OF_STOCK or UNKNOWN_CATEGORY). Items include categoryName and available.
+        Search matches Vietnamese names with or without accents and active category names/codes; inactive products/categories are excluded.
+        Visible out-of-stock items can be returned and are explicitly identified, without enabling a cart proposal.
+        An answer that invents shipping fees without a get_shipping result in the current turn is replaced with verified tool summaries.
+        Ambiguous compare_products/add_to_cart references return AMBIGUOUS choices as product cards, without a comparison or cart_proposal event.
+        Only an exact or unique sellable product reference can create a cart proposal; the customer still confirms the actual cart mutation.
       security: []
       parameters:
         - {$ref: '#/components/parameters/Idempotency'}

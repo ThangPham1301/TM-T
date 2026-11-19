@@ -37,6 +37,7 @@ type ChatRequest = {
 };
 
 const TOOL_NAMES: Record<string, string> = {
+  search_products: "Tìm theo tên và loại sản phẩm",
   recommend_products: "Tìm sản phẩm phù hợp",
   compare_products: "So sánh sản phẩm",
   add_to_cart: "Chuẩn bị thêm vào giỏ",
@@ -47,6 +48,8 @@ const TOOL_NAMES: Record<string, string> = {
 };
 
 const CHIPS = [
+  "Tôi muốn chọn một loại trà",
+  "Tìm bánh mè xửng",
   "Phí ship bao nhiêu?",
   "Tư vấn quà tặng mẹ dưới 200k",
   "Chính sách đổi trả thế nào?",

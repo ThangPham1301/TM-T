@@ -97,7 +97,7 @@ class ModelFixture(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-        ModelFixture.tool_schema_seen = len(body.get("toolConfig", {}).get("tools", [])) == 7
+        ModelFixture.tool_schema_seen = {tool["toolSpec"]["name"] for tool in body.get("toolConfig", {}).get("tools", [])} == {"search_products", "recommend_products", "compare_products", "add_to_cart", "get_shipping", "lookup_order", "get_policy", "get_memory"}
         messages = body["messages"]
         prompt = next(block["text"] for msg in reversed(messages) for block in msg["content"] if "text" in block and msg["role"] == "user")
         results = [block["toolResult"] for block in messages[-1]["content"] if "toolResult" in block]
@@ -146,6 +146,15 @@ class ModelFixture(http.server.BaseHTTPRequestHandler):
                 data = results[0]["content"][0]["json"]
                 content = [{"text": "Dữ liệu sản phẩm đã kiểm tra: " + json.dumps(data, ensure_ascii=False)}]
                 stop = "end_turn"
+        elif "MODEL_SEARCH::" in prompt:
+            if not results:
+                arguments = json.loads(prompt.split("MODEL_SEARCH::", 1)[1])
+                content = [{"toolUse": {"toolUseId": "fixture-search", "name": "search_products", "input": arguments}}]
+                stop = "tool_use"
+            else:
+                text = "Phí giao hàng là 50.000đ." if "MODEL_BAD_SHIPPING" in prompt else json.dumps(results[0]["content"][0]["json"], ensure_ascii=False)
+                content = [{"text": text}]
+                stop = "end_turn"
         elif "MODEL_COMPARE::" in prompt:
             if not results:
                 names = prompt.split("MODEL_COMPARE::", 1)[1].split("::")
@@ -186,6 +195,8 @@ class ModelFixture(http.server.BaseHTTPRequestHandler):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--keep", action="store_true")
+    parser.add_argument("--api-image", default="goihue-api:agent-demo-review")
+    parser.add_argument("--web-image", default="goihue-web:agent-demo-review")
     args = parser.parse_args()
     project = "tmt-agent-check-" + uuid.uuid4().hex[:8]
     model = http.server.ThreadingHTTPServer(("0.0.0.0", 0), ModelFixture)
@@ -193,12 +204,12 @@ def main():
     config = {"services": {
         "db": {"image": "postgres:16-alpine", "environment": {"POSTGRES_DB": "goihue", "POSTGRES_USER": "goihue", "POSTGRES_PASSWORD": PASSWORD},
                "healthcheck": {"test": ["CMD", "pg_isready", "-U", "goihue", "-d", "goihue"], "interval": "1s", "retries": 30}},
-        "api": {"image": "goihue-api:agent-demo-review", "environment": {
+        "api": {"image": args.api_image, "environment": {
             "SPRING_DATASOURCE_URL": "jdbc:postgresql://db:5432/goihue", "SPRING_DATASOURCE_USERNAME": "goihue", "SPRING_DATASOURCE_PASSWORD": PASSWORD,
             "ADMIN_EMAIL": "review-admin@example.invalid", "ADMIN_PASSWORD": PASSWORD, "APP_ORIGINS": ORIGIN,
             "APP_AGENT_PROVIDER": "deterministic", "AWS_EC2_METADATA_DISABLED": "true"},
             "depends_on": {"db": {"condition": "service_healthy"}}},
-        "web": {"image": "goihue-web:agent-demo-review", "environment": {"API_UPSTREAM_URL": "http://api:8088/api/v1", "APP_PUBLIC_ORIGINS": ORIGIN},
+        "web": {"image": args.web_image, "environment": {"API_UPSTREAM_URL": "http://api:8088/api/v1", "APP_PUBLIC_ORIGINS": ORIGIN},
                 "ports": ["127.0.0.1:13097:3000"]},
     }}
     temporary = tempfile.TemporaryDirectory(prefix="tmt-agent-check-")
@@ -290,6 +301,29 @@ def main():
         check(sql("SELECT count(*) FROM records WHERE kind IN ('chat','ai_memory');") == "0", "guest and consent-off chats leave no persistent chat or memory")
         no_budget, _ = guest.chat("so sánh 2 gói hàng đang bán chạy")
         check(len(event_data(no_budget, "product_cards")[0]["items"]) == 2 and "Chênh lệch giá" in answer(no_budget), "budget-free comparisons return two grounded products and their price difference")
+        tea_category = next(product["category"] for product in products if "Trà" in product["name"])
+        def sample_product(name, slug, price=75000, stock=4, active=True, category=tea_category):
+            return admin.request("commerce", "POST", {"action": "product-save", "name": name, "slug": slug, "category": category, "description": "Synthetic public catalog description", "price": price, "stock": stock, "active": active}, str(uuid.uuid4()))
+        ginger_tea = sample_product("Trà Gừng Túi Lọc", "synthetic-tra-gung")
+        unavailable_tea = sample_product("Trà Nhài", "synthetic-tra-nhai", stock=0)
+        hidden_tea = sample_product("Trà Riêng Tư", "synthetic-tra-hidden", active=False)
+        for phrase in ("tôi muốn chọn một loại trà", "cửa hàng có những loại trà nào?", "tra gung", "tôi muốn mua bánh mè xửng", "me xung"):
+            searched, _ = guest.chat(phrase)
+            cards = event_data(searched, "product_cards")[0]["items"]
+            category = tea_category if "trà" in phrase or "tra " in phrase else first["category"]
+            check(any(tool["name"] == "search_products" for tool in event_data(searched, "tool_call")) and cards and all(card["category"] == category for card in cards), "natural category lookup works without a budget: " + phrase)
+        missing_stock, _ = guest.chat("Tìm trà nhài")
+        check(event_data(missing_stock, "product_cards")[0]["items"][0]["id"] == unavailable_tea["id"] and "hết hàng" in answer(missing_stock), "search distinguishes visible out-of-stock products from missing products")
+        check(hidden_tea["id"] not in [card["id"] for card in event_data(guest.chat("Tìm trà")[0], "product_cards")[0]["items"]], "search never exposes an inactive product")
+        ambiguous_cart, _ = guest.chat("Thêm trà vào giỏ")
+        check(not event_data(ambiguous_cart, "cart_proposal") and event_data(ambiguous_cart, "product_cards")[0]["items"], "a broad tea request offers choices instead of selecting a cart item")
+        search_customer = Browser()
+        search_customer.register("search-memory@example.invalid")
+        search_customer.request("agent/consent", "PUT", {"historyUse": False, "memoryUse": True, "revision": 0}, str(uuid.uuid4()))
+        search_customer.chat("Quà dưới 100k")
+        no_inherited_budget, _ = search_customer.chat("Tôi muốn chọn một loại trà")
+        check(any(card["price"] > 100000 for card in event_data(no_inherited_budget, "product_cards")[0]["items"]), "general catalog search does not silently inherit an old gifting budget")
+        search_customer.request("agent/history", "DELETE", {}, str(uuid.uuid4()))
         compared, _ = guest.chat("So sánh " + first["name"] + " với " + partner["name"] + " giúp mình")
         comparison = event_data(compared, "comparison")
         check(comparison and {item["id"] for item in comparison[0]["items"]} == {first["id"], partner["id"]} and comparison[0]["priceDifference"] == abs(first["price"] - partner["price"]), "named comparison emits a structured two-product comparison event")
@@ -336,6 +370,22 @@ def main():
             "AWS_SECRET_ACCESS_KEY": "synthetic-secret", "AWS_ENDPOINT_URL_BEDROCK_RUNTIME": f"http://host.docker.internal:{model.server_port}"})
         compose("up", "-d", "--force-recreate", "api")
         wait_ready()
+        search_model, _ = guest.chat('MODEL_SEARCH::{"query":"trà","category":"tra-cung-dinh","limit":8}')
+        search_cards = event_data(search_model, "product_cards")[0]["items"]
+        check(search_cards and all(card["category"] == tea_category for card in search_cards) and any(card["price"] > 200000 for card in search_cards), "model-selected category search has no implicit budget and returns category metadata")
+        check(any(card["id"] == unavailable_tea["id"] and card["available"] is False for card in search_cards), "model search explicitly identifies out-of-stock results")
+        stock_only, _ = guest.chat('MODEL_SEARCH::{"query":"trà nhài","inStockOnly":true}')
+        check(not event_data(stock_only, "product_cards")[0]["items"] and "hết hàng" in event_data(stock_only, "tool_result")[0]["summary"], "in-stock filtering reports an exhausted match rather than claiming it does not exist")
+        unknown_category, _ = guest.chat('MODEL_SEARCH::{"category":"synthetic-unknown-category"}')
+        check('"UNKNOWN_CATEGORY"' in answer(unknown_category) and not event_data(unknown_category, "product_cards")[0]["items"], "unknown categories return an explicit empty search result")
+        bounded, _ = guest.chat('MODEL_SEARCH::{"query":"trà","limit":1}')
+        check(len(event_data(bounded, "product_cards")[0]["items"]) == 1, "search result limits are enforced")
+        ungrounded_shipping, _ = guest.chat('MODEL_BAD_SHIPPING MODEL_SEARCH::{"query":"trà"}')
+        check("50.000đ" not in answer(ungrounded_shipping) and "Trà" in answer(ungrounded_shipping), "catalog answers cannot invent a shipping fee without calling the shipping tool")
+        rejected_search, _ = guest.chat('MODEL_SEARCH::{"query":"trà","ownerId":"untrusted"}')
+        check(not event_data(rejected_search, "tool_result")[0]["ok"], "search rejects undeclared identity arguments")
+        ambiguous_model, _ = guest.chat("MODEL_CART::Trà::1")
+        check(not event_data(ambiguous_model, "cart_proposal") and event_data(ambiguous_model, "product_cards")[0]["items"] and "nhiều sản phẩm" in event_data(ambiguous_model, "tool_result")[0]["summary"], "ambiguous model cart references require a customer choice rather than picking the shortest name")
         for marker in ("MODEL_BUDGET_ZERO", "MODEL_BUDGET_NEGATIVE", "MODEL_BUDGET_INVENTED"):
             unbounded, _ = guest.chat(marker + " gợi ý sản phẩm bán chạy")
             cards = event_data(unbounded, "product_cards")[0]["items"]

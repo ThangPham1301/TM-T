@@ -17,13 +17,15 @@ public class AgentTools {
     private final CatalogService catalog;
     private final RecommendApi recommendations;
     private final AiPrivacy privacy;
+    private final ProductSearch search;
 
-    public AgentTools(PlatformApi app, JdbcTemplate db, CatalogService catalog, RecommendApi recommendations, AiPrivacy privacy) {
+    public AgentTools(PlatformApi app, JdbcTemplate db, CatalogService catalog, RecommendApi recommendations, AiPrivacy privacy, ProductSearch search) {
         this.app = app;
         this.db = db;
         this.catalog = catalog;
         this.recommendations = recommendations;
         this.privacy = privacy;
+        this.search = search;
     }
 
     record Result(Map<String, Object> data, String text, String source, List<Map<String, Object>> cards) {}
@@ -69,6 +71,8 @@ public class AgentTools {
 
     List<Tool> definitions() {
         return List.of(
+            definition("search_products", "Tìm sản phẩm theo từ khóa, loại trà/bánh/mè xửng hoặc nhóm hàng, không cần ngân sách. query có thể là tên hoặc từ khóa tiếng Việt có/không dấu; category tùy chọn là mã hoặc tên nhóm hàng. Tìm cả hàng hết kho và đọc available trước khi tư vấn mua. Chỉ bật inStockOnly nếu cần hàng còn kho. Không suy ra thành phần hay công dụng ngoài description. Dùng để khám phá và tìm sản phẩm trước khi so sánh hoặc đề xuất thêm giỏ; không dùng ngân sách thay cho từ khóa.",
+                Map.of("query", Map.of("type", "string", "maxLength", 120), "category", Map.of("type", "string", "maxLength", 120), "inStockOnly", Map.of("type", "boolean"), "limit", Map.of("type", "integer", "minimum", 1, "maximum", 8), "budget", Map.of("type", "integer", "minimum", 1, "maximum", 100000000)), List.of()),
             definition("recommend_products", "Tìm sản phẩm còn bán được. budget là số tiền VND, chỉ truyền khi khách nêu rõ số tiền, không truyền 0; không có budget vẫn tìm được sản phẩm. Tra tên bằng query (tên ngắn, ví dụ Hương Huế), không đưa tên vào productId. productId chỉ là UUID ngữ cảnh mua cùng. rankingBasis=CATALOG nghĩa là chưa có dữ liệu bán chạy; deliveredQuantity=0 không chứng minh sản phẩm bán chạy.",
                 Map.of("budget", Map.of("type", "integer", "minimum", 1, "maximum", 100000000), "query", Map.of("type", "string", "maxLength", 120), "surface", Map.of("type", "string", "enum", List.of("home", "product", "cart")), "productId", Map.of("type", "string", "format", "uuid")), List.of()),
             definition("compare_products", "So sánh đúng hai sản phẩm còn bán được theo tên ngắn hoặc UUID: giá, tồn kho, số lượng đã giao và chênh lệch giá. Dùng khi khách nêu hai sản phẩm hoặc hỏi so sánh hai món cụ thể. first/second là tên sản phẩm ngắn, ví dụ 'Mè Xửng Gừng' và 'Hộp Quà Hương Huế', hoặc UUID.",
@@ -106,6 +110,7 @@ public class AgentTools {
 
     Result execute(String name, Map<String, Object> input, Map<String, Object> actor) {
         Set<String> fields = switch (name) {
+            case "search_products" -> Set.of("query", "category", "inStockOnly", "limit", "budget");
             case "recommend_products" -> Set.of("budget", "query", "surface", "productId");
             case "compare_products" -> Set.of("first", "second");
             case "add_to_cart" -> Set.of("product", "quantity");
@@ -117,6 +122,7 @@ public class AgentTools {
         };
         app.require(fields.containsAll(input.keySet()), "Tham số công cụ không hợp lệ.");
         return switch (name) {
+            case "search_products" -> search.search(input);
             case "recommend_products" -> gifts(actor, input);
             case "compare_products" -> compareProducts(input);
             case "add_to_cart" -> proposeCart(input);
@@ -175,8 +181,21 @@ public class AgentTools {
             return words.stream().allMatch(candidate::contains);
         }).toList();
         if (matches.size() <= 1) return matches.isEmpty() ? null : matches.getFirst();
-        // Prefer the tightest name when several products contain the phrase.
-        return matches.stream().min(Comparator.comparingInt(p -> normalized(app.str(p, "name")).length())).orElse(null);
+        var exact = matches.stream().filter(p -> normalized(ref).equals(normalized(app.str(p, "name"))) || normalized(ref).equals(normalized(app.str(p, "slug")))).toList();
+        if (exact.size() == 1) return exact.getFirst();
+        // A broad reference is a choice for the customer, never an implicit cart selection.
+        throw new AmbiguousProduct(matches);
+    }
+
+    private static class AmbiguousProduct extends RuntimeException {
+        final List<Map<String, Object>> products;
+        AmbiguousProduct(List<Map<String, Object>> products) { this.products = products; }
+    }
+
+    private Result ambiguous(AmbiguousProduct choice) {
+        var cards = choice.products.stream().limit(8).map(recommendations::card).toList();
+        return new Result(Map.of("code", "AMBIGUOUS", "items", cards), "Có nhiều sản phẩm khớp tên này. Bạn chọn rõ một món giúp mình: "
+            + cards.stream().map(card -> app.str(card, "name")).collect(Collectors.joining(", ")) + ".", "Danh mục hiện đang bán · cần chọn sản phẩm", cards);
     }
 
     private int deliveredQuantity(String productId) {
@@ -196,6 +215,11 @@ public class AgentTools {
     }
 
     private Result compareProducts(Map<String, Object> input) {
+        try { return compareResolved(input); }
+        catch (AmbiguousProduct choice) { return ambiguous(choice); }
+    }
+
+    private Result compareResolved(Map<String, Object> input) {
         var first = resolveProduct(app.str(input, "first"));
         var second = resolveProduct(app.str(input, "second"));
         if (first == null || second == null) {
@@ -216,6 +240,11 @@ public class AgentTools {
     }
 
     private Result proposeCart(Map<String, Object> input) {
+        try { return proposeResolved(input); }
+        catch (AmbiguousProduct choice) { return ambiguous(choice); }
+    }
+
+    private Result proposeResolved(Map<String, Object> input) {
         var product = resolveProduct(app.str(input, "product"));
         if (product == null)
             return new Result(Map.of("code", "NOT_FOUND"), "Chưa tìm thấy sản phẩm còn hàng khớp '" + app.str(input, "product") + "' để thêm vào giỏ.", "Danh mục hiện đang bán", List.of());
@@ -352,6 +381,13 @@ public class AgentTools {
 
     Call productLookup(String message, Map<String, Object> slots, boolean giftContext) {
         String text = normalized(message);
+        boolean tea = Pattern.compile("\\btra\\b").matcher(text).find() && !text.contains("tra cuu") && !text.contains("doi tra") && !text.contains("tra hang");
+        if (tea || text.contains("me xung") || text.contains("banh") || text.contains("keo") || text.contains("cua hang co gi")) {
+            var lookup = new LinkedHashMap<String, Object>();
+            lookup.put("query", message.substring(0, Math.min(message.length(), 120)));
+            if (slots.containsKey("budget")) lookup.put("budget", slots.get("budget"));
+            return new Call("search_products", lookup);
+        }
         if (!(giftContext || text.contains("qua") || text.contains("tang") || text.contains("bieu")
                 || text.contains("san pham") || text.contains("ban chay") || text.contains("so sanh"))) return null;
         var input = new LinkedHashMap<String, Object>();
