@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { type Row, api, cleanText, date, money, useStore } from "@/lib/store";
+import { useRouter, useSearchParams } from "next/navigation";
+import { type Row, api, cleanText, date, label, money, useStore } from "@/lib/store";
+import { PaymentPanel } from "./payment-panel";
 
 const EMPTY_ORDERS: Row[] = [];
 export function AccountOrders({
@@ -12,22 +13,17 @@ export function AccountOrders({
   initialOrderId?: string;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const linkedOrderId = initialOrderId ?? searchParams.get("order");
   const { state, busy, run, mutate } = useStore();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusTab, setStatusTab] = useState<
     "ALL" | "PLACED" | "SHIPPED" | "DELIVERED" | "CANCELLED"
   >("ALL");
-  const [paymentFilter, setPaymentFilter] = useState<"ALL" | "UNPAID" | "PAID">(
+  const [paymentFilter, setPaymentFilter] = useState<"ALL" | "UNPAID" | "PAID" | "REVIEW" | "REFUNDED">(
     "ALL",
   );
-  const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>(() => {
-    if (initialOrderId) return { [initialOrderId]: true };
-    if (typeof window !== "undefined") {
-      const q = new URLSearchParams(window.location.search).get("order");
-      if (q) return { [q]: true };
-    }
-    return {};
-  });
+  const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   const [currentPage, setCurrentPage] = useState(1);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -68,11 +64,8 @@ export function AccountOrders({
       }
 
       // 2. Payment filter
-      if (paymentFilter === "UNPAID") {
-        if (String(order.paymentStatus) !== "UNPAID") return false;
-      } else if (paymentFilter === "PAID") {
-        if (String(order.paymentStatus) !== "PAID") return false;
-      }
+      if (paymentFilter !== "ALL" && String(order.paymentStatus) !== paymentFilter)
+        return false;
 
       // 3. Search query filter
       if (searchQuery.trim()) {
@@ -110,7 +103,7 @@ export function AccountOrders({
   const toggleDetails = (id: string) => {
     setExpandedIds((prev) => ({
       ...prev,
-      [id]: !prev[id],
+      [id]: !(prev[id] ?? (id === linkedOrderId)),
     }));
   };
 
@@ -339,13 +332,15 @@ export function AccountOrders({
               className="orders-payment-select"
               value={paymentFilter}
               onChange={(e) => {
-                setPaymentFilter(e.target.value as "ALL" | "UNPAID" | "PAID");
+                setPaymentFilter(e.target.value as typeof paymentFilter);
                 setCurrentPage(1);
               }}
             >
               <option value="ALL">Tất cả thanh toán</option>
-              <option value="UNPAID">COD - Chưa thanh toán</option>
-              <option value="PAID">Đã thanh toán COD</option>
+              <option value="UNPAID">Chưa thanh toán</option>
+              <option value="PAID">Đã thanh toán</option>
+              <option value="REVIEW">Chờ đối soát thanh toán</option>
+              <option value="REFUNDED">Đã hoàn tiền</option>
             </select>
           </div>
         </div>
@@ -401,7 +396,7 @@ export function AccountOrders({
         ) : (
           paginatedOrders.map((order) => {
             const items = (order.items as Row[] | undefined) || [];
-            const isExpanded = Boolean(expandedIds[order.id]);
+            const isExpanded = expandedIds[order.id] ?? (order.id === linkedOrderId);
             const isDelivered = String(order.status) === "DELIVERED";
             const isShipped = ["SHIPPED", "PACKED"].includes(
               String(order.status),
@@ -541,7 +536,7 @@ export function AccountOrders({
                         >
                           check_circle
                         </span>
-                        Đã thanh toán COD
+                        {label(order.paymentMethod)} · {label(order.paymentStatus)}
                       </span>
                     ) : (
                       <span className="orders-payment-pill orders-payment-unpaid">
@@ -554,7 +549,7 @@ export function AccountOrders({
                         >
                           price_check
                         </span>
-                        COD - Chưa thanh toán
+                        {label(order.paymentMethod)} · {label(order.paymentStatus)}
                       </span>
                     )}
                   </div>
@@ -908,6 +903,7 @@ export function AccountOrders({
                         </div>
                       </div>
                     </div>
+                    {order.paymentMethod === "VIETQR" && <PaymentPanel order={order} />}
                   </div>
                 )}
               </article>

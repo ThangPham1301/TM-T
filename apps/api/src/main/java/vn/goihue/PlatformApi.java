@@ -378,7 +378,7 @@ public class PlatformApi {
     String bounded(Map<String,Object> b,String key,int max){String s=str(b,key);require(s.length()<=max,"Thông tin quá dài: "+key);return s;}
     Map<String,Object> export(UUID owner) {
         var a=db.queryForList("SELECT id,email,name,phone,address,marketing FROM customers WHERE id=?",owner).getFirst();
-        var data=new LinkedHashMap<String,Object>();data.put("profile",a);data.put("scope","Dữ liệu tài khoản Gói Huế");for(String kind:List.of("order","cart","consent","return","privacy","address","chat","ai_memory"))data.put(kind,db.query("SELECT (data-'export')::text FROM records WHERE owner_id=? AND kind=?",(rs,i)->decode(rs.getString(1)),owner,kind));return data;
+        var data=new LinkedHashMap<String,Object>();data.put("profile",a);data.put("scope","Dữ liệu tài khoản Gói Huế");for(String kind:List.of("order","cart","consent","return","privacy","address","chat","ai_memory","payment-event"))data.put(kind,db.query("SELECT (data-'export')::text FROM records WHERE owner_id=? AND kind=?",(rs,i)->decode(rs.getString(1)),owner,kind));return data;
     }
     @GetMapping("/privacy/{id}/export") public Object download(@PathVariable String id,HttpServletRequest req,HttpServletResponse response) {var r=record(id,"privacy",actor(req));require(str(r,"status").equals("COMPLETED")&&r.containsKey("export"),"Chưa có dữ liệu xuất.");response.setHeader("Content-Disposition","attachment; filename=goi-hue-data.json");return r.get("export");}
     @PostMapping("/evidence/intents") @Transactional public Object intent(@RequestBody Map<String,Object> b,HttpServletRequest req) {
