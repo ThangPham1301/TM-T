@@ -37,6 +37,9 @@ export function ProductDetail({ slug }: { slug: string }) {
         setProduct(p);
         setCategories(c);
         setError("");
+        setRelated([]);
+        setRelatedStrategy("");
+        if (process.env.NEXT_PUBLIC_RECOMMENDATIONS_ENABLED === "false") return;
         try {
           const rec = await api(
             `products/recommended?surface=product&productId=${encodeURIComponent(p.id)}&limit=4`,
@@ -49,7 +52,7 @@ export function ProductDetail({ slug }: { slug: string }) {
           try {
             const all = await api("products");
             if (live) {
-              setRelated(all.filter((r: Row) => r.id !== p.id).slice(0, 4));
+              setRelated(all.filter((r: Row) => r.id !== p.id && Number(r.stock) > 0).slice(0, 4));
               setRelatedStrategy("");
             }
           } catch {

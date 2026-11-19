@@ -6,7 +6,7 @@ services:
       API_UPSTREAM_URL: http://api:8088/api/v1
       # Extra browser origins allowed to call the store API (e.g. the public
       # demo tunnel host). Localhost origins are always allowed.
-      APP_PUBLIC_ORIGINS: ${APP_PUBLIC_ORIGINS:-}
+      APP_PUBLIC_ORIGINS: ${APP_PUBLIC_ORIGINS:-https://tmt-web.npanhbao.dev,https://goihue.io.vn,https://www.goihue.io.vn}
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
@@ -35,7 +35,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?Run setup.ps1 first}
       ADMIN_EMAIL: ${ADMIN_EMAIL:?Run setup.ps1 first}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Run setup.ps1 first}
-      APP_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      APP_ORIGINS: http://localhost:3000,http://127.0.0.1:3000,${APP_PUBLIC_ORIGINS:-https://tmt-web.npanhbao.dev,https://goihue.io.vn,https://www.goihue.io.vn}
+      APP_COOKIE_SECURE: ${APP_COOKIE_SECURE:-false}
       # Demo VietQR checkout: receiving account shown in the QR payload and
       # the shared secret that signs payment notifications (IPN). Override in
       # .env for anything beyond a local demo.

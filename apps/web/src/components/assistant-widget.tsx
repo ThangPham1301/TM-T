@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { money, type Row } from "@/lib/store";
+import { api, money, type Row, useStore } from "@/lib/store";
 import { ProductImage } from "./product/product-image";
+import { AiPreferences } from "./ai-preferences";
 import styles from "./assistant-widget.module.css";
 
 type Msg = {
@@ -13,6 +14,23 @@ type Msg = {
   cards?: Row[];
   sources?: string[];
   failed?: boolean;
+  steps?: { id: string; name: string; summary?: string; ok?: boolean }[];
+  request?: ChatRequest;
+};
+
+type ChatRequest = {
+  message: string;
+  conversationId: string;
+  history: { role: string; content: string }[];
+  key: string;
+};
+
+const TOOL_NAMES: Record<string, string> = {
+  recommend_products: "Tìm sản phẩm phù hợp",
+  get_shipping: "Kiểm tra phí giao hàng",
+  lookup_order: "Tra cứu đơn của bạn",
+  get_policy: "Tra cứu chính sách",
+  get_memory: "Đọc sở thích đã ghi nhớ",
 };
 
 const CHIPS = [
@@ -33,7 +51,7 @@ function renderRich(text: string) {
     if (m[1]) parts.push(<strong key={k++}>{m[1]}</strong>);
     else
       parts.push(
-        <Link key={k++} href={m[3]}>
+        <Link key={k++} href={/^\/(?!\/)/.test(m[3]) ? m[3] : "/products"}>
           {m[2]}
         </Link>,
       );
@@ -45,37 +63,126 @@ function renderRich(text: string) {
 
 export function AssistantWidget() {
   const pathname = usePathname();
+  const { state, loading } = useStore();
+  if (
+    loading ||
+    process.env.NEXT_PUBLIC_AI_CHAT_ENABLED === "false" ||
+    pathname?.startsWith("/admin") ||
+    pathname?.startsWith("/account")
+  )
+    return null;
+  return (
+    <ChatSession
+      key={state?.user.id ?? "guest"}
+      customer={state?.user.role === "CUSTOMER"}
+    />
+  );
+}
+
+function ChatSession({ customer }: { customer: boolean }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const conversation = useRef("");
+  const generation = useRef(0);
+  const [provider, setProvider] = useState("");
+  const [historyLoading, setHistoryLoading] = useState(customer);
+  const [historyError, setHistoryError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  const sending = useRef(false);
+
+  useEffect(() => {
+    const chatGeneration = generation;
+    const reset = () => {
+      chatGeneration.current++;
+      abortRef.current?.abort();
+      conversation.current = "";
+      sending.current = false;
+      setStreaming(false);
+      setMessages([]);
+      setAttempt((value) => value + 1);
+    };
+    window.addEventListener("ai-preferences-changed", reset);
+    return () => {
+      window.removeEventListener("ai-preferences-changed", reset);
+      chatGeneration.current++;
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!customer) return;
+    let active = true;
+    void Promise.resolve().then(async () => {
+      if (!active) return;
+      setHistoryLoading(true);
+      setHistoryError("");
+      try {
+        const history = await api("agent/history");
+        if (active) {
+          conversation.current = history.conversationId;
+          setMessages(history.messages ?? []);
+        }
+      } catch {
+        if (active) setHistoryError("Chưa tải được hội thoại đã lưu.");
+      } finally {
+        if (active) setHistoryLoading(false);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [customer, attempt]);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, open]);
 
-  if (pathname?.startsWith("/admin") || pathname?.startsWith("/account"))
-    return null;
+  function newConversation() {
+    generation.current++;
+    abortRef.current?.abort();
+    conversation.current = crypto.randomUUID();
+    sending.current = false;
+    setStreaming(false);
+    setMessages([]);
+    setProvider("");
+  }
 
-  async function send(raw: string, base: Msg[] = messages) {
+  async function send(
+    raw: string,
+    base: Msg[] = messages,
+    retry?: ChatRequest,
+  ) {
     const text = raw.trim();
-    if (!text || streaming) return;
+    if (!text || sending.current || historyLoading || historyError) return;
+    sending.current = true;
+    const currentGeneration = generation.current;
     setInput("");
     const history = base
       .filter((x) => !x.failed && x.text)
       .slice(-6)
-      .map((x) => ({ role: x.role, content: x.text }));
+      .map((x) => ({ role: x.role, content: x.text.slice(0, 1000) }));
+    if (!conversation.current) conversation.current = crypto.randomUUID();
+    const request = retry ?? {
+      message: text,
+      history,
+      conversationId: conversation.current,
+      key: crypto.randomUUID(),
+    };
     setMessages([
       ...base,
       { role: "user", text },
-      { role: "assistant", text: "" },
+      { role: "assistant", text: "", request },
     ]);
     setStreaming(true);
     const patchLast = (fn: (msg: Msg) => Msg) =>
       setMessages((prev) => {
+        if (generation.current !== currentGeneration || prev.length === 0)
+          return prev;
         const next = [...prev];
         next[next.length - 1] = fn(next[next.length - 1]);
         return next;
@@ -85,31 +192,72 @@ export function AssistantWidget() {
     try {
       const resp = await fetch("/api/store/agent/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, history }),
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": request.key,
+        },
+        body: JSON.stringify({
+          message: request.message,
+          history: request.history,
+          conversationId: request.conversationId,
+        }),
         signal: controller.signal,
       });
       if (!resp.ok || !resp.body) throw new Error("bad response");
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let completed = false;
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const blocks = buffer.split("\n\n");
+        const blocks = buffer.split(/\r?\n\r?\n/);
         buffer = blocks.pop() ?? "";
         for (const block of blocks) {
           const ev = block.match(/^event:(.+)$/m)?.[1]?.trim();
-          const dataLine = block.match(/^data:(.+)$/m)?.[1];
-          if (!ev || dataLine === undefined) continue;
+          const dataLine = block
+            .split(/\r?\n/)
+            .filter((line) => line.startsWith("data:"))
+            .map((line) => line.slice(5).trimStart())
+            .join("\n");
+          if (!ev || !dataLine) continue;
           let data: Record<string, unknown> = {};
           try {
             data = JSON.parse(dataLine) as Record<string, unknown>;
           } catch {
             continue;
           }
-          if (ev === "token") {
+          if (ev === "meta") {
+            if (generation.current === currentGeneration)
+              setProvider(String(data.provider ?? ""));
+          } else if (ev === "tool_call") {
+            patchLast((msg) => ({
+              ...msg,
+              steps: [
+                ...(msg.steps ?? []),
+                { id: String(data.id), name: String(data.name) },
+              ],
+            }));
+          } else if (ev === "tool_result") {
+            patchLast((msg) => ({
+              ...msg,
+              steps: (msg.steps ?? []).map((step) =>
+                step.id === data.id
+                  ? {
+                      ...step,
+                      summary: String(data.summary ?? ""),
+                      ok: Boolean(data.ok),
+                    }
+                  : step,
+              ),
+            }));
+          } else if (ev === "done") {
+            completed = true;
+          } else if (ev === "memory") {
+            if (generation.current === currentGeneration)
+              window.dispatchEvent(new Event("ai-memory-updated"));
+          } else if (ev === "token") {
             const delta = String(data.delta ?? "");
             patchLast((msg) => ({ ...msg, text: msg.text + delta }));
           } else if (ev === "product_cards") {
@@ -134,12 +282,12 @@ export function AssistantWidget() {
         }
       }
       patchLast((msg) =>
-        msg.text
+        msg.text && completed
           ? msg
           : {
               ...msg,
               failed: true,
-              text: "Trợ lý chưa trả lời được, bạn thử lại nhé.",
+              text: msg.text || "Trợ lý chưa trả lời được, bạn thử lại nhé.",
             },
       );
     } catch {
@@ -149,8 +297,11 @@ export function AssistantWidget() {
         text: "Không kết nối được với trợ lý, bạn thử lại nhé.",
       }));
     } finally {
-      setStreaming(false);
-      abortRef.current = null;
+      if (generation.current === currentGeneration) {
+        setStreaming(false);
+        sending.current = false;
+        abortRef.current = null;
+      }
     }
   }
 
@@ -164,8 +315,26 @@ export function AssistantWidget() {
             </span>
             <div className={styles.headText}>
               <h2>Trợ lý Gói Huế</h2>
-              <p>Trả lời từ dữ liệu thật của cửa hàng</p>
+              <p>
+                {provider === "deterministic"
+                  ? "Chế độ theo luật"
+                  : provider === "bedrock"
+                    ? "Bedrock · Gọi công cụ"
+                    : provider === "replay"
+                      ? "Hội thoại đã lưu"
+                      : "Tư vấn từ dữ liệu cửa hàng"}
+              </p>
             </div>
+            <button
+              type="button"
+              className={styles.close}
+              aria-label="Cuộc trò chuyện mới"
+              title="Cuộc trò chuyện mới"
+              disabled={historyLoading || Boolean(historyError)}
+              onClick={newConversation}
+            >
+              ＋
+            </button>
             <button
               type="button"
               className={styles.close}
@@ -176,6 +345,24 @@ export function AssistantWidget() {
             </button>
           </header>
           <div className={styles.body} ref={scrollRef}>
+            <AiPreferences />
+            {!customer && (
+              <p className={styles.hint}>
+                Đăng nhập để bật lưu lịch sử và ghi nhớ sở thích.
+              </p>
+            )}
+            {historyLoading && <p role="status">Đang tải hội thoại…</p>}
+            {historyError && (
+              <p role="alert">
+                {historyError}{" "}
+                <button
+                  type="button"
+                  onClick={() => setAttempt((value) => value + 1)}
+                >
+                  Thử lại
+                </button>
+              </p>
+            )}
             {messages.length === 0 && (
               <p className={styles.hint}>
                 Xin chào, mình có thể tư vấn quà tặng Huế, tra phí giao hàng
@@ -205,6 +392,26 @@ export function AssistantWidget() {
                     </span>
                   ) : (
                     <span className={styles.text}>{renderRich(msg.text)}</span>
+                  )}
+                  {msg.steps && msg.steps.length > 0 && (
+                    <details
+                      className={styles.trace}
+                      open={streaming && i === messages.length - 1}
+                    >
+                      <summary>
+                        {msg.steps.length} bước kiểm tra dữ liệu
+                      </summary>
+                      <ol>
+                        {msg.steps.map((step) => (
+                          <li key={step.id}>
+                            <strong>
+                              {TOOL_NAMES[step.name] ?? "Kiểm tra dữ liệu"}
+                            </strong>
+                            <p>{step.summary ?? "Đang kiểm tra…"}</p>
+                          </li>
+                        ))}
+                      </ol>
+                    </details>
                   )}
                   {msg.cards && msg.cards.length > 0 && (
                     <div className={styles.cards}>
@@ -248,9 +455,10 @@ export function AssistantWidget() {
                       type="button"
                       className={styles.retry}
                       onClick={() => {
-                        const base = messages.slice(0, -2);
-                        const lastUser = messages[messages.length - 2];
-                        if (lastUser) void send(lastUser.text, base);
+                        const base = messages.slice(0, i - 1);
+                        const lastUser = messages[i - 1];
+                        if (lastUser)
+                          void send(lastUser.text, base, msg.request);
                       }}
                     >
                       Thử lại
@@ -266,6 +474,9 @@ export function AssistantWidget() {
                 <button
                   key={chip}
                   type="button"
+                  disabled={
+                    historyLoading || Boolean(historyError) || streaming
+                  }
                   onClick={() => void send(chip)}
                 >
                   {chip}
@@ -285,13 +496,18 @@ export function AssistantWidget() {
               onChange={(e) => setInput(e.target.value)}
               placeholder="Nhắn cho trợ lý…"
               aria-label="Nhắn cho trợ lý"
-              disabled={streaming}
+              disabled={streaming || historyLoading || Boolean(historyError)}
             />
             <button
               type="submit"
               className={styles.sendBtn}
               aria-label="Gửi tin nhắn"
-              disabled={streaming || !input.trim()}
+              disabled={
+                streaming ||
+                historyLoading ||
+                Boolean(historyError) ||
+                !input.trim()
+              }
             >
               ↑
             </button>

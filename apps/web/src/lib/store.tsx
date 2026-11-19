@@ -245,7 +245,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const connect = () => {
       const url = new URL("/api/store/live", location.href);
       url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
-      url.port = "8088";
       socket = new WebSocket(url);
       socket.onopen = () => {
         delay = 1000;

@@ -29,6 +29,7 @@ public class PlatformApi {
     @Value("${ADMIN_EMAIL:admin@goihue.local}") String adminEmail;
     @Value("${ADMIN_PASSWORD}") String adminPassword;
     @Value("${APP_ORIGINS:http://localhost:3000}") String origins;
+    @Value("${APP_COOKIE_SECURE:false}") boolean secureCookie;
     public PlatformApi(JdbcTemplate db, ObjectMapper json, StoreLive live) { this.db=db; this.json=json; this.live=live; }
     static class Problem extends RuntimeException {
         final int status;
@@ -44,7 +45,7 @@ public class PlatformApi {
     String hash(String x) {try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(x.getBytes(java.nio.charset.StandardCharsets.UTF_8)));}catch(Exception e){throw new IllegalStateException(e);} }
     String token() {byte[] b=new byte[32];random.nextBytes(b);return HexFormat.of().formatHex(b);}
     void lock() {db.execute("SELECT pg_advisory_xact_lock(728124)");}
-    void origin(HttpServletRequest r) { if(!Arrays.asList(origins.split(",")).contains(r.getHeader("Origin"))) throw new Problem(403,"Nguồn yêu cầu không được phép."); }
+    void origin(HttpServletRequest r) { if(Arrays.stream(origins.split(",")).map(String::trim).noneMatch(value -> value.equals(r.getHeader("Origin")))) throw new Problem(403,"Nguồn yêu cầu không được phép."); }
     Map<String,Object> actor(HttpServletRequest r) {
         return sessionActor(sessionToken(r));
     }
@@ -62,7 +63,7 @@ public class PlatformApi {
         if(!granted.contains(p))throw new Problem(403,"Bạn không có quyền thực hiện thao tác này.");
     }
     Map<String,Object> safe(Map<String,Object> a) {var m=new LinkedHashMap<>(a);m.remove("password_hash");return m;}
-    void cookie(HttpServletResponse res,String t,int age) {res.addHeader("Set-Cookie",ResponseCookie.from("goihue_session",t).httpOnly(true).sameSite("Strict").path("/api/store").maxAge(age).build().toString());}
+    void cookie(HttpServletResponse res,String t,int age) {res.addHeader("Set-Cookie",ResponseCookie.from("goihue_session",t).httpOnly(true).secure(secureCookie).sameSite("Strict").path("/api/store").maxAge(age).build().toString());}
     void audit(Map<String,Object> a,String subject,String action) {db.update("INSERT INTO audit(actor_id,subject,action) VALUES(?,?,?)",a.get("id"),subject,action);}
     Map<String,Object> save(String kind,UUID owner,Map<String,Object> data) {
         if(!data.containsKey("id")){data.put("id",UUID.randomUUID().toString());data.put("createdAt",Instant.now().toString());data.put("revision",1);}
@@ -342,13 +343,20 @@ public class PlatformApi {
                 if(next.equals("COMPLETED")) {
                     String type=str(r,"type");
                     if(type.equals("EXPORT")||type.equals("ACCESS")){r.put("export",export(owner));}
-                    if(type.equals("RESTRICT")){db.update("UPDATE customers SET marketing=false WHERE id=?",owner);r.put("result","Đã tắt tiếp thị. Các xử lý đơn/đối soát được giữ để xem xét thủ công; không xác nhận hạn chế toàn bộ.");}
+                    if(type.equals("RESTRICT")) {
+                        db.update("UPDATE customers SET marketing=false WHERE id=?",owner);
+                        db.update("UPDATE records SET data=data || jsonb_build_object('personalization',false,'historyUse',false,'memoryUse',false,'revision',COALESCE((data->>'revision')::int,0)+1) WHERE owner_id=? AND kind='consent' AND data->>'purpose'='shopping-assistant-v1'",owner);
+                        db.update("DELETE FROM records WHERE owner_id=? AND kind IN ('chat','ai_memory')",owner);
+                        db.update("UPDATE records SET data=(data #- '{export,chat}') #- '{export,ai_memory}' WHERE owner_id=? AND kind='privacy'",owner);
+                        db.update("UPDATE operations SET result=(result #- '{export,chat}') #- '{export,ai_memory}' WHERE result->>'id' IN (SELECT id::text FROM records WHERE kind='privacy' AND owner_id=?)",owner);
+                        r.put("result","Đã tắt tiếp thị, cá nhân hóa, lưu lịch sử và ghi nhớ trợ lý. Các xử lý đơn/đối soát được giữ để xem xét thủ công; không xác nhận hạn chế toàn bộ.");
+                    }
                     if(type.equals("DELETE")) {
                         require(db.queryForObject("SELECT count(*) FROM records WHERE owner_id=? AND ((kind='order' AND data->>'status' NOT IN ('DELIVERED','CANCELLED')) OR (kind='return' AND data->>'status' NOT IN ('RESOLVED','REJECTED','WITHDRAWN')))",Integer.class,owner)==0,"Cần xử lý xong các đơn hàng/yêu cầu đổi trả đang mở trước khi đóng tài khoản.");
                         db.update("DELETE FROM sessions WHERE customer_id=?",owner);db.update("UPDATE customers SET active=false,name='Tài khoản đã đóng',email=?,password_hash=?,phone='',address='',marketing=false WHERE id=?","deleted-"+owner+"@invalid.test",passwords.encode(token()),owner);
                         db.update("UPDATE records SET data=(data - 'description' - 'export') || jsonb_build_object('history',jsonb_build_array(jsonb_build_object('note','Nội dung đã ẩn danh theo yêu cầu đóng tài khoản'))) WHERE owner_id=? AND kind IN ('privacy','return')",owner);
                         for(var e:db.query("SELECT data::text FROM records WHERE kind='evidence' AND owner_id=?",(rs,i)->decode(rs.getString(1)),owner)){try{Files.deleteIfExists(storage.resolve(str(e,"id")));}catch(Exception ex){throw new Problem(503,"Chưa xóa được ảnh. Yêu cầu chưa hoàn tất.");}}
-                        db.update("DELETE FROM records WHERE kind IN ('evidence','consent','address') AND owner_id=?",owner);r.put("description","Đã ẩn danh");r.remove("export");r.put("history",new ArrayList<>());r.put("result","Đã đóng tài khoản, xóa liên hệ/ảnh/lựa chọn tiếp thị và ẩn danh nội dung yêu cầu trong phân hệ. Giữ snapshot giao dịch và nhật ký phục vụ đối soát/tranh chấp; lịch lưu cụ thể chờ phê duyệt. Chưa tác động hệ thống khác.");
+                        db.update("DELETE FROM records WHERE kind IN ('evidence','consent','address','chat','ai_memory') AND owner_id=?",owner);r.put("description","Đã ẩn danh");r.remove("export");r.put("history",new ArrayList<>());r.put("result","Đã đóng tài khoản, xóa liên hệ/ảnh/lựa chọn tiếp thị, lịch sử và ghi nhớ trợ lý và ẩn danh nội dung yêu cầu trong phân hệ. Giữ snapshot giao dịch và nhật ký phục vụ đối soát/tranh chấp; lịch lưu cụ thể chờ phê duyệt. Chưa tác động hệ thống khác.");
                         db.update("DELETE FROM operations WHERE actor_id=?",owner);
                         db.update("DELETE FROM records WHERE kind='cart' AND owner_id=?",owner);
                         db.update("UPDATE records SET data=data || jsonb_build_object('recipient','Đã ẩn danh','phone','','address','','history',jsonb_build_array(jsonb_build_object('note','Nội dung liên hệ đã ẩn danh; số liệu giao dịch được giữ phục vụ đối soát'))) WHERE kind='order' AND owner_id=?",owner);
@@ -430,7 +438,7 @@ public class PlatformApi {
     String bounded(Map<String,Object> b,String key,int max){String s=str(b,key);require(s.length()<=max,"Thông tin quá dài: "+key);return s;}
     Map<String,Object> export(UUID owner) {
         var a=db.queryForList("SELECT id,email,name,phone,address,marketing FROM customers WHERE id=?",owner).getFirst();
-        var data=new LinkedHashMap<String,Object>();data.put("profile",a);data.put("scope","Dữ liệu tài khoản Gói Huế");for(String kind:List.of("order","cart","consent","return","privacy","address"))data.put(kind,db.query("SELECT (data-'export')::text FROM records WHERE owner_id=? AND kind=?",(rs,i)->decode(rs.getString(1)),owner,kind));return data;
+        var data=new LinkedHashMap<String,Object>();data.put("profile",a);data.put("scope","Dữ liệu tài khoản Gói Huế");for(String kind:List.of("order","cart","consent","return","privacy","address","chat","ai_memory","payment-event"))data.put(kind,db.query("SELECT (data-'export')::text FROM records WHERE owner_id=? AND kind=?",(rs,i)->decode(rs.getString(1)),owner,kind));return data;
     }
     @GetMapping("/privacy/{id}/export") public Object download(@PathVariable String id,HttpServletRequest req,HttpServletResponse response) {var r=record(id,"privacy",actor(req));require(str(r,"status").equals("COMPLETED")&&r.containsKey("export"),"Chưa có dữ liệu xuất.");response.setHeader("Content-Disposition","attachment; filename=goi-hue-data.json");return r.get("export");}
     @PostMapping("/evidence/intents") @Transactional public Object intent(@RequestBody Map<String,Object> b,HttpServletRequest req) {
