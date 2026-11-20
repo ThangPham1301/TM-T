@@ -69,8 +69,14 @@ class Browser:
             return events
         return json.loads(raw)
 
-    def chat(self, message, conversation=None, key=None, expected=200):
+    def chat(self, message, conversation=None, key=None, expected=200, context=None, history=None, purchase=None):
         body = {"message": message, "conversationId": conversation or str(uuid.uuid4())}
+        if context is not None:
+            body["contextProductIds"] = context
+        if history is not None:
+            body["history"] = history
+        if purchase is not None:
+            body["purchaseContext"] = purchase
         events = self.request("agent/chat", "POST", body, key or str(uuid.uuid4()), expected)
         return events, body
 
@@ -91,20 +97,38 @@ class ModelFixture(http.server.BaseHTTPRequestHandler):
     release = threading.Event()
     tool_results_seen = False
     tool_schema_seen = False
+    advice_policy_seen = False
 
     def log_message(self, *args):
         pass
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-        ModelFixture.tool_schema_seen = {tool["toolSpec"]["name"] for tool in body.get("toolConfig", {}).get("tools", [])} == {"search_products", "recommend_products", "compare_products", "add_to_cart", "get_shipping", "lookup_order", "get_policy", "get_memory"}
+        ModelFixture.advice_policy_seen = any(block.get("text", "").startswith("GOIHUE_SALES_ADVISOR_V4") and "<customer_preferences_data>" in block["text"] and "<current_customer_question>" in block["text"] for block in body.get("system", []))
+        ModelFixture.tool_schema_seen = {tool["toolSpec"]["name"] for tool in body.get("toolConfig", {}).get("tools", [])} == {"plan_purchase", "search_products", "recommend_products", "compare_products", "add_to_cart", "get_shipping", "lookup_order", "get_policy", "get_memory"}
         messages = body["messages"]
         prompt = next(block["text"] for msg in reversed(messages) for block in msg["content"] if "text" in block and msg["role"] == "user")
         results = [block["toolResult"] for block in messages[-1]["content"] if "toolResult" in block]
-        if "REVOCATION_RACE" in prompt:
+        if "MODEL_ADVICE_GENERAL" in prompt:
+            content = [{"text": "Bạn có thể cân nhắc khẩu vị, số người cùng dùng và thành phần cần tránh. Khi chốt món, mình tính thêm ngân sách và phí giao hàng."}]
+            stop = "end_turn"
+        elif "REVOCATION_RACE" in prompt:
             self.entered.set()
             self.release.wait(15)
             content = [{"text": "Đã xử lý lượt kiểm tra đồng thời."}]
+            stop = "end_turn"
+        elif "MODEL_PLAN_BAD" in prompt:
+            if not results:
+                content = [{"toolUse": {"toolUseId": "fixture-plan", "name": "plan_purchase", "input": {"budget": 1, "recipientCount": 1, "unitsPerRecipient": 100, "budgetScope": "PER_RECIPIENT"}}}]
+                stop = "tool_use"
+            else:
+                content = [{"text": "Mua một sản phẩm bất kỳ là đủ, tổng tiền 1 đồng."}]
+                stop = "end_turn"
+        elif "MODEL_OUTSIDE_CONTEXT" in prompt:
+            content = [{"text": "Bạn có thể tặng Mè Xửng Gừng Huế 250g vì món này không chứa đậu phộng."}]
+            stop = "end_turn"
+        elif "MODEL_ALLOWED_CONTEXT" in prompt:
+            content = [{"text": "Mình đang nói về Mè Xửng Đậu Phộng 300g; hương vị cần cân nhắc theo khẩu vị người nhận."}]
             stop = "end_turn"
         elif "MODEL_NO_TOOL" in prompt:
             content = [{"text": "Đã kiểm tra sản phẩm trong danh mục hiện tại."}]
@@ -118,7 +142,7 @@ class ModelFixture(http.server.BaseHTTPRequestHandler):
                 stop = "tool_use"
             else:
                 ModelFixture.tool_results_seen = len(results) == 2 and all("json" in item["content"][0] for item in results)
-                content = [{"text": "<thinking>PRIVATE_FIXTURE</thinking>\nĐã tìm quà trong ngân sách và kiểm tra phí giao từ hai công cụ."}]
+                content = [{"text": "<thinking>PRIVATE_FIXTURE</thinking>\n<response>Đã tìm quà trong ngân sách và kiểm tra phí giao từ hai công cụ.</response>"}]
                 stop = "end_turn"
         elif "TOOL_OWNER_INJECTION" in prompt:
             if not results:
@@ -307,7 +331,7 @@ def main():
         ginger_tea = sample_product("Trà Gừng Túi Lọc", "synthetic-tra-gung")
         unavailable_tea = sample_product("Trà Nhài", "synthetic-tra-nhai", stock=0)
         hidden_tea = sample_product("Trà Riêng Tư", "synthetic-tra-hidden", active=False)
-        for phrase in ("tôi muốn chọn một loại trà", "cửa hàng có những loại trà nào?", "tra gung", "tôi muốn mua bánh mè xửng", "me xung"):
+        for phrase in ("tôi muốn chọn một loại trà", "cửa hàng có những loại trà nào?", "tra gung", "tôi muốn mua bánh mè xửng", "me xung", "tôi muốn mua món quà liên quan đến mè"):
             searched, _ = guest.chat(phrase)
             cards = event_data(searched, "product_cards")[0]["items"]
             category = tea_category if "trà" in phrase or "tra " in phrase else first["category"]
@@ -370,6 +394,15 @@ def main():
             "AWS_SECRET_ACCESS_KEY": "synthetic-secret", "AWS_ENDPOINT_URL_BEDROCK_RUNTIME": f"http://host.docker.internal:{model.server_port}"})
         compose("up", "-d", "--force-recreate", "api")
         wait_ready()
+        advice_customer = Browser()
+        advice_customer.register("advice-policy@example.invalid")
+        general_advice, _ = advice_customer.chat("MODEL_ADVICE_GENERAL Tặng quà gia đình cần cân nhắc gì?")
+        check(ModelFixture.advice_policy_seen, "the packaged UTF-8 sales-advice policy and preference data are sent to Bedrock")
+        check(not event_data(general_advice, "tool_call") and "khẩu vị" in answer(general_advice) and "phí giao hàng" in answer(general_advice), "general gift advice can mention shipping as a consideration without a forced lookup or a fee claim")
+        specific_advice, _ = advice_customer.chat("MODEL_NO_TOOL Tôi cân nhắc Trà Sen Tịnh Tâm, giá bao nhiêu?")
+        check(any(data["name"] == "search_products" for data in event_data(specific_advice, "tool_call")), "an advice keyword cannot bypass fresh catalog evidence for a product-price question")
+        budget_advice, _ = advice_customer.chat("MODEL_NO_TOOL Tiêu chí chọn quà dưới 200k, gợi ý vài món giúp mình")
+        check(event_data(budget_advice, "tool_call") and event_data(budget_advice, "product_cards")[0]["items"] and all(item["price"] <= 200000 for item in event_data(budget_advice, "product_cards")[0]["items"]), "a mixed advice and budget-shopping request retains catalog tools and its explicit price limit")
         search_model, _ = guest.chat('MODEL_SEARCH::{"query":"trà","category":"tra-cung-dinh","limit":8}')
         search_cards = event_data(search_model, "product_cards")[0]["items"]
         check(search_cards and all(card["category"] == tea_category for card in search_cards) and any(card["price"] > 200000 for card in search_cards), "model-selected category search has no implicit budget and returns category metadata")
@@ -416,11 +449,141 @@ def main():
         events, _ = alice.chat("MODEL_TOOL_LOOP tìm quà dưới 200k và phí ship")
         check(event_data(events, "meta")[0]["provider"] == "bedrock" and len(event_data(events, "tool_call")) == 2 and ModelFixture.tool_results_seen and ModelFixture.tool_schema_seen,
               "Bedrock protocol loop sends tool schemas, executes model-chosen tools, and feeds both results back")
-        check("PRIVATE_FIXTURE" not in answer(events) and "thinking" not in answer(events), "model reasoning markup is removed before rendering or persistence")
+        check("PRIVATE_FIXTURE" not in answer(events) and "thinking" not in answer(events) and "<response>" not in answer(events) and "</response>" not in answer(events) and "Đã tìm quà" in answer(events), "model reasoning and response wrappers are removed while preserving the customer answer")
         rejected, _ = alice.chat("TOOL_OWNER_INJECTION")
         check(not event_data(rejected, "tool_result")[0]["ok"], "model-supplied owner identity cannot bypass tool validation")
         outage, _ = alice.chat("MODEL_UNAVAILABLE phí ship bao nhiêu?")
         check(event_data(outage, "meta")[-1]["provider"] == "deterministic" and "chưa áp dụng" in answer(outage), "model failures switch explicitly to functioning deterministic tools")
+
+        context_customer = Browser()
+        context_owner = context_customer.register("product-context@example.invalid")
+        ginger_candy = sample_product("Mè Xửng Gừng Huế 250g", "synthetic-context-ginger", category=first["category"])
+        peanut_candy = sample_product("Mè Xửng Đậu Phộng 300g", "synthetic-context-peanut", price=90000, stock=6, category=first["category"])
+        pair = [ginger_candy["id"], peanut_candy["id"]]
+        previous = [{"role": "user", "content": "Tôi muốn món quà liên quan đến mè"},
+                    {"role": "assistant", "content": ginger_candy["name"] + " và " + peanut_candy["name"]}]
+        follow, _ = context_customer.chat("MODEL_BUDGET_ZERO 1 trong 2 món này món nào hợp tặng bạn bè?", context=pair, history=previous)
+        check([item["id"] for item in event_data(follow, "product_cards")[0]["items"]] == pair and '"scope": "CONVERSATION"' in answer(follow), "a model recommendation for one of two previous products stays in that set without POPULAR drift")
+        inferred, _ = context_customer.chat("MODEL_NO_TOOL 1 trong 2 món này thì chọn món nào?", history=previous)
+        check([item["id"] for item in event_data(inferred, "product_cards")[0]["items"]] == pair, "legacy text-only history recovers the pair using verified catalog identities")
+        reversed_history = [{"role": "user", "content": "Tôi muốn món quà liên quan đến mè"}, {"role": "assistant", "content": peanut_candy["name"] + " và " + ginger_candy["name"]}]
+        reversed_pair, _ = context_customer.chat("MODEL_NO_TOOL 1 trong 2 món này thì chọn món nào?", history=reversed_history)
+        check([item["id"] for item in event_data(reversed_pair, "product_cards")[0]["items"]] == list(reversed(pair)), "legacy context preserves the order displayed in the assistant text rather than catalog sorting")
+        typo, _ = context_customer.chat('Thế món mè xửng động phộng kia không tặng được hả MODEL_SEARCH::{"query":"mè xửng động phộng"}', context=pair, history=previous)
+        check([item["id"] for item in event_data(typo, "product_cards")[0]["items"]] == [peanut_candy["id"]], "a unique distinguishing name word resolves a misspelled contextual reference without global fuzzy search")
+        outside_answer, _ = context_customer.chat("MODEL_OUTSIDE_CONTEXT Món mè xửng động phộng kia không tặng được hả?", context=pair)
+        check(ginger_candy["name"] not in answer(outside_answer) and peanut_candy["name"] in answer(outside_answer) and "không chứa đậu phộng" not in answer(outside_answer), "a model answer that recommends outside the resolved subject is replaced with grounded contextual advice")
+        allowed_answer, _ = context_customer.chat("MODEL_ALLOWED_CONTEXT Món mè xửng động phộng kia tặng được không?", context=pair)
+        check("hương vị cần cân nhắc" in answer(allowed_answer), "a generic flavor word cannot be mistaken for an outside gift-box product name")
+        ambiguous_context, _ = context_customer.chat("Thêm món kia vào giỏ MODEL_CART::" + ginger_candy["id"] + "::1", context=pair)
+        check(not event_data(ambiguous_context, "cart_proposal") and ginger_candy["name"] in answer(ambiguous_context) and peanut_candy["name"] in answer(ambiguous_context), "an ambiguous contextual cart reference asks which product even when the model invents a concrete ID")
+        ordinal, _ = context_customer.chat("Thêm món thứ hai vào giỏ MODEL_CART::" + ginger_candy["id"] + "::1", context=pair)
+        check(event_data(ordinal, "cart_proposal")[0]["productId"] == peanut_candy["id"], "a contextual ordinal wins over the model's wrong cart ID")
+        check(not context_customer.request("cart/summary")["items"], "contextual proposals still leave cart writes to explicit UI confirmation")
+        advice_cart, _ = context_customer.chat("Món mè xửng đậu phộng kia tặng bạn bè được không? MODEL_CART::" + ginger_candy["id"] + "::1", context=pair)
+        check(not event_data(advice_cart, "cart_proposal"), "contextual suitability questions cannot create an unsolicited cart proposal")
+        new_topic, _ = context_customer.chat('Còn trà thì sao? MODEL_SEARCH::{"query":"còn trà thì sao?"}', context=pair)
+        check(event_data(new_topic, "product_cards")[0]["items"] and all(item["category"] == tea_category for item in event_data(new_topic, "product_cards")[0]["items"]), "changing to tea releases the previous sesame-candy set")
+        only_old = [first["id"]]
+        different, _ = context_customer.chat('Tôi muốn Trà Gừng Túi Lọc MODEL_SEARCH::{"query":"Trà Gừng Túi Lọc"}', context=only_old)
+        check([item["id"] for item in event_data(different, "product_cards")[0]["items"]] == [ginger_tea["id"]], "a fully named new product is not captured by a shared word in the old set")
+        hidden_context, _ = context_customer.chat("MODEL_NO_TOOL Món này còn không?", context=[hidden_tea["id"]])
+        check(not event_data(hidden_context, "product_cards")[0]["items"] and hidden_tea["name"] not in answer(hidden_context), "forged hidden product context cannot leak product data or fall back to the whole catalog")
+        out_context, _ = context_customer.chat("MODEL_NO_TOOL Món này còn không?", context=[unavailable_tea["id"]])
+        check(event_data(out_context, "product_cards")[0]["items"][0]["available"] is False, "context refresh preserves visible out-of-stock status")
+        context_customer.chat("Món này", context=["not-a-uuid"], expected=422)
+        context_customer.chat("Món này", context=pair * 5, expected=422)
+        check(sql("SELECT count(*) FROM records WHERE kind IN ('chat','ai_memory') AND owner_id='" + context_owner["id"] + "';") == "0", "consent-off conversational product context is never stored as history or long-term memory")
+        context_customer.request("agent/consent", "PUT", {"historyUse": True, "memoryUse": False, "revision": 0}, str(uuid.uuid4()))
+        saved_context = str(uuid.uuid4())
+        context_customer.chat("MODEL_BUDGET_ZERO 1 trong 2 món này thì chọn món nào?", saved_context, context=pair)
+        restored_context = context_customer.request("agent/history?conversationId=" + saved_context)
+        check(restored_context["messages"][-1]["productIds"] == pair and not restored_context["memory"], "history consent restores product identities independently of preference-memory consent")
+        fresh_price = 91000
+        sql("UPDATE records SET data=jsonb_set(data,'{price}','91000'::jsonb) WHERE id='" + peanut_candy["id"] + "';")
+        reloaded, _ = context_customer.chat("MODEL_NO_TOOL Món mè xửng động phộng kia giá bao nhiêu?", saved_context)
+        check(event_data(reloaded, "product_cards")[0]["items"][0]["price"] == fresh_price and event_data(reloaded, "product_cards")[0]["items"][0]["id"] == peanut_candy["id"], "a reloaded saved conversation resolves the subject and refreshes its price without client context or stale history facts")
+        context_customer.request("agent/consent", "PUT", {"historyUse": False, "memoryUse": False, "revision": 1}, str(uuid.uuid4()))
+        check(not context_customer.request("agent/history?conversationId=" + saved_context)["messages"], "revoking history consent also erases saved conversational product identities")
+
+        planner_customer = Browser()
+        planner_owner = planner_customer.register("purchase-planner@example.invalid")
+        sql("UPDATE records SET data=jsonb_set(jsonb_set(data,'{price}','74998'::jsonb),'{stock}','41'::jsonb) WHERE id='" + ginger_candy["id"] + "';")
+        sql("UPDATE records SET data=jsonb_set(jsonb_set(data,'{price}','90000'::jsonb),'{stock}','38'::jsonb) WHERE id='" + peanut_candy["id"] + "';")
+        def planned(message, purchase=None, context=pair, history=None):
+            events, body = planner_customer.chat(message, context=context, history=history, purchase=purchase)
+            return event_data(events, "purchase_plan")[0], event_data(events, "purchase_context")[0], events
+        exact, constraints, events = planned("MODEL_NO_TOOL Nhưng ngân sách tôi chỉ có 160k mà phải tặng 2 người mỗi người một sản phẩm thì nên mua sao?")
+        chosen = exact["options"][0]
+        check(exact["code"] == "PLANNED" and exact["requiredQuantity"] == 2 and len(exact["options"]) == 1 and chosen["lines"][0]["quantity"] == 2 and chosen["lines"][0]["productId"] == ginger_candy["id"] and chosen["subtotal"] == 149996 and chosen["remainingBudget"] == 10004, "160k for two recipients produces two 74,998 VND items, not two independently affordable unit suggestions")
+        check(exact["closestOverBudget"]["subtotal"] == 164998 and exact["closestOverBudget"]["remainingBudget"] == -4998 and chosen["total"] == 179996, "mixed gifts and single-order shipping are calculated with exact VND arithmetic")
+        check("149.996đ" in answer(events) and "4.998đ" in answer(events) and "19.996đ" in answer(events) and "chưa gồm phí giao" in answer(events), "the final advice retains verified totals, rejected alternative and the unknown-shipping caveat despite a model omission")
+        check([card["id"] for card in event_data(events, "product_cards")[0]["items"]] == [ginger_candy["id"]] and event_data(events, "product_cards")[0]["contextProductIds"] == pair, "plan cards show feasible items while retaining the full candidate set for follow-up budget changes")
+        included, included_context, _ = planned("MODEL_NO_TOOL 160k bao gồm ship", constraints)
+        check(included["code"] == "NO_FEASIBLE_PLAN" and included_context["shippingInBudget"] == "INCLUDED" and included["closestOverBudget"]["total"] == 179996 and not included["options"], "an all-in 160k budget rejects the 179,996 VND single-order total")
+        sample_product("Mè Xửng Quà Tiết Kiệm 100g", "synthetic-budget-alternative", price=50000, stock=10, category=first["category"])
+        alternatives, alternative_context, _ = planned("MODEL_NO_TOOL Tìm món khác giúp tôi", included_context)
+        check(alternatives["options"] and all(option["total"] <= 160000 and sum(line["quantity"] for line in option["lines"]) == 2 for option in alternatives["options"]) and alternative_context["recipientCount"] == 2, "an explicit request for alternatives broadens candidates while retaining total budget, shipping and gift quantity")
+        increased, _, _ = planned("MODEL_NO_TOOL 190k bao gồm ship", included_context)
+        check(increased["totalBudget"] == 190000 and increased["options"][0]["total"] == 179996, "a later budget amount overrides the prior amount even when it says it includes shipping")
+        per_person, per_context, _ = planned("MODEL_NO_TOOL 80k/người, tặng 2 người mỗi người một sản phẩm")
+        check(per_person["totalBudget"] == 160000 and per_context["budgetScope"] == "PER_RECIPIENT" and per_person["options"][0]["subtotal"] == 149996, "80k per recipient is distinguished from a total 80k budget")
+        total_changed, total_context, _ = planned("MODEL_NO_TOOL Tổng 160k cho cả hai người", per_context)
+        check(total_context["budgetScope"] == "TOTAL" and total_changed["totalBudget"] == 160000, "an explicit total budget replaces the previous per-recipient interpretation")
+        premium = sample_product("Mè Xửng Cao Cấp 300g", "synthetic-context-premium", price=110000, stock=5, category=first["category"])
+        capped, _, _ = planned("MODEL_NO_TOOL 100k mỗi người, tặng hai người mỗi người một sản phẩm", context=[ginger_candy["id"], premium["id"]])
+        check(capped["totalBudget"] == 200000 and all(line["unitPrice"] <= 100000 for option in capped["options"] for line in option["lines"]), "a 110k gift is excluded under a 100k per-person cap even when a mixed pair would fit the pooled total")
+        quantity, _, _ = planned("MODEL_NO_TOOL Ngân sách 350k tặng 2 người mỗi người 2 hộp")
+        check(quantity["requiredQuantity"] == 4 and all(sum(line["quantity"] for line in option["lines"]) == 4 for option in quantity["options"]), "recipient count times units each is enforced across every proposed option")
+        inadequate, _, _ = planned("MODEL_NO_TOOL Tổng ngân sách 100k tặng 2 người mỗi người một sản phẩm")
+        check(inadequate["code"] == "NO_FEASIBLE_PLAN" and not inadequate["options"], "an insufficient group budget never reduces the number of gifts silently")
+        different, _, _ = planned("MODEL_NO_TOOL Tổng 200k tặng 2 người mỗi người một loại khác nhau")
+        check(different["options"] and all(len(option["lines"]) == 2 and all(line["quantity"] == 1 for line in option["lines"]) for option in different["options"]), "distinct-gift requests exclude same-product allocations")
+        sql("UPDATE records SET data=jsonb_set(data,'{stock}','1'::jsonb) WHERE id IN ('" + ginger_candy["id"] + "','" + peanut_candy["id"] + "');")
+        stock_mix, _, _ = planned("MODEL_NO_TOOL Ngân sách 200k tặng hai người mỗi người một sản phẩm")
+        check(len(stock_mix["options"]) == 1 and all(line["quantity"] == 1 for line in stock_mix["options"][0]["lines"]), "live stock can force a mixed allocation without overselling a uniform choice")
+        uniform, uniform_context, _ = planned("MODEL_NO_TOOL Ngân sách 200k tặng hai người mỗi người một sản phẩm, phải giống nhau")
+        check(uniform["code"] == "INSUFFICIENT_STOCK" and not uniform["options"], "a same-product requirement is not relaxed to work around insufficient per-product stock")
+        relaxed, _, _ = planned("MODEL_NO_TOOL Không cần giống nhau, xem lại phương án giúp tôi", uniform_context)
+        check(relaxed["code"] == "PLANNED", "a later relaxation replaces the earlier same-product requirement")
+        sql("UPDATE records SET data=jsonb_set(data,'{stock}','41'::jsonb) WHERE id='" + ginger_candy["id"] + "';")
+        sql("UPDATE records SET data=jsonb_set(data,'{stock}','38'::jsonb) WHERE id='" + peanut_candy["id"] + "';")
+        sql("UPDATE records SET data=jsonb_set(data,'{freeShippingThreshold}','150000'::jsonb) WHERE kind='settings' AND data->>'code'='shipping';")
+        free, _, _ = planned("MODEL_NO_TOOL Ngân sách 200k gồm ship, tặng hai người mỗi người một sản phẩm")
+        check(free["options"][0]["subtotal"] == 164998 and free["options"][0]["shippingFee"] == 0 and free["options"][0]["total"] == 164998, "the cheapest all-in choice can be a mixed pair that crosses the verified free-shipping threshold")
+        sql("UPDATE records SET data=jsonb_set(data,'{freeShippingThreshold}','0'::jsonb) WHERE kind='settings' AND data->>'code'='shipping';")
+        hidden_plan, _, _ = planned("MODEL_NO_TOOL Tổng 160k tặng hai người mỗi người một sản phẩm", context=[hidden_tea["id"]])
+        check(not hidden_plan.get("items") and hidden_plan["code"] == "INSUFFICIENT_STOCK", "planning with a hidden product pointer does not expose it or search unrelated products")
+        missing, _, _ = planned("MODEL_NO_TOOL Tặng hai người mỗi người một sản phẩm")
+        check(missing["code"] == "NEED_BUDGET", "an unknown total budget produces one relevant question instead of an invented amount")
+        invented, _, _ = planned("MODEL_PLAN_BAD Tổng 160k tặng hai người mỗi người một sản phẩm")
+        check(invented["totalBudget"] == 160000 and invented["requiredQuantity"] == 2 and invented["options"][0]["subtotal"] == 149996, "invented model budget and quantity arguments cannot replace the customer's verified constraints or arithmetic")
+        unsolicited, _ = planner_customer.chat("Tổng 160k tặng hai người mỗi người một sản phẩm MODEL_CART::" + ginger_candy["id"] + "::2", context=pair)
+        check(not event_data(unsolicited, "cart_proposal") and not planner_customer.request("cart/summary")["items"], "purchase advice never proposes or writes a cart without explicit cart intent")
+        sql("UPDATE records SET data=jsonb_set(data,'{enabled}','false'::jsonb) WHERE kind='settings' AND data->>'code'='shipping';")
+        paused, _, _ = planned("MODEL_NO_TOOL Tổng 160k tặng hai người mỗi người một sản phẩm")
+        check(paused["code"] == "STORE_PAUSED", "a paused store is disclosed before recommending a purchase allocation")
+        sql("UPDATE records SET data=jsonb_set(data,'{enabled}','true'::jsonb) WHERE kind='settings' AND data->>'code'='shipping';")
+        check(sql("SELECT count(*) FROM records WHERE kind IN ('chat','ai_memory') AND owner_id='" + planner_owner["id"] + "';") == "0", "consent-off purchase constraints and quotes are not persisted")
+        planner_customer.chat("test", purchase={"recipientCount": 0}, expected=422)
+        planner_customer.chat("test", purchase={"recipientCount": 2, "budget": -1}, expected=422)
+
+        plan_history = Browser()
+        plan_history.register("purchase-history@example.invalid")
+        plan_history.request("agent/consent", "PUT", {"historyUse": True, "memoryUse": True, "revision": 0}, str(uuid.uuid4()))
+        plan_conversation = str(uuid.uuid4())
+        plan_key = str(uuid.uuid4())
+        first_plan, request_body = plan_history.chat("MODEL_NO_TOOL Tổng 160k tặng hai người mỗi người một sản phẩm", plan_conversation, key=plan_key, context=pair)
+        plan_replay = plan_history.request("agent/chat", "POST", request_body, plan_key)
+        check(event_data(plan_replay, "meta")[0]["provider"] == "replay" and event_data(plan_replay, "purchase_plan")[0] == event_data(first_plan, "purchase_plan")[0] and event_data(plan_replay, "purchase_context")[0]["recipientCount"] == 2, "idempotent quote retries restore the same computed plan and conversational constraints")
+        restored_plan = plan_history.request("agent/history?conversationId=" + plan_conversation)
+        check(restored_plan["messages"][-1]["purchaseContext"]["recipientCount"] == 2 and "budget" not in restored_plan["memory"], "history restores group constraints while the group budget is not stored as an ordinary unit preference")
+        after_reload, _ = plan_history.chat("MODEL_NO_TOOL Vậy ngân sách 190k gồm ship thì sao?", plan_conversation)
+        check(event_data(after_reload, "purchase_plan")[0]["options"][0]["total"] == 179996, "a saved conversation retains recipient count and candidate identities when only the budget changes")
+        new_topic, _ = plan_history.chat('Còn trà thì sao? MODEL_SEARCH::{"query":"trà"}', plan_conversation)
+        check(event_data(new_topic, "purchase_context")[0] == {} and not event_data(new_topic, "purchase_plan"), "a fresh discovery topic clears purchase constraints instead of silently reusing a group allocation")
+        plan_history.request("agent/consent", "PUT", {"historyUse": False, "memoryUse": False, "revision": 1}, str(uuid.uuid4()))
+        check(not plan_history.request("agent/history?conversationId=" + plan_conversation)["messages"], "withdrawing history consent also erases purchase constraints and computed quotes")
         consent = alice.request("agent/consent")
         alice.request("agent/consent", "PUT", {"historyUse": True, "memoryUse": True, "revision": consent["revision"]}, str(uuid.uuid4()))
         race_key = str(uuid.uuid4())

@@ -138,7 +138,7 @@ public class AiPrivacy {
         var messages = new ArrayList<Map<String, Object>>();
         for (var turn : turns(owner, conversationId)) {
             messages.add(Map.of("role", "user", "text", turn.get("message")));
-            messages.add(Map.of("role", "assistant", "text", turn.get("answer")));
+            messages.add(Map.of("role", "assistant", "text", turn.get("answer"), "productIds", turn.getOrDefault("productIds", List.of()), "purchaseContext", turn.getOrDefault("purchaseContext", Map.of())));
         }
         return Map.of("conversationId", conversationId, "messages", messages, "memory", memory(owner), "revision", preferences(owner).get("revision"));
     }

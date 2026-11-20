@@ -99,9 +99,47 @@ Không nhận số tiền refund/owner/role được browser quyết định. Gi
 
 ### Agent catalog search
 
-Model tự chèn phí giao hàng khi chưa gọi get_shipping trong lượt hiện tại sẽ bị thay bằng nội dung từ các kết quả công cụ đã kiểm tra. Trên điện thoại, panel chat nằm trên nút nổi để nút gửi không bị che; hộp xác nhận thêm giỏ vẫn nằm trên panel.
+Instruction tư vấn nằm trong resource `agent-sales-advisor.vi.txt` (GOIHUE_SALES_ADVISOR_V4), được đóng gói trong API và đọc UTF-8 khi khởi tạo. Phân biệt dữ kiện của đúng sản phẩm/cửa hàng cần xác minh, kiến thức chung và nhận xét có điều kiện. Câu hỏi tiêu chí chọn quà chung không ép tra danh mục; giá/tồn/thành phần/chứng nhận vẫn phải dựa trên dữ kiện phù hợp. Thiếu thuộc tính chỉ giới hạn phần chưa xác nhận, không suy ra không có thuộc tính đó. Không mặc nhiên đồng ý với tiền đề "không hợp để tặng"; không bảo đảm an toàn dị ứng/chế độ ăn từ tên hoặc description thiếu thông tin. Phản hồi trả lời chính trước, giải thích ngắn và tối đa một câu hỏi cần thiết, không báo cáo database/tool cho khách.
+
+Lượt được nhận diện là câu hỏi tiêu chí quà tặng chung không gửi schema công cụ cho model. Câu hỏi có tham chiếu sản phẩm, dữ kiện giá/tồn/chính sách, ngân sách hoặc ý định tìm/gợi ý món vẫn giữ công cụ; "gia đình" không phải từ khóa giá. Các thẻ bọc response/answer được loại trước khi hiển thị/lưu, cùng với markup reasoning đã bị loại.
+
+Model tự chèn mức phí giao hàng/miễn phí khi chưa có phí đã xác minh từ get_shipping hoặc plan_purchase trong lượt hiện tại sẽ bị thay bằng nội dung từ các kết quả công cụ đã kiểm tra. Lời khuyên chung "cân nhắc phí giao hàng" không có mức phí/cam kết vẫn được giữ. Trên điện thoại, panel chat nằm trên nút nổi để nút gửi không bị che; hộp xác nhận thêm giỏ vẫn nằm trên panel.
 
 `search_products` tìm theo query hoặc tên/mã category, không cần budget. Chỉ dùng budget dương trong câu khách hiện tại; không áp ngân sách trong memory cho yêu cầu khám phá loại hàng mới. Success trả items với description/categoryName/available, categories, totalMatches, outOfStockMatches và budgetApplied. Empty dùng NO_MATCH/UNKNOWN_CATEGORY; inStockOnly lọc hết hàng nhưng OUT_OF_STOCK vẫn phân biệt món tồn tại. Không trả sản phẩm hoặc nhóm hàng ẩn. Widget hiển thị bước tìm tên/loại sản phẩm và thẻ kết quả; tra cứu khách chưa đăng nhập vẫn được dùng, còn thêm giỏ thật cần CUSTOMER và xác nhận. Nhập tên mơ hồ vào compare_products/add_to_cart trả AMBIGUOUS cùng các lựa chọn, không phát comparison/cart_proposal. Công cụ đã tra danh mục hợp lệ được tính là dữ kiện mới, không gọi thêm recommendation chỉ để vượt điều kiện kiểm tra dữ liệu.
+
+### Conversational product context
+
+Widget gửi `contextProductIds` (tối đa tám UUID) lấy từ thẻ/bảng so sánh gần nhất hoặc `productIds` đã khôi phục. Backend ưu tiên lịch sử đã lưu đúng owner; client chỉ gửi tham chiếu, không được quyết định giá/tồn hay quyền. Lịch sử cũ chỉ có chữ được đối chiếu lại tên sản phẩm public. Mỗi lượt lấy lại tên, mô tả, giá, tồn và tình trạng hiển thị; không tin dữ kiện do assistant/client nêu trước đó. Các công cụ sản phẩm bị giới hạn trong tập đã xác định cho câu hỏi nối tiếp, không rơi về POPULAR. Khi đổi loại/tên sản phẩm rõ ràng, tập cũ được bỏ. Nội dung `productIds` chỉ lưu cùng chat khi có historyUse; không thêm vào preference memory, không tạo cache hội thoại của khách vãng lai trên server.
+
+Nếu câu trả lời cuối nhắc tên sản phẩm public được nhận diện nằm ngoài tập đã giải quyết, thay câu trả lời bằng nội dung dựa trên mô tả của đúng tập đó. Từ chung như “hương vị” không tự được coi là đang nhắc tên Hộp Quà Hương Huế. Đây là chặn đổi món ngoài phạm vi, không phải bộ xác minh mọi khẳng định ngữ nghĩa của model.
+
+| Trạng thái / câu hỏi | Phản hồi bắt buộc |
+| --- | --- |
+| “1 trong 2 món này” | Giữ đúng tập món vừa xem, đối chiếu dữ kiện mới; tư vấn theo khẩu vị/mô tả, không lấy số đã giao làm bằng chứng phù hợp người nhận. |
+| “mè xửng động phộng kia” | Chỉ hiểu thành món đậu phộng khi từ phân biệt khớp duy nhất trong tập trước; không sửa chính tả toàn danh mục hoặc khẳng định món không tồn tại. |
+| “món kia” khớp nhiều món | AMBIGUOUS, hỏi rõ món, hiển thị lựa chọn; không tự so sánh/chọn món/thêm giỏ theo ID model đoán. |
+| Món hết hàng hoặc bị ẩn | Hết tồn vẫn có available=false nếu còn public; món bị ẩn/ID không có trả UNAVAILABLE, không lộ dữ kiện và không mở rộng sang toàn danh mục. |
+| “còn trà thì sao?” | Tra loại trà mới, không giữ bộ lọc mè xửng cũ. |
+| Reload có historyUse | Khôi phục ID món từ lịch sử đúng owner, lấy lại dữ kiện hiện tại; memoryUse có thể vẫn tắt. |
+| Guest/consent tắt/rút consent | Ngữ cảnh tạm theo request/tab; không lưu khi chưa đồng ý, rút historyUse xóa cả ID trong chat. |
+
+### Purchase planning
+
+`plan_purchase` là công cụ đọc, không ghi giỏ. Widget gửi lại `purchaseContext` sau sự kiện SSE tương ứng; assistant message trong lịch sử cũng trả trường này. Dữ liệu có budget, budgetScope, recipientCount, unitsPerRecipient, shippingInBudget và selectionMode; không nhận giá/tồn/phí do client/model quyết định. Backend ưu tiên lịch sử đúng owner rồi áp thay đổi rõ ràng trong tin mới. Ngân sách nhóm không ghi đè preference budget; điều kiện và báo giá chỉ lưu cùng chat khi historyUse bật. Retry cùng key/body phát lại purchase_context và purchase_plan đã lưu.
+
+| Trạng thái | Phản hồi |
+| --- | --- |
+| PLANNED | Tối đa ba phương án đủ số lượng/tồn/ngân sách, có lines, subtotal, shippingFee, total và remainingBudget. Câu trả lời dùng phép tính backend; product_cards chỉ có món trong phương án khả thi, contextProductIds vẫn giữ ứng viên. |
+| NO_FEASIBLE_PLAN | Không âm thầm bớt số quà hay tăng tiền. Nêu phương án thấp nhất đang xét và mức thiếu; nếu trần mỗi người chưa bảo đảm thì làm rõ cách chia. |
+| INSUFFICIENT_STOCK | Không đề xuất lượng vượt tồn; SAME không bị nới thành phối loại khác, DIFFERENT phải đủ loại khác nhau. |
+| NEED_BUDGET / NEED_RECIPIENT_COUNT | Hỏi một điều kiện còn thiếu, không tự tạo ngân sách hoặc số người từ tham số model. |
+| NEED_DISTRIBUTION / NEED_DELIVERY_DETAILS | Làm rõ cách phối bộ quà/giao riêng; không giả định mỗi người là một địa chỉ giao. |
+| STORE_PAUSED / ORDER_LIMIT / QUANTITY_LIMIT | Nêu giới hạn hiện tại; một đơn không vượt 100 triệu tiền hàng, bộ tính giới hạn 100 sản phẩm/phương án. |
+| Chưa rõ bao gồm ship | Ghi tiền hàng chưa gồm ship và tổng một đơn có ship. Giá trị ngưỡng 0 không tạo miễn phí. |
+| Đổi sang 190k / mỗi người 80k | Giữ số người và lượng mỗi người; cập nhật phạm vi ngân sách theo câu khách nói, kiểm tra cả trần từng người. |
+| Tìm món khác | Mở tập ứng viên theo yêu cầu rõ, giữ số quà/ngân sách/ship; không giữ cứng tập cũ khi khách muốn thay. |
+| Chủ đề mới / cuộc trò chuyện mới | Xóa điều kiện phương án cũ, không tự áp ngân sách nhóm vào khám phá loại hàng mới. |
+| 422 | purchaseContext sai kiểu, enum, số lượng hoặc ngân sách ngoài giới hạn bị từ chối trước khi chạy model. |
 
 Privacy: SUBMITTED→REVIEWING→EVIDENCE_REQUIRED/COMPLETED/REJECTED. EVIDENCE_REQUIRED→REVIEWING. ACCESS/EXPORT tạo snapshot profile/order/cart/consent/return/privacy không lồng export cũ. RESTRICT tắt marketing và phản hồi rõ các xử lý còn lại cần xem xét. DELETE không cho hoàn tất khi còn đơn đang xử lý hoặc Return chưa kết thúc; hủy phiên, đóng login, xóa liên hệ/ảnh/consent/cart, ẩn danh yêu cầu và địa chỉ giao; giữ số liệu giao dịch/identifier/audit theo phạm vi thông báo. Xóa file không thể rollback cùng SQL; cần xử lý thủ công nếu filesystem lỗi.
 

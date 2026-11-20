@@ -12,6 +12,8 @@ type Msg = {
   role: "user" | "assistant";
   text: string;
   cards?: Row[];
+  productIds?: string[];
+  purchaseContext?: Record<string, unknown>;
   sources?: string[];
   failed?: boolean;
   steps?: { id: string; name: string; summary?: string; ok?: boolean }[];
@@ -33,10 +35,13 @@ type ChatRequest = {
   message: string;
   conversationId: string;
   history: { role: string; content: string }[];
+  contextProductIds: string[];
+  purchaseContext: Record<string, unknown>;
   key: string;
 };
 
 const TOOL_NAMES: Record<string, string> = {
+  plan_purchase: "Tính phương án theo ngân sách và số lượng",
   search_products: "Tìm theo tên và loại sản phẩm",
   recommend_products: "Tìm sản phẩm phù hợp",
   compare_products: "So sánh sản phẩm",
@@ -234,10 +239,20 @@ function ChatSession({ customer }: { customer: boolean }) {
       .filter((x) => !x.failed && x.text)
       .slice(-6)
       .map((x) => ({ role: x.role, content: x.text.slice(0, 1000) }));
+    const contextProductIds = [...base].reverse()
+      .filter((msg) => msg.role === "assistant" && !msg.failed)
+      .map((msg) => msg.productIds?.length ? msg.productIds : msg.cards?.length ? msg.cards.map((card) => String(card.id))
+        : msg.comparison?.items.length ? msg.comparison.items.map((card) => String(card.id))
+        : msg.productIds ?? [])
+      .find((ids) => ids.length > 0)?.slice(0, 8) ?? [];
+    const purchaseContext = [...base].reverse()
+      .find((msg) => msg.role === "assistant" && !msg.failed && msg.purchaseContext !== undefined)?.purchaseContext ?? {};
     if (!conversation.current) conversation.current = crypto.randomUUID();
     const request = retry ?? {
       message: text,
       history,
+      contextProductIds,
+      purchaseContext,
       conversationId: conversation.current,
       key: crypto.randomUUID(),
     };
@@ -267,6 +282,8 @@ function ChatSession({ customer }: { customer: boolean }) {
         body: JSON.stringify({
           message: request.message,
           history: request.history,
+          contextProductIds: request.contextProductIds,
+          purchaseContext: request.purchaseContext,
           conversationId: request.conversationId,
         }),
         signal: controller.signal,
@@ -350,6 +367,8 @@ function ChatSession({ customer }: { customer: boolean }) {
               );
               pendingProposal.current = null;
             }
+          } else if (ev === "purchase_context") {
+            patchLast((msg) => ({ ...msg, purchaseContext: data }));
           } else if (ev === "memory") {
             if (generation.current === currentGeneration)
               window.dispatchEvent(new Event("ai-memory-updated"));
@@ -360,6 +379,7 @@ function ChatSession({ customer }: { customer: boolean }) {
             patchLast((msg) => ({
               ...msg,
               cards: (data.items as Row[]) ?? [],
+              productIds: Array.isArray(data.contextProductIds) ? data.contextProductIds.map(String) : undefined,
             }));
           } else if (ev === "citations") {
             patchLast((msg) => ({
