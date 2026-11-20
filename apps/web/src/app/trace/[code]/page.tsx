@@ -21,12 +21,16 @@ export default async function TracePage({
             {decodedCode}
           </div>
 
+          <div style={{ padding: "12px 16px", background: "#fdf0e3", border: "1px solid #d97706", borderRadius: "4px", margin: "0 0 8px", color: "#7c2d12", textAlign: "left" }}>
+            <strong>Lưu ý — dữ liệu mô phỏng, chưa xác minh:</strong> Hệ thống hiện chưa kết nối cơ sở dữ liệu truy xuất nguồn gốc thật và chưa tra cứu được mã lô này. Toàn bộ thông tin hiển thị dưới đây là dữ liệu mẫu để minh họa giao diện, không phải chứng nhận OCOP hay thông tin lô hàng thật.
+          </div>
+
           <div style={{ display: "grid", gap: "16px", margin: "20px 0 32px", textAlign: "left" }}>
             <div style={{ padding: "12px 16px", background: "var(--kem)", borderLeft: "4px solid var(--mat)", borderRadius: "2px" }}>
               <strong>Sản phẩm:</strong> Mè xửng Cung Đình &amp; Trà Sen Tịnh Tâm
             </div>
             <div style={{ padding: "12px 16px", background: "var(--kem)", borderLeft: "4px solid var(--mat)", borderRadius: "2px" }}>
-              <strong>Chứng nhận:</strong> Chuẩn OCOP 4 sao Thừa Thiên Huế — Chỉ dẫn địa lý bảo hộ
+              <strong>Chứng nhận:</strong> Chuẩn OCOP 4 sao Thừa Thiên Huế — Chỉ dẫn địa lý bảo hộ (dữ liệu mẫu, chưa xác minh)
             </div>
             <div style={{ padding: "12px 16px", background: "var(--kem)", borderLeft: "4px solid var(--mat)", borderRadius: "2px" }}>
               <strong>Vùng nguyên liệu:</strong> Hạt sen hồ Tịnh Tâm, Mè vàng đất bãi sông Hương, Mạch nha nếp làng Kim Long
