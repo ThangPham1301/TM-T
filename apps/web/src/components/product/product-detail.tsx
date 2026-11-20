@@ -17,6 +17,102 @@ const tabs = [
   "Thông số & Thành phần",
   "Thưởng thức & Bảo quản",
 ];
+
+// Thông số hiển thị của từng sản phẩm (hardcode tạm thời vì DB chưa có các trường này).
+const SPECS: Record<
+  string,
+  {
+    packaging?: string;
+    weight?: string;
+    ingredients?: string;
+    shelfLife?: string;
+    origin?: string;
+    storage?: string;
+  }
+> = {
+  "me-xung-gion-ngu-tien-300g": {
+    packaging: "Hộp 300g",
+    weight: "300g",
+    ingredients: "Mè rang, đậu phộng, mạch nha",
+    shelfLife: "In trên bao bì sản phẩm",
+    origin: "Huế, Việt Nam",
+    storage:
+      "Dùng trực tiếp hoặc dùng kèm trà nóng. Bảo quản nơi khô ráo, thoáng mát, tránh ánh nắng trực tiếp; sau khi mở nên đậy kín để giữ độ giòn.",
+  },
+  "me-xung-deo-cung-dinh-300g": {
+    packaging: "Hộp 300g",
+    weight: "300g",
+    ingredients: "Mè rang, đậu phộng, mạch nha",
+    shelfLife: "In trên bao bì sản phẩm",
+    origin: "Huế, Việt Nam",
+    storage:
+      "Dùng trực tiếp hoặc dùng kèm trà nóng. Bảo quản nơi khô ráo, thoáng mát, tránh ánh nắng trực tiếp; đậy kín sau khi mở để giữ độ dẻo mềm.",
+  },
+  "mut-hat-sen-tinh-tam-300g": {
+    packaging: "Hũ 300g",
+    weight: "300g",
+    ingredients: "Hạt sen, đường",
+    shelfLife: "In trên bao bì sản phẩm",
+    origin: "Huế, Việt Nam",
+    storage:
+      "Dùng trực tiếp như món ăn vặt hoặc dùng kèm trà nóng. Bảo quản nơi khô ráo, thoáng mát; đậy kín nắp sau khi mở.",
+  },
+  "tra-cung-dinh-100g": {
+    packaging: "Hộp giấy 100g",
+    weight: "100g",
+    ingredients: "Các loại thảo mộc phối trộn theo phong cách trà cung đình Huế",
+    shelfLife: "In trên bao bì sản phẩm",
+    origin: "Huế, Việt Nam",
+    storage:
+      "Cho trà vào ấm, chế nước nóng, đợi vài phút cho trà ngấm rồi thưởng thức; có thể pha lại nhiều lần trong ngày. Bảo quản nơi khô ráo, tránh ẩm và tránh để gần nơi có mùi mạnh.",
+  },
+  "mut-gung-hue-200g": {
+    packaging: "Hộp 200g",
+    weight: "200g",
+    ingredients: "Gừng tươi, đường",
+    shelfLife: "In trên bao bì sản phẩm",
+    origin: "Huế, Việt Nam",
+    storage:
+      "Dùng trực tiếp hoặc dùng kèm trà nóng. Bảo quản nơi khô ráo, thoáng mát; đậy kín sau khi mở để giữ hương gừng.",
+  },
+  "me-xung-gion-ngu-tien-150g": {
+    packaging: "Gói 150g (10 miếng × 15g)",
+    weight: "150g",
+    ingredients: "Mè rang, đậu phộng, mạch nha",
+    shelfLife: "In trên bao bì sản phẩm",
+    origin: "Huế, Việt Nam",
+    storage:
+      "Dùng trực tiếp hoặc dùng kèm trà nóng, tiện mang theo. Bảo quản nơi khô ráo, thoáng mát, tránh ánh nắng trực tiếp để giữ độ giòn.",
+  },
+  "me-xung-deo-cung-dinh-150g": {
+    packaging: "Gói 150g",
+    weight: "150g",
+    ingredients: "Mè rang, đậu phộng, mạch nha",
+    shelfLife: "In trên bao bì sản phẩm",
+    origin: "Huế, Việt Nam",
+    storage:
+      "Dùng trực tiếp hoặc dùng kèm trà nóng. Bảo quản nơi khô ráo, thoáng mát, tránh ánh nắng trực tiếp; sau khi mở nên dùng sớm để giữ độ dẻo ngon.",
+  },
+  "hop-qua-di-san-co-do-900g": {
+    packaging: "Hộp quà 900g (3 hộp 300g bên trong)",
+    weight: "900g",
+    ingredients:
+      "Mè Xửng Giòn Ngự Tiến 300g, Mè Xửng Dẻo Cung Đình 300g, Mứt Hạt Sen Tịnh Tâm 300g",
+    shelfLife: "In trên bao bì sản phẩm",
+    origin: "Huế, Việt Nam",
+    storage:
+      "Các món được đóng gói riêng bên trong, dùng dần theo nhu cầu. Bảo quản nơi khô ráo, thoáng mát, tránh ánh nắng trực tiếp.",
+  },
+  "hop-qua-doan-vien-400g": {
+    packaging: "Hộp quà 400g",
+    weight: "400g",
+    ingredients: "Các món đặc sản Huế tuyển chọn, đóng gói riêng bên trong hộp",
+    shelfLife: "In trên bao bì sản phẩm",
+    origin: "Huế, Việt Nam",
+    storage:
+      "Các món được đóng gói riêng bên trong, dùng dần theo nhu cầu. Bảo quản nơi khô ráo, thoáng mát, tránh ánh nắng trực tiếp.",
+  },
+};
 export function ProductDetail({ slug }: { slug: string }) {
   const offers = usePublicOffers();
   const { feed, reload: reloadPrices } = usePricing();
@@ -45,6 +141,9 @@ export function ProductDetail({ slug }: { slug: string }) {
         setProduct(p);
         setCategories(c);
         setError("");
+        setRelated([]);
+        setRelatedStrategy("");
+        if (process.env.NEXT_PUBLIC_RECOMMENDATIONS_ENABLED === "false") return;
         try {
           const rec = await api(
             `products/recommended?surface=product&productId=${encodeURIComponent(p.id)}&limit=4`,
@@ -57,7 +156,7 @@ export function ProductDetail({ slug }: { slug: string }) {
           try {
             const all = await api("products");
             if (live) {
-              setRelated(all.filter((r: Row) => r.id !== p.id).slice(0, 4));
+              setRelated(all.filter((r: Row) => r.id !== p.id && Number(r.stock) > 0).slice(0, 4));
               setRelatedStrategy("");
             }
           } catch {
@@ -116,6 +215,7 @@ export function ProductDetail({ slug }: { slug: string }) {
     stock = Math.max(0, Number(product?.stock ?? 0));
   const canBuy =
     !busy && stock > 0 && (!state || state.user.role === "CUSTOMER");
+  const spec = SPECS[String(product?.slug ?? "")];
   return (
     <main className="lan-page lan-detail">
       <nav className="lan-breadcrumb" aria-label="Đường dẫn">
@@ -185,7 +285,6 @@ export function ProductDetail({ slug }: { slug: string }) {
                 {stock > 0 ? `Còn ${stock} sản phẩm` : "Tạm hết hàng"}
               </p>
               <h1>{String(product.name)}</h1>
-              <p>{String(product.description ?? "")}</p>
               {Number(product.stock) > 0 && (priceSource(product)?.source ?? "BASE") === "BASE" && <ProductOffer offer={offerForProduct(offers, product.id)} />}
               <div className="lan-price lan-frame">
                 <small>Đơn giá đang bán</small>
@@ -195,7 +294,7 @@ export function ProductDetail({ slug }: { slug: string }) {
                 <legend>Loại sản phẩm / Quy cách</legend>
                 <label className="lan-frame">
                   <input type="radio" name="package" checked readOnly />
-                  {String(product.packaging ?? product.name)}
+                  {String(product.packaging ?? spec?.packaging ?? product.name)}
                   <strong>{money(product.price)}</strong>
                 </label>
               </fieldset>
@@ -339,11 +438,11 @@ export function ProductDetail({ slug }: { slug: string }) {
                   <dl className="lan-specs">
                     {[
                       ["Danh mục", category?.name],
-                      ["Quy cách", product.packaging],
-                      ["Khối lượng", product.weight],
-                      ["Thành phần", product.ingredients],
-                      ["Hạn sử dụng", product.shelfLife],
-                      ["Xuất xứ", product.origin],
+                      ["Quy cách", product.packaging ?? spec?.packaging],
+                      ["Khối lượng", product.weight ?? spec?.weight],
+                      ["Thành phần", product.ingredients ?? spec?.ingredients],
+                      ["Hạn sử dụng", product.shelfLife ?? spec?.shelfLife],
+                      ["Xuất xứ", product.origin ?? spec?.origin],
                     ].map(([name, value]) => (
                       <div key={String(name)}>
                         <dt>{String(name)}</dt>
@@ -358,6 +457,7 @@ export function ProductDetail({ slug }: { slug: string }) {
                   <p>
                     {String(
                       product.storage ??
+                        spec?.storage ??
                         "Thông tin bảo quản đang được cập nhật. Vui lòng tham khảo hướng dẫn trên bao bì sản phẩm.",
                     )}
                   </p>

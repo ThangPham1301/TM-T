@@ -9,8 +9,8 @@ export function SiteHeader() {
   const { state, busy, run, logout } = useStore();
   const pathname = usePathname();
   if (pathname === "/admin/pricing" || pathname === "/admin/discounts") return null;
-  if (pathname && ["/admin", "/admin/orders", "/admin/products", "/admin/categories", "/admin/returns", "/admin/settings", "/admin/privacy", "/admin/policies", "/admin/audit"].includes(pathname) && state?.user.role === "ADMIN") return null;
-  return <StoreHeader user={state ? { name: String(state.user.name), role: String(state.user.role) } : null} cartCount={state?.cartCount} busy={busy} onLogout={() => void run(logout)} />;
+  if (pathname && ["/admin", "/admin/orders", "/admin/products", "/admin/categories", "/admin/returns", "/admin/settings", "/admin/privacy", "/admin/policies", "/admin/audit"].includes(pathname) && state?.user?.role === "ADMIN") return null;
+  return <StoreHeader user={state?.user ? { name: String(state.user.name), role: String(state.user.role) } : null} cartCount={state?.cartCount} busy={busy} onLogout={() => void run(logout)} />;
 }
 export function StorePauseBanner() {
   const pathname = usePathname();

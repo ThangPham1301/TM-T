@@ -1,0 +1,68 @@
+services:
+  web:
+    build:
+      context: ./apps/web
+      args:
+        API_WEBSOCKET_UPSTREAM: http://api:8088
+        NEXT_PUBLIC_RECOMMENDATIONS_ENABLED: ${NEXT_PUBLIC_RECOMMENDATIONS_ENABLED:-true}
+        NEXT_PUBLIC_AI_CHAT_ENABLED: ${NEXT_PUBLIC_AI_CHAT_ENABLED:-true}
+    environment:
+      API_UPSTREAM_URL: http://api:8088/api/v1
+      APP_PUBLIC_ORIGINS: ${APP_PUBLIC_ORIGINS:-https://goihue.io.vn}
+    expose:
+      - "3000"
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/store/shipping').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
+    restart: unless-stopped
+  api:
+    build: ./apps/api
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/goihue
+      SPRING_DATASOURCE_USERNAME: goihue
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in Coolify}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Set ADMIN_EMAIL in Coolify}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in Coolify}
+      APP_ORIGINS: ${APP_PUBLIC_ORIGINS:-https://goihue.io.vn}
+      APP_COOKIE_SECURE: "true"
+      APP_BANK_BIN: ${APP_BANK_BIN:-970422}
+      APP_BANK_ACCOUNT: ${APP_BANK_ACCOUNT:?Set the SePay test receiving account in Coolify}
+      APP_BANK_NAME: ${APP_BANK_NAME:-GOI HUE}
+      APP_SEPAY_SECRET: ${APP_SEPAY_SECRET:-}
+      APP_PAYMENT_TTL_MINUTES: ${APP_PAYMENT_TTL_MINUTES:-15}
+      APP_PAYMENT_SWEEP_MS: ${APP_PAYMENT_SWEEP_MS:-60000}
+      APP_AGENT_PROVIDER: ${APP_AGENT_PROVIDER:-auto}
+      APP_BEDROCK_MODEL: ${APP_BEDROCK_MODEL:-amazon.nova-lite-v1:0}
+      APP_BEDROCK_REGION: ${APP_BEDROCK_REGION:-ap-southeast-2}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+    expose:
+      - "8088"
+    volumes:
+      - evidence:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: goihue
+      POSTGRES_USER: goihue
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in Coolify}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U goihue -d goihue"]
+      interval: 3s
+      retries: 20
+    restart: unless-stopped
+volumes:
+  database:
+  evidence:

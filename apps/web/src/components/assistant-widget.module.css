@@ -2,6 +2,22 @@
    (tokens.css / lan.css): brown #573722, gold #c99643, canvas #fbf7f0,
    surface #f4ebdd, line #e5dac8, ink #2d2016, muted #7d6a58. */
 
+.trace {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.trace summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.trace ol {
+  padding-left: 18px;
+}
+.trace p {
+  margin: 4px 0 10px;
+}
+
 .dock {
   --dock-bottom: 20px;
   position: fixed;
@@ -109,7 +125,7 @@
   position: fixed;
   right: 20px;
   bottom: 88px;
-  z-index: 200;
+  z-index: 201;
   width: min(384px, calc(100vw - 32px));
   height: min(600px, calc(100dvh - 120px));
   background: #fffdf8;
@@ -407,6 +423,211 @@
 
 .sendBtn:disabled {
   opacity: 0.45;
+  cursor: default;
+}
+
+.compare {
+  margin-top: 10px;
+  background: #fffdf8;
+  border: 1px solid #e5dac8;
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.compareGrid {
+  display: grid;
+  grid-template-columns: 52px 1fr 1fr;
+  gap: 6px 8px;
+  align-items: start;
+  font-size: 12px;
+}
+
+.compareHead {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.compareThumb {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f4ebdd;
+}
+
+.compareName {
+  font-family: var(--gh-loaded-display), "Noto Serif", Georgia, serif;
+  font-weight: 600;
+  font-size: 13px;
+  color: #2d2016;
+  line-height: 1.35;
+}
+
+.compareLabel {
+  color: #7d6a58;
+  font-weight: 600;
+}
+
+.comparePrice {
+  font-weight: 700;
+  color: #573722;
+}
+
+.compareDiff {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #7d6a58;
+}
+
+.compareActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.compareBtn {
+  text-align: center;
+  border: 1px solid #c99643;
+  background: #c99643;
+  color: #fff8ec;
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.compareBtn:hover {
+  background: #b5853a;
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: rgba(45, 32, 22, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.modal {
+  background: #fffdf8;
+  border-radius: 16px;
+  border: 1px solid #e5dac8;
+  box-shadow: 0 24px 60px rgba(45, 32, 22, 0.3);
+  width: min(360px, 100%);
+  padding: 18px;
+  color: #2d2016;
+}
+
+.modal h3 {
+  margin: 0 0 12px;
+  font-family: var(--gh-loaded-display), "Noto Serif", Georgia, serif;
+  font-size: 18px;
+  text-align: center;
+}
+
+.modalProduct {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f4ebdd;
+  border-radius: 12px;
+  padding: 8px;
+}
+
+.modalQty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+  font-size: 14px;
+}
+
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #e5dac8;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.stepper button {
+  border: none;
+  background: transparent;
+  color: #573722;
+  font-size: 18px;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+}
+
+.stepper button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.modalTotal {
+  display: flex;
+  justify-content: space-between;
+  margin: 12px 0 0;
+  font-size: 14px;
+}
+
+.modalWarn {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: #7d6a58;
+  background: #fbf7f0;
+  border: 1px solid #e5dac8;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.modalActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.modalCancel {
+  border: 1px solid #573722;
+  background: transparent;
+  color: #573722;
+  border-radius: 999px;
+  padding: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.modalConfirm {
+  border: 1px solid #c99643;
+  background: #c99643;
+  color: #fff8ec;
+  border-radius: 999px;
+  padding: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.modalConfirm:disabled,
+.modalCancel:disabled {
+  opacity: 0.55;
   cursor: default;
 }
 

@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.math.BigDecimal;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.*;
@@ -43,7 +44,7 @@ public class PaymentApi {
     @Value("${APP_IPN_SECRET:}") String ipnSecret;
     @Value("${APP_SEPAY_SECRET:}") String sepaySecret;
 
-    private static final Pattern ORDER_NUMBER = Pattern.compile("GH-[A-Z0-9]{8}");
+    private static final Pattern ORDER_NUMBER = Pattern.compile("\\bGH[-\\s]?([A-Z0-9]{8})(?![A-Z0-9])");
 
     public PaymentApi(PlatformApi app, JdbcTemplate db, CatalogService catalog) {
         this.app = app;
@@ -82,7 +83,7 @@ public class PaymentApi {
         String given = app.str(b, "signature").toLowerCase(Locale.ROOT);
         if (!MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8), given.getBytes(StandardCharsets.UTF_8)))
             throw new PlatformApi.Problem(401, "Chữ ký IPN không hợp lệ.");
-        String result = processPayment(number, amount, txn, "IPN", "payment-ipn");
+        String result = processPayment(number, amount, txn, "IPN", "payment-ipn", null);
         return Map.of("orderNumber", number, "result", result);
     }
 
@@ -107,13 +108,16 @@ public class PaymentApi {
         } catch (Exception e) {
             throw new PlatformApi.Problem(401, "Thiếu hoặc sai X-SePay-Timestamp.");
         }
-        if (Math.abs(Instant.now().getEpochSecond() - ts) > 300)
+        long now = Instant.now().getEpochSecond();
+        if (ts < now - 300 || ts > now + 300)
             throw new PlatformApi.Problem(401, "Webhook SePay ngoài cửa sổ 5 phút (timestamp).");
         String expected = "sha256=" + hmacHex(sepaySecret, ts + "." + rawBody);
         String given = signature == null ? "" : signature.trim();
         if (!MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8), given.getBytes(StandardCharsets.UTF_8)))
             throw new PlatformApi.Problem(401, "Chữ ký SePay không hợp lệ.");
-        var payload = app.decode(rawBody);
+        Map<String, Object> payload;
+        try { payload = app.decode(rawBody); }
+        catch (IllegalStateException malformed) { throw new PlatformApi.Problem(400, "Nội dung webhook không phải JSON hợp lệ."); }
         if (!"in".equals(app.str(payload, "transferType")))
             return sepayOk();
         String number = extractOrderNumber(app.str(payload, "content"));
@@ -122,21 +126,24 @@ public class PaymentApi {
             return sepayOk(); // a transfer that is not one of our orders: acknowledge and ignore
         long amount;
         try {
-            amount = Long.parseLong(app.str(payload, "transferAmount"));
+            amount = new BigDecimal(app.str(payload, "transferAmount")).longValueExact();
         } catch (Exception e) {
             return sepayOk();
         }
         // SePay's transaction id is stable across retries and manual replays: it is the dedup key.
-        String providerId = app.str(payload, "id");
-        if (providerId.isBlank() || providerId.length() > 94) return sepayOk();
-        String txn = "SEPAY-" + providerId;
+        String eventId = app.str(payload, "id");
+        if (!eventId.matches("[0-9]{1,20}") || amount <= 0)
+            throw new PlatformApi.Problem(400, "Mã giao dịch hoặc số tiền SePay không hợp lệ.");
+        String receivingAccount = app.str(payload, "accountNumber");
+        if (receivingAccount.isEmpty()) throw new PlatformApi.Problem(400, "Thiếu tài khoản nhận giao dịch.");
+        String txn = "SEPAY-" + eventId;
         app.lock();
         try {
-            processPayment(number, amount, txn, "SePay", "payment-sepay");
+            processPayment(number, amount, txn, "SePay", "payment-sepay", receivingAccount);
         } catch (PlatformApi.Problem p) {
             // Unknown order, non-VietQR order, or an order in a terminal state:
             // the outcome is permanent, so acknowledge instead of letting SePay retry.
-            if (p.status != 404 && p.status != 422) throw p;
+            if (p.status != 404 && p.status != 422 && p.status != 409) throw p;
         }
         return sepayOk();
     }
@@ -148,7 +155,7 @@ public class PaymentApi {
     private String extractOrderNumber(String text) {
         if (text == null) return null;
         var m = ORDER_NUMBER.matcher(text.toUpperCase(Locale.ROOT));
-        return m.find() ? m.group() : null;
+        return m.find() ? "GH-" + m.group(1) : null;
     }
 
     /**
@@ -157,7 +164,43 @@ public class PaymentApi {
      * or invalid receipt.
      */
     @SuppressWarnings("unchecked")
-    String processPayment(String number, long amount, String txn, String source, String historyAction) {
+    String processPayment(String number, long amount, String txn, String source, String historyAction, String receivingAccount) {
+        app.require(amount > 0, "Số tiền thanh toán phải lớn hơn 0.");
+        UUID eventId = UUID.nameUUIDFromBytes((source + ":" + txn).getBytes(StandardCharsets.UTF_8));
+        String fingerprint = app.hash(number + "|" + amount + "|" + Objects.toString(receivingAccount, ""));
+        var events = db.query("SELECT data::text FROM records WHERE kind='payment-event' AND id=?", (rs, i) -> app.decode(rs.getString(1)), eventId);
+        if (!events.isEmpty()) {
+            if (!fingerprint.equals(events.getFirst().get("fingerprint")))
+                throw new PlatformApi.Problem(409, "Mã giao dịch đã được ghi nhận với nội dung khác.");
+            return "DUPLICATE_IGNORED";
+        }
+        int legacyMatches = db.queryForObject("""
+            SELECT count(*) FROM records WHERE kind='order' AND data->>'number'<>?
+              AND (data#>>'{payment,transactionId}'=? OR data#>>'{payment,extraTransactionId}'=?
+                OR data->>'paymentReference'=? OR EXISTS (
+                  SELECT 1 FROM jsonb_array_elements(COALESCE(data#>'{payment,extraPayments}','[]'::jsonb)) receipt
+                  WHERE receipt->>'transactionId'=?))
+            """, Integer.class, number, txn, txn, txn, txn);
+        if (legacyMatches > 0) throw new PlatformApi.Problem(409, "Mã giao dịch đã được dùng cho đơn hàng khác.");
+        String result = applyPayment(number, amount, txn, source, historyAction, receivingAccount);
+        if (!result.equals("IGNORED_ACCOUNT")) {
+            UUID owner = db.queryForObject("SELECT owner_id FROM records WHERE kind='order' AND data->>'number'=?", UUID.class, number);
+            var event = new LinkedHashMap<String, Object>();
+            event.put("id", eventId.toString());
+            event.put("source", source);
+            event.put("transactionId", txn);
+            event.put("orderNumber", number);
+            event.put("amount", amount);
+            event.put("fingerprint", fingerprint);
+            event.put("result", result);
+            event.put("receivedAt", Instant.now().toString());
+            app.save("payment-event", owner, event);
+        }
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private String applyPayment(String number, long amount, String txn, String source, String historyAction, String receivingAccount) {
         var rows = db.queryForList("SELECT owner_id, data::text FROM records WHERE kind='order' AND data->>'number'=?", number);
         if (rows.isEmpty()) throw new PlatformApi.Problem(404, "Không tìm thấy đơn hàng.");
         UUID owner = (UUID) rows.getFirst().get("owner_id");
@@ -165,6 +208,8 @@ public class PaymentApi {
         var payment = VietQrPayment.details(order);
         if (payment == null || !VietQrPayment.isVietQr(order))
             throw new PlatformApi.Problem(422, "Đơn không dùng thanh toán VietQR.");
+        if (receivingAccount != null && !receivingAccount.equals(app.str(payment, "bankAccount")))
+            return "IGNORED_ACCOUNT";
         app.require(amount > 0, "Số tiền thông báo phải lớn hơn 0.");
         boolean normalized = VietQrPayment.normalizeLegacyExtra(order, payment);
         String paymentStatus = app.str(order, "paymentStatus");

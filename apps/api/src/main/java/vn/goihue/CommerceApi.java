@@ -51,13 +51,17 @@ public class CommerceApi {
     @GetMapping("/pricing") public Object pricingFeed() {
         var book = pricing.book(Instant.now());
         var prices = new LinkedHashMap<String, PricingService.Price>();
+        boolean hasScheduledPrices = false;
         for (var product : catalog.publicProducts()) {
-            prices.put(app.str(product, "id"), pricing.resolve(product, book));
+            var price = pricing.resolve(product, book);
+            prices.put(app.str(product, "id"), price);
+            hasScheduledPrices |= price.source().equals("SCHEDULE") && app.number(product, "stock") > 0;
         }
         var response = new LinkedHashMap<String, Object>();
         response.put("asOf", book.asOf());
         response.put("nextChangeAt", book.nextChangeAt());
         response.put("prices", prices);
+        response.put("hasScheduledPrices", hasScheduledPrices);
         return response;
     }
 
@@ -410,6 +414,6 @@ public class CommerceApi {
             app.save("product", null, product);
         }
     }
-    void recipient(Map<String,Object> order,Map<String,Object> b){order.put("recipient",app.text(b,"recipient",100));String phone=app.text(b,"phone",30);app.require(phone.matches("[+0-9() .-]{8,30}"),"Số điện thoại không hợp lệ.");order.put("phone",phone);order.put("address",app.text(b,"address",400));}
+    void recipient(Map<String,Object> order,Map<String,Object> b){order.put("recipient",app.text(b,"recipient",100));String phone=app.text(b,"phone",30);app.require(phone.matches("[+0-9() .-]{8,30}")&&phone.chars().filter(Character::isDigit).count()>=8,"Số điện thoại không hợp lệ.");order.put("phone",phone);order.put("address",app.text(b,"address",400));}
     @ExceptionHandler(Exception.class) public org.springframework.http.ResponseEntity<?> error(Exception e){return app.error(e);}
 }

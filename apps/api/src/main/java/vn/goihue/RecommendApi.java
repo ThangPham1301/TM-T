@@ -1,97 +1,137 @@
 package vn.goihue;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 import java.time.Instant;
 import java.util.*;
 
-/**
- * Recommendation engine (demo): POPULAR for the home rail and
- * BOUGHT_TOGETHER for the product page, computed directly from order
- * records. Only sellable products are ever returned (active product in
- * an active category, stock > 0) - the same visibility rule as
- * GET /products plus the stock condition.
- */
 @RestController
 @RequestMapping("/api/v1")
 public class RecommendApi {
-    final PlatformApi app;
-    final JdbcTemplate db;
-    final PricingService pricing;
-    final CatalogService catalog;
-    public RecommendApi(PlatformApi app, JdbcTemplate db, PricingService pricing, CatalogService catalog){
-        this.app=app;this.db=db;this.pricing=pricing;this.catalog=catalog;
+    private final PlatformApi app;
+    private final JdbcTemplate db;
+    private final AiPrivacy privacy;
+    private final PricingService pricing;
+
+    public RecommendApi(PlatformApi app, JdbcTemplate db, AiPrivacy privacy, PricingService pricing) {
+        this.app = app;
+        this.db = db;
+        this.privacy = privacy;
+        this.pricing = pricing;
     }
 
-    static String s(Object v){return v==null?"":v.toString();}
-    static int n(Object v){
-        if(v instanceof Number num)return num.intValue();
-        try{return Integer.parseInt(s(v));}catch(Exception e){return 0;}
-    }
     @SuppressWarnings("unchecked")
-    static List<Map<String,Object>> items(Map<String,Object> order){
-        var raw=order.get("items");
-        if(raw instanceof List<?> list){
-            List<Map<String,Object>> out=new ArrayList<>();
-            for(var e:list)if(e instanceof Map<?,?>)out.add((Map<String,Object>)e);
-            return out;
-        }
-        return List.of();
+    static List<Map<String, Object>> items(Map<String, Object> order) {
+        if (!(order.get("items") instanceof List<?> list)) return List.of();
+        return list.stream().filter(Map.class::isInstance).map(item -> (Map<String, Object>) item).toList();
     }
 
-    List<Map<String,Object>> orders(String sql){
-        return db.query(sql,(r,i)->app.decode(r.getString(1)));
+    List<Map<String, Object>> sellable() {
+        var products = db.query("SELECT r.data::text FROM records r WHERE kind='product' AND data->>'active'='true' AND (data->>'stock')::int>0 AND EXISTS(SELECT 1 FROM records c WHERE c.kind='category' AND c.data->>'code'=r.data->>'category' AND c.data->>'active'='true') ORDER BY created_at, id",
+            (rs, i) -> app.decode(rs.getString(1)));
+        var book = pricing.book(Instant.now());
+        products.forEach(product -> pricing.publish(product, pricing.resolve(product, book)));
+        return products;
     }
 
     @GetMapping("/products/recommended")
-    public Object recommended(@RequestParam(defaultValue="home") String surface,
+    public Object recommended(HttpServletRequest request,
+                              @RequestParam(defaultValue="home") String surface,
                               @RequestParam(required=false) String productId,
-                              @RequestParam(defaultValue="4") int limit){
-        int lim=Math.max(1,Math.min(8,limit));
-        // Sellable catalog, in catalog order (same query shape as GET /products).
-        var products = catalog.publicProducts();
-        Map<String,Map<String,Object>> sellable=new LinkedHashMap<>();
-        for(var p:products)if(n(p.get("stock"))>0)sellable.put(s(p.get("id")),p);
-        // Popularity: units sold across every order that was not cancelled.
-        Map<String,Integer> sold=new HashMap<>();
-        for(var o:orders("SELECT data::text FROM records WHERE kind='order' AND data->>'status'<>'CANCELLED'"))
-            for(var it:items(o)){var pid=s(it.get("productId"));if(!pid.isEmpty())sold.merge(pid,Math.max(1,n(it.get("quantity"))),Integer::sum);}
-        String strategy="POPULAR";
-        List<Map<String,Object>> ranked=new ArrayList<>();
-        if("product".equals(surface)&&productId!=null&&sellable.containsKey(productId)){
-            // Bought together: co-occurrence inside DELIVERED orders only,
-            // so the score reflects orders that actually reached customers.
-            Map<String,Integer> pairs=new HashMap<>();
-            for(var o:orders("SELECT data::text FROM records WHERE kind='order' AND data->>'status'='DELIVERED'")){
-                Set<String> ids=new HashSet<>();
-                for(var it:items(o)){var pid=s(it.get("productId"));if(!pid.isEmpty())ids.add(pid);}
-                if(ids.contains(productId))for(var pid:ids)if(!pid.equals(productId))pairs.merge(pid,1,Integer::sum);
+                              @RequestParam(defaultValue="4") int limit,
+                              @RequestParam(required=false) Integer budget) {
+        var actor = privacy.optionalCustomer(request);
+        if (surface.equals("cart")) actor = privacy.customer(request);
+        return rank(actor, surface, productId, limit, budget);
+    }
+
+    Map<String, Object> rank(Map<String, Object> actor, String surface, String productId, int limit, Integer budget) {
+        return rank(actor, surface, productId, limit, budget, null);
+    }
+
+    Map<String, Object> rank(Map<String, Object> actor, String surface, String productId, int limit, Integer budget, String query) {
+        app.require(Set.of("home", "product", "cart").contains(surface), "Vị trí gợi ý không hợp lệ.");
+        app.require(limit >= 1 && limit <= 8, "Số lượng gợi ý từ 1 đến 8.");
+        app.require(budget == null || budget <= 100_000_000, "Ngân sách không hợp lệ.");
+        Integer maximum = budget != null && budget > 0 ? budget : null;
+        if (productId != null) app.uuid(productId);
+        var context = new HashSet<String>();
+        if (surface.equals("product") && productId != null) context.add(productId);
+        UUID owner = actor == null ? null : (UUID) actor.get("id");
+        if (surface.equals("cart")) {
+            if (owner == null) throw new PlatformApi.Problem(401, "Vui lòng đăng nhập để xem gợi ý cho giỏ hàng.");
+            app.permission(actor, "cart.manage");
+            context.addAll(db.query("SELECT data->>'productId' FROM records WHERE kind='cart' AND owner_id=?", (rs, i) -> rs.getString(1), owner));
+        }
+        var orders = db.queryForList("SELECT owner_id, data::text FROM records WHERE kind='order' AND data->>'status'='DELIVERED'");
+        var sold = new HashMap<String, Integer>();
+        var pairs = new HashMap<String, Integer>();
+        var purchased = new HashSet<String>();
+        for (var row : orders) {
+            var order = app.decode((String) row.get("data"));
+            var ids = new HashSet<String>();
+            for (var item : items(order)) {
+                String id = app.str(item, "productId");
+                if (id.isEmpty()) continue;
+                sold.merge(id, app.number(item, "quantity"), Integer::sum);
+                ids.add(id);
             }
-            List<Map.Entry<String,Integer>> es=new ArrayList<>(pairs.entrySet());
-            es.sort((a,b)->{int c=Integer.compare(b.getValue(),a.getValue());if(c!=0)return c;return Integer.compare(sold.getOrDefault(b.getKey(),0),sold.getOrDefault(a.getKey(),0));});
-            for(var e:es){var p=sellable.get(e.getKey());if(p!=null)ranked.add(p);}
-            if(!ranked.isEmpty())strategy="BOUGHT_TOGETHER";
+            if (!Collections.disjoint(ids, context)) {
+                for (String id : ids) if (!context.contains(id)) pairs.merge(id, 1, Integer::sum);
+            }
+            if (owner != null && owner.equals(row.get("owner_id"))) purchased.addAll(ids);
         }
-        if(ranked.isEmpty()){
-            ranked=new ArrayList<>(sellable.values());
-            ranked.sort((a,b)->Integer.compare(sold.getOrDefault(s(b.get("id")),0),sold.getOrDefault(s(a.get("id")),0)));
+        var preferredCategories = new HashSet<String>();
+        boolean personalized = owner != null && privacy.allowed(privacy.preferences(owner), "personalization");
+        if (personalized && !purchased.isEmpty()) {
+            preferredCategories.addAll(db.query("SELECT data->>'category' FROM records WHERE kind='product' AND id::text IN (SELECT jsonb_array_elements(data->'items')->>'productId' FROM records WHERE kind='order' AND owner_id=? AND data->>'status'='DELIVERED')",
+                (rs, i) -> rs.getString(1), owner));
         }
-        if("product".equals(surface)&&productId!=null)ranked.removeIf(p->productId.equals(s(p.get("id"))));
-        List<Map<String,Object>> out=new ArrayList<>();
-        var book = pricing.book(Instant.now());
-        for(var p:ranked){
-            if(out.size()>=lim)break;
-            var v=new LinkedHashMap<String,Object>();
-            v.put("id",p.get("id"));v.put("slug",p.get("slug"));v.put("name",p.get("name"));
-            pricing.publish(v, pricing.resolve(p, book));v.put("image",p.get("image"));
-            v.put("stock",p.get("stock"));v.put("category",p.get("category"));
-            out.add(v);
+        var available = sellable().stream()
+            .filter(product -> !context.contains(app.str(product, "id")))
+            .filter(product -> maximum == null || app.number(product, "price") <= maximum)
+            .filter(product -> matches(product, query))
+            .toList();
+        var ranked = new ArrayList<>(available.stream().filter(product -> pairs.containsKey(app.str(product, "id"))).toList());
+        String strategy = "BOUGHT_TOGETHER";
+        Comparator<Map<String, Object>> popularity = Comparator.<Map<String, Object>>comparingInt(product -> sold.getOrDefault(app.str(product, "id"), 0)).reversed()
+            .thenComparing(product -> app.str(product, "id"));
+        if (!ranked.isEmpty()) ranked.sort(Comparator.<Map<String, Object>>comparingInt(product -> pairs.get(app.str(product, "id"))).reversed().thenComparing(popularity));
+        else {
+            ranked.addAll(available.stream().filter(product -> preferredCategories.contains(app.str(product, "category"))).toList());
+            strategy = "PERSONALIZED";
+            if (ranked.isEmpty()) {
+                ranked.addAll(available);
+                strategy = "POPULAR";
+            }
+            ranked.sort(popularity);
         }
-        var res=new LinkedHashMap<String,Object>();
-        res.put("strategy",strategy);
-        res.put("surface",surface);
-        res.put("items",out);
-        res.put("generatedAt",Instant.now().toString());
-        return res;
+        var result = ranked.stream().limit(limit).map(product -> {
+            var item = card(product);
+            item.put("deliveredQuantity", sold.getOrDefault(app.str(product, "id"), 0));
+            return item;
+        }).toList();
+        var response = new LinkedHashMap<String, Object>();
+        response.put("strategy", strategy);
+        response.put("surface", surface);
+        response.put("items", result);
+        response.put("budgetApplied", maximum);
+        response.put("rankingBasis", available.stream().anyMatch(product -> sold.getOrDefault(app.str(product, "id"), 0) > 0) ? "DELIVERED_ORDERS" : "CATALOG");
+        response.put("generatedAt", Instant.now().toString());
+        return response;
+    }
+
+    private boolean matches(Map<String, Object> product, String query) {
+        if (query == null || query.isBlank()) return true;
+        String name = AgentTools.normalized(app.str(product, "name") + " " + app.str(product, "slug")).replace('-', ' ');
+        return Arrays.stream(AgentTools.normalized(query).split("[^a-z0-9]+"))
+            .filter(word -> !word.isEmpty()).allMatch(name::contains);
+    }
+
+    Map<String, Object> card(Map<String, Object> product) {
+        var result = new LinkedHashMap<String, Object>();
+        for (String field : List.of("id", "slug", "name", "price", "basePrice", "pricing", "image", "stock", "category", "description")) result.put(field, product.get(field));
+        return result;
     }
 }

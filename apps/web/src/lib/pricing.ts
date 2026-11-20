@@ -13,6 +13,7 @@ export type Price = {
 
 export type PricingFeed = {
   asOf: string;
+  hasScheduledPrices?: boolean;
   nextChangeAt?: string | null;
   prices: Record<string, Price>;
 };

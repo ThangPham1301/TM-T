@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CartView } from "./cart-view";
 import { CheckoutView } from "./checkout-view";
 import { CheckoutPayment } from "./checkout-payment";
+import { RecommendationRail } from "./recommendation-rail";
 import { api, ApiError, fields, type Row, useStore } from "@/lib/store";
 import type { CartSummary } from "@/lib/discounts";
 export function Cart({ checkout = false }: { checkout?: boolean }) {
@@ -136,7 +137,7 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
   if (!checkout) {
     return <CartView summary={summary} fetching={fetching} error={error} disabled={disabled} blocked={blocked}
       refresh={() => void refresh()} update={(action, data) => void run(() => update(action, data))}
-      checkout={() => router.push("/checkout")} />;
+      checkout={() => router.push("/checkout")} recommendations={<RecommendationRail surface="cart" refreshKey={summary?.cartToken} />} />;
   }
   if (placedVietQrOrder) {
     const order = state.orders.find(({ id }) => id === placedVietQrOrder.id) ?? placedVietQrOrder;

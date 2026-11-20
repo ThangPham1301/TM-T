@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { type Row, api, cleanText, date, money, useStore } from "@/lib/store";
 import { PaymentPanel } from "./payment-panel";
 import { VietQrDialog } from "./checkout-payment";
@@ -15,6 +15,8 @@ export function AccountOrders({
   initialOrderId?: string;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const linkedOrderId = initialOrderId ?? searchParams.get("order");
   const { state, busy, run, mutate } = useStore();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusTab, setStatusTab] = useState<
@@ -22,32 +24,25 @@ export function AccountOrders({
   >("ALL");
   const [paymentFilter, setPaymentFilter] = useState("");
   const [payOrderId, setPayOrderId] = useState<string | null>(null);
-  const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>(() => {
-    if (initialOrderId) return { [initialOrderId]: true };
-    if (typeof window !== "undefined") {
-      const q = new URLSearchParams(window.location.search).get("order");
-      if (q) return { [q]: true };
-    }
-    return {};
-  });
+  const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   const [currentPage, setCurrentPage] = useState(1);
-  const openedOrder = useRef(false);
+  const openedOrder = useRef<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const orders = state?.orders ?? EMPTY_ORDERS;
   const payingOrder = orders.find((order) => order.id === payOrderId);
   useEffect(() => {
-    if (openedOrder.current || !orders.length) return;
-    const id = initialOrderId ?? new URLSearchParams(window.location.search).get("order");
+    const id = linkedOrderId;
+    if (!orders.length || openedOrder.current === id) return;
     if (!id) return;
     const index = orders.findIndex((order) => order.id === id);
     if (index < 0) return;
-    openedOrder.current = true;
+    openedOrder.current = id;
     void Promise.resolve().then(() => {
       setExpandedIds((previous) => ({ ...previous, [id]: true }));
       setCurrentPage(Math.floor(index / 4) + 1);
     });
-  }, [initialOrderId, orders]);
+  }, [linkedOrderId, orders]);
 
   // Tab counts
   const countAll = orders.length;
@@ -122,7 +117,7 @@ export function AccountOrders({
   const toggleDetails = (id: string) => {
     setExpandedIds((prev) => ({
       ...prev,
-      [id]: !prev[id],
+      [id]: !(prev[id] ?? (id === linkedOrderId)),
     }));
   };
 
@@ -359,6 +354,7 @@ export function AccountOrders({
               <option value="">Tất cả thanh toán</option>
               <option value="UNPAID">Chưa thanh toán</option>
               <option value="PAID">Đã thanh toán</option>
+              <option value="REVIEW">Chờ đối soát thanh toán</option>
               <option value="EXPIRED">VietQR hết hạn</option>
               <option value="REFUNDED">Đã hoàn tiền</option>
             </select>
@@ -416,7 +412,7 @@ export function AccountOrders({
         ) : (
           paginatedOrders.map((order) => {
             const items = (order.items as Row[] | undefined) || [];
-            const isExpanded = Boolean(expandedIds[order.id]);
+            const isExpanded = expandedIds[order.id] ?? (order.id === linkedOrderId);
             const isDelivered = String(order.status) === "DELIVERED";
             const isShipped = ["SHIPPED", "PACKED"].includes(
               String(order.status),

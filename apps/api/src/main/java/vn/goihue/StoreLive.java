@@ -1,6 +1,7 @@
 package vn.goihue;
 
 import java.util.Map;
+import java.util.Arrays;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.beans.factory.annotation.Value;
@@ -8,10 +9,12 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.http.server.ServletServerHttpRequest;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
+import org.springframework.web.socket.PingMessage;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
@@ -36,7 +39,7 @@ public class StoreLive extends TextWebSocketHandler implements WebSocketConfigur
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(this, "/api/store/live")
-            .setAllowedOrigins(origins.split(","))
+            .setAllowedOrigins(Arrays.stream(origins.split(",")).map(String::trim).toArray(String[]::new))
             .addInterceptors(new HandshakeInterceptor() {
                 @Override
                 public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response,
@@ -67,6 +70,21 @@ public class StoreLive extends TextWebSocketHandler implements WebSocketConfigur
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         sessions.remove(session.getId());
+    }
+
+    @Scheduled(fixedDelayString="${APP_LIVE_HEARTBEAT_MS:25000}")
+    public void heartbeat() {
+        for (var session : sessions.values()) {
+            synchronized (session) {
+                try {
+                    app.sessionActor((String) session.getAttributes().get("session"));
+                    session.sendMessage(new PingMessage());
+                } catch (Exception failure) {
+                    sessions.remove(session.getId());
+                    try { session.close(); } catch (java.io.IOException ignored) {}
+                }
+            }
+        }
     }
 
     void changed(UUID owner) {

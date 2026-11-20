@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { date, label, type Row, useStore } from "@/lib/store";
+import { AiPreferences } from "./ai-preferences";
 
 export function AccountPrivacy() {
   const { state, busy, run, mutate } = useStore();
@@ -83,6 +84,7 @@ export function AccountPrivacy() {
         </p>
       </div>
 
+      <AiPreferences />
       {/* SECTION A: Quyền của bạn (5 Cards) */}
       <div style={{ marginBottom: "2.5rem" }}>
         <h2

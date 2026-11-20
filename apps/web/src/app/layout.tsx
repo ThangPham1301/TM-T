@@ -17,6 +17,7 @@ import "@/styles/store.css";
 import "@/styles/web-theme.css";
 import "@/styles/lan.css";
 import "@/styles/account-figma.css";
+import "@/styles/gh-heritage.css";
 
 const bodyFont = localFont({
   src: [
@@ -48,7 +49,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="vi" className={`${bodyFont.variable} ${displayFont.variable}`}>
+    <html lang="vi" data-scroll-behavior="smooth" className={`${bodyFont.variable} ${displayFont.variable}`}>
       <body>
         <StoreProvider>
           <SiteHeader />
