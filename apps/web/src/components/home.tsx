@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ProductImage } from "./product/product-image";
+import { HomeHeritageStories } from "./home-heritage-stories";
 import { usePricing } from "./pricing/use-pricing";
-import pricingStyles from "./pricing/price-display.module.css";
+import revealStyles from "./home-reveal.module.css";
 
 type Slide = {
   kicker: string;
@@ -275,8 +276,54 @@ function HeritageBanner({
 
 export function HomeExperience() {
   const { feed } = usePricing();
+  const mainRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const main = mainRef.current;
+    if (
+      !main ||
+      !("IntersectionObserver" in window) ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+
+    const targets = Array.from(main.querySelectorAll<HTMLElement>("[data-home-reveal]"))
+      .filter((target) => target.getBoundingClientRect().top >= window.innerHeight);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          if (entry.target.getAttribute("data-home-reveal") === "pending") {
+            entry.target.setAttribute("data-home-reveal", "visible");
+          }
+          observer.unobserve(entry.target);
+        }
+      },
+      { rootMargin: "0px 0px 16px" },
+    );
+
+    for (const target of targets) {
+      target.dataset.homeReveal = "pending";
+      observer.observe(target);
+    }
+
+    return () => {
+      observer.disconnect();
+      for (const target of targets) target.dataset.homeReveal = "";
+    };
+  }, []);
+
   return (
-    <main className="gh-home" id="main-content">
+    <main
+      ref={mainRef}
+      className={`gh-home ${revealStyles.home}`}
+      id="main-content"
+      onFocus={({ target }) => {
+        const block = target.closest<HTMLElement>("[data-home-reveal]");
+        if (block) block.dataset.homeReveal = "";
+      }}
+    >
       {/* 1. HERO BANNER */}
       <section
         className="gh-home-band gh-home-hero"
@@ -298,22 +345,21 @@ export function HomeExperience() {
                   →
                 </span>
               </Link>
+              {feed?.hasScheduledPrices && (
+                <Link
+                  className="gh-btn gh-btn--paper"
+                  href="/products?pricing=scheduled"
+                >
+                  Giá giờ vàng{" "}
+                  <span className="gh-btn__arrow" aria-hidden="true">
+                    →
+                  </span>
+                </Link>
+              )}
             </div>
           </HeritageBanner>
         </div>
       </section>
-
-      {feed?.hasScheduledPrices && (
-        <div className="gh-wrap">
-          <section className={pricingStyles.banner} aria-label="Giá giờ vàng">
-            <div>
-              <strong>Giá giờ vàng</strong>
-              <p>Xem giá đang áp dụng cho những thức quà được chọn.</p>
-            </div>
-            <Link className="gh-btn gh-btn--fold" href="/products?pricing=scheduled">Xem sản phẩm →</Link>
-          </section>
-        </div>
-      )}
 
       {/* DIVIDER */}
       <div className="gh-wrap">
@@ -331,14 +377,14 @@ export function HomeExperience() {
         <Motif name="05-may" className="gh-collections__cloud" />
         <Motif name="07-hat-me" className="gh-collections__seeds" />
         <div className="gh-wrap">
-          <div className="gh-section-header gh-section-header--center">
+          <div className="gh-section-header gh-section-header--center" data-home-reveal="">
             <div className="gh-section-header__line" />
             <h2 id="gh-collection-title">Chọn thức quà</h2>
             <div className="gh-section-header__line" />
           </div>
           <div className="gh-categories">
             {categoryItems.map((item) => (
-              <Link key={item.href} className="gh-frame-card" href={item.href}>
+              <Link key={item.href} className="gh-frame-card" href={item.href} data-home-reveal="">
                 <div className="gh-card-media">
                   <ProductImage
                     fill
@@ -366,7 +412,7 @@ export function HomeExperience() {
       <section
         className="gh-story"
         id="heritage-story"
-        aria-labelledby="gh-story-title"
+        aria-label="Câu chuyện phong vị Gói Huế"
       >
         <Motif name="02-canh-hoa" className="gh-story__blossom" />
         <Motif name="01-hien-nha" className="gh-story__veranda" />
@@ -375,82 +421,13 @@ export function HomeExperience() {
           name="12-hoa-sen-cung-dinh-phai"
           className="gh-story__lotus"
         />
-        <div className="gh-wrap">
-          <div className="gh-story__grid">
-            <div className="gh-story__copy">
-              <h2 id="gh-story-title">Bên chén trà Huế</h2>
-              <div className="gh-story__rule" aria-hidden="true" />
-              <p>
-                Thưởng chén trà Huế, cảm nhận hương vị thanh dịu và nét tinh tế
-                trong những thức quà mộc mạc của cố đô.
-              </p>
-              <p className="gh-story__muted">
-                Một miếng mè xửng dẻo thơm mùi mạch nha, nhấp cùng ngụm trà sen
-                ấm nóng — lời mời thong thả ngồi lại, kể nhau nghe đôi chuyện
-                xứ kinh kỳ.
-              </p>
-              <Link
-                className="gh-btn gh-btn--paper"
-                href="/products?category=tra-cung-dinh"
-              >
-                Khám phá Trà Huế{" "}
-                <span className="gh-btn__arrow" aria-hidden="true">
-                  →
-                </span>
-              </Link>
-            </div>
-            <div className="gh-frame-plaque gh-story__photo">
-              <ProductImage
-                width={900}
-                height={620}
-                sizes="(max-width: 960px) 100vw, 50vw"
-                src="/images/heritage/photos/story-tra-hue.jpg"
-                alt="Bàn tay rót trà Huế từ ấm sứ hoa lam bên đĩa mè xửng"
-              />
-            </div>
-          </div>
-
-          <div className="gh-story__grid gh-story__grid--reverse">
-            <div className="gh-frame-plaque gh-story__photo">
-              <ProductImage
-                width={900}
-                height={620}
-                sizes="(max-width: 960px) 100vw, 50vw"
-                src="/images/heritage/photos/story-nha-ruong.jpg"
-                alt="Hiên nhà rường gỗ cổ truyền xứ Huế ngập nắng"
-              />
-            </div>
-            <div className="gh-story__copy">
-              <span className="gh-kicker">Di sản kiến trúc & ẩm thực</span>
-              <h2>Thức quà từ Huế</h2>
-              <div className="gh-story__rule" aria-hidden="true" />
-              <p>
-                Gói Huế mang đến những thức quà mộc mạc mà tinh tế của xứ Huế: mè
-                xửng dẻo thơm, trà Huế thanh dịu và những món quà biếu trang
-                nhã.
-              </p>
-              <p className="gh-story__muted">
-                Mỗi hộp quà lấy cảm hứng từ nếp giấy Dó thủ công, nhịp mái hiên
-                nhà rường và cổng thành cổ kính.
-              </p>
-              <Link
-                className="gh-btn gh-btn--brown gh-btn--fold"
-                href="/products?category=qua-bieu"
-              >
-                Chọn hộp quà biếu{" "}
-                <span className="gh-btn__arrow" aria-hidden="true">
-                  →
-                </span>
-              </Link>
-            </div>
-          </div>
-        </div>
+        <HomeHeritageStories />
       </section>
 
       {/* 6. ACCOUNT CTA */}
       <section className="gh-home-section" aria-labelledby="gh-account-title">
         <div className="gh-wrap">
-          <div className="gh-frame-functional gh-frame-functional--fold gh-account-cta">
+          <div className="gh-frame-functional gh-frame-functional--fold gh-account-cta" data-home-reveal="">
             <div>
               <span className="gh-kicker">Đồng hành cùng khách hàng</span>
               <h2 id="gh-account-title">Một tài khoản cho trọn hành trình</h2>

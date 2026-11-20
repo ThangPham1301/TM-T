@@ -28,19 +28,3 @@
   color: var(--gh-primary);
   font-size: var(--gh-text-sm);
 }
-.banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 14px 18px;
-  margin-block: 16px;
-  border: 1px solid var(--gh-accent);
-  border-radius: var(--gh-radius-sm);
-  background: var(--gh-surface);
-  color: var(--gh-primary);
-}
-.banner p {
-  margin: 0;
-}

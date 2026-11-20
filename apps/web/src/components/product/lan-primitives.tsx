@@ -48,7 +48,7 @@ export function CollectionStory() {
       <small>CHUYỆN CỐ ĐÔ</small>
       <h2>Hương sắc sông Hương trong từng nếp gói</h2>
       <p>Khám phá những thức quà và câu chuyện phong vị xứ Huế.</p>
-      <Link className="lan-button lan-button-paper" href="/#heritage-story">
+      <Link className="lan-button lan-button-paper" href="/cau-chuyen-hue">
         Đọc câu chuyện Huế →
       </Link>
     </section>

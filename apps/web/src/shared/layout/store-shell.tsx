@@ -174,7 +174,11 @@ export function StoreHeader({
               </Link>
             </Dropdown>
 
-            <Link className="gh-nav-link" href="/#heritage-story">
+            <Link
+              className="gh-nav-link"
+              aria-current={pathname === "/cau-chuyen-hue" ? "page" : undefined}
+              href="/cau-chuyen-hue"
+            >
               Chuyện Huế
             </Link>
           </nav>
@@ -250,7 +254,7 @@ export function StoreHeader({
             <Link
               className="gh-icon-button gh-cart"
               title="Giỏ hàng"
-              aria-label="Mở giỏ hàng"
+              aria-label={cartCount > 0 ? `Mở giỏ hàng, ${cartCount} sản phẩm` : "Mở giỏ hàng"}
               href="/cart"
             >
               <svg
@@ -265,7 +269,11 @@ export function StoreHeader({
                 <path d="M4 8h16l-1.2 12H5.2L4 8z" />
                 <path d="M8 8V6a4 4 0 0 1 8 0v2" />
               </svg>
-              {cartCount > 0 && <span className="gh-cart-count">{cartCount}</span>}
+              {cartCount > 0 && (
+                <span className="gh-cart__count" aria-hidden="true">
+                  {cartCount > 99 ? "99+" : cartCount}
+                </span>
+              )}
             </Link>
 
             <div className="gh-dropdown">
@@ -473,6 +481,9 @@ export function StoreFooter(_props: StoreFooterProps) {
                   <Link href={c.href}>{c.name}</Link>
                 </li>
               ))}
+              <li>
+                <Link href="/cau-chuyen-hue">Chuyện Huế</Link>
+              </li>
             </ul>
           </div>
 

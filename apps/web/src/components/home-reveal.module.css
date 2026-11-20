@@ -1,0 +1,31 @@
+@media (prefers-reduced-motion: no-preference) {
+  .home [data-home-reveal="pending"]:not(:focus-within) {
+    opacity: 0;
+    translate: 0 18px;
+  }
+
+  .home [data-home-reveal="visible"]:not(:focus-within) {
+    animation: reveal 540ms var(--ease-out) var(--home-reveal-delay, 0ms) backwards;
+  }
+
+  @keyframes reveal {
+    from {
+      opacity: 0;
+      translate: 0 18px;
+    }
+  }
+}
+
+@media (min-width: 1200px) {
+  .home :global(.gh-categories) > :nth-child(2) {
+    --home-reveal-delay: 45ms;
+  }
+
+  .home :global(.gh-categories) > :nth-child(3) {
+    --home-reveal-delay: 90ms;
+  }
+
+  .home :global(.gh-categories) > :nth-child(4) {
+    --home-reveal-delay: 135ms;
+  }
+}

@@ -9,7 +9,7 @@
   --lan-red: #8b261d;
   color: #2f241c;
   font-family: "Be Vietnam Pro", "Segoe UI", sans-serif;
-  background: url("/goi-hue/assets/08-nen-giay-seamless.jpg") repeat;
+  background: var(--paper) repeat;
   padding: 32px max(20px, calc((100% - 1280px) / 2));
 }
 .lan-page *,

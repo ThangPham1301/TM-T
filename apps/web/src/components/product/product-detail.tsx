@@ -5,12 +5,14 @@ import { useEffect, useRef, useState } from "react";
 import { api, ApiError, money, type Row, useStore } from "@/lib/store";
 import { ProductImage } from "./product-image";
 import { offerForProduct } from "@/lib/discounts";
+import { storyForCategory } from "@/lib/heritage-stories";
 import { applyPricing, priceSource } from "@/lib/pricing";
 import { ProductPrice } from "../pricing/price-display";
 import { usePricing } from "../pricing/use-pricing";
 import { ProductOffer } from "../discounts/offer-display";
 import { usePublicOffers } from "../discounts/use-public-offers";
 import { LoadState, ProductCard } from "./lan-primitives";
+import storyStyles from "../heritage-stories.module.css";
 
 const tabs = [
   "Câu chuyện phong vị",
@@ -211,6 +213,7 @@ export function ProductDetail({ slug }: { slug: string }) {
       if (buyNow) router.push("/checkout");
     });
   }
+  const heritageStory = storyForCategory(product?.category);
   const category = categories.find((c) => c.code === product?.category),
     stock = Math.max(0, Number(product?.stock ?? 0));
   const canBuy =
@@ -422,16 +425,35 @@ export function ProductDetail({ slug }: { slug: string }) {
               tabIndex={0}
             >
               {tab === 0 ? (
-                <>
-                  <h2>Nếp quà tao nhã bên dòng Hương Giang</h2>
-                  <p>
-                    {String(
-                      product.story ??
-                        product.description ??
-                        "Thông tin đang được cập nhật.",
+                heritageStory ? (
+                  <article className={storyStyles.fullStory}>
+                    <h2>{heritageStory.title}</h2>
+                    <p className={storyStyles.storyLead}>{heritageStory.lead}</p>
+                    {heritageStory.paragraphs.map((paragraph) => (
+                      <p key={paragraph}>{paragraph}</p>
+                    ))}
+                    {heritageStory.sections?.map(({ heading, text }) => (
+                      <section key={heading}>
+                        <h3>{heading}</h3>
+                        <p>{text}</p>
+                      </section>
+                    ))}
+                    {heritageStory.quote && (
+                      <blockquote>{heritageStory.quote}</blockquote>
                     )}
-                  </p>
-                </>
+                  </article>
+                ) : (
+                  <>
+                    <h2>Nếp quà tao nhã bên dòng Hương Giang</h2>
+                    <p>
+                      {String(
+                        product.story ??
+                          product.description ??
+                          "Thông tin đang được cập nhật.",
+                      )}
+                    </p>
+                  </>
+                )
               ) : tab === 1 ? (
                 <>
                   <h2>Thông số & Thành phần</h2>
