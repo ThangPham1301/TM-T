@@ -168,9 +168,6 @@ export function StoreHeader({
             <Link className="gh-nav-link" href="/#ocop-traceability">
               Truy xuất nguồn gốc
             </Link>
-            <Link className="gh-nav-link" href="/promotions">
-              Ưu đãi
-            </Link>
           </nav>
 
           <div className="gh-header__tools">
@@ -297,6 +294,9 @@ export function StoreHeader({
                           <Link href="/account/orders">Đơn hàng của tôi</Link>
                         </li>
                         <li>
+                          <Link href="/account/addresses">Sổ địa chỉ</Link>
+                        </li>
+                        <li>
                           <Link href="/account/privacy">Quyền dữ liệu</Link>
                         </li>
                         <li>
@@ -353,9 +353,6 @@ export function StoreHeader({
                         Xem đơn hàng
                       </Link>
                     </li>
-                    <li>
-                      <Link href="/support/request">Hỗ trợ khách hàng</Link>
-                    </li>
                   </ul>
                 </Dropdown>
               )}
@@ -398,21 +395,6 @@ export function StoreHeader({
             <rect x="14" y="14" width="7" height="7" />
           </svg>
           <span>Danh mục</span>
-        </Link>
-        <Link href="/promotions">
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            aria-hidden="true"
-          >
-            <rect x="3" y="8" width="18" height="13" rx="1" />
-            <path d="M12 8v13M3 12h18M12 8c-2-3-5-3-5-1s3 1 5 1 5 1 5-1-3-2-5 1z" />
-          </svg>
-          <span>Ưu đãi</span>
         </Link>
         <Link href="/products">
           <svg
@@ -489,10 +471,10 @@ export function StoreFooter(_props: StoreFooterProps) {
             <h2>Chăm sóc &amp; hỗ trợ</h2>
             <ul>
               <li>
-                <Link href="/support/request">Trung tâm hỗ trợ khách hàng</Link>
+                <Link href="/return-policy">Chính sách đổi trả</Link>
               </li>
               <li>
-                <Link href="/promotions">Ưu đãi</Link>
+                <Link href="/privacy-policy">Chính sách bảo mật</Link>
               </li>
               <li>
                 <Link href="/#ocop-traceability">Truy xuất nguồn gốc</Link>

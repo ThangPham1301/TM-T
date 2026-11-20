@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, type Row } from "@/lib/store";
 import { ProductImage } from "./product/product-image";
+import { RecommendationRail } from "./recommendation-rail";
 
 type Slide = {
   kicker: string;
@@ -411,6 +412,11 @@ export function HomeExperience() {
         <div className="gh-divider" aria-hidden="true">
           <span className="gh-divider__knot" />
         </div>
+      </div>
+
+      {/* 2b. RECOMMENDATION RAIL */}
+      <div className="gh-wrap" style={{ padding: "8px 16px 0" }}>
+        <RecommendationRail surface="home" />
       </div>
 
       {/* 3. COLLECTIONS */}
