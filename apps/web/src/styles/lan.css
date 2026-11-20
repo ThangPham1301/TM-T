@@ -747,11 +747,11 @@ body:has(.lan-page) .brand-seal {
   min-height: 230px;
 }
 .lan-tab-content p {
-  max-width: 900px;
+  text-align: justify;
   white-space: pre-line;
 }
 .lan-specs {
-  max-width: 900px;
+  max-width: none;
 }
 .lan-specs > div {
   display: grid;
