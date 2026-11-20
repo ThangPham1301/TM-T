@@ -7,7 +7,7 @@ async function proxy(
 ) {
   const path = (await ctx.params).path.join("/");
   if (
-    !/^(policy|state|password|command|commerce|agent\/chat|cart(?:\/summary)?|shipping|categories|products(?:\/[a-z0-9-]+)?|admin\/(products|categories)|catalog\/images\/[a-f0-9-]{36}(?:\/content)?|auth\/(login|register|logout)|evidence\/intents|evidence\/[a-f0-9-]{36}\/content|privacy\/[a-f0-9-]{36}\/export)$/u.test(
+    !/^(policy|state|password|command|commerce|agent\/chat|cart(?:\/summary)?|shipping|discounts|pricing|categories|products(?:\/[a-z0-9-]+)?|admin\/(products|categories|discounts|pricing)|catalog\/images\/[a-f0-9-]{36}(?:\/content)?|auth\/(login|register|logout)|evidence\/intents|evidence\/[a-f0-9-]{36}\/content|privacy\/[a-f0-9-]{36}\/export)$/u.test(
       path,
     )
   )

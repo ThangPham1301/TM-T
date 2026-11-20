@@ -425,7 +425,11 @@ export function Account({
               </p>
             ))}
             <p>
-              Tiền hàng {money(current.subtotal)} · Giao hàng{" "}
+              Tiền hàng {money(current.subtotal)}
+              {Number(current.discountAmount) > 0 && (
+                <> · Ưu đãi ({String((current.discount as Row | undefined)?.name ?? "Giảm giá")}) −{money(current.discountAmount)}</>
+              )}
+              {" "}· Giao hàng{" "}
               {money(current.shippingFee)} ·{" "}
               <strong>Tổng {money(current.total)}</strong>
             </p>

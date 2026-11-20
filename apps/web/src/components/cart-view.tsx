@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { money, shippingPauseMessage, type Row } from "@/lib/store";
+import { money, shippingPauseMessage } from "@/lib/store";
+import { CartPricing } from "./pricing/price-display";
+import type { CartSummary } from "@/lib/discounts";
+import { CartOfferHint, DiscountPriceRow } from "./discounts/offer-display";
 import { Button, Dialog } from "@/shared/ui";
 import { ProductImage } from "./product/product-image";
 import styles from "./cart-view.module.css";
 
-type CartSummary = { items: Row[]; subtotal: number; shippingFee: number; total: number; shipping: Row };
 type CartViewProps = {
   summary: CartSummary | null;
   fetching: boolean;
@@ -49,17 +51,17 @@ export function CartView({ summary, fetching, error, disabled, blocked, refresh,
                 <div className={styles.image}><ProductImage src={String(line.image ?? "")} alt={String(line.name)} width={96} height={96} /></div>
                 <div className={styles.productInfo}><span className={styles.productTag}>Thức quà Cố Đô</span>
                   <strong>{String(line.name)}</strong>
-                  {Boolean(line.priceChanged) && <p className={styles.warning}>Giá mới: {money(line.currentPrice)}. Chọn “Cập nhật giá mới” trước khi đặt.</p>}
+                  <CartPricing line={line} />
                   {!line.available ? <p className={styles.warning}>Sản phẩm hoặc danh mục đã ngừng bán. Hãy xóa khỏi giỏ.</p> : quantity > stock && <p className={styles.warning}>Chỉ còn {String(line.stock)} sản phẩm. Hãy giảm số lượng hoặc xóa.</p>}
                 </div>
               </div>
-              <div className={styles.unitPrice}><span>Đơn giá</span>{money(line.price)}</div>
+              <div className={styles.unitPrice}><span>Đơn giá</span>{money(line.currentPrice ?? line.price)}</div>
               <div className={styles.quantity}><span className={styles.mobileLabel}>Số lượng</span><div className={styles.stepper}>
                 <button type="button" aria-label={`Giảm số lượng ${line.name}`} disabled={disabled || quantity <= 1} onClick={() => update("cart-set", { productId: line.productId, quantity: quantity - 1 })}>−</button>
                 <input key={line.id + String(line.quantity) + String(line.version)} aria-label={`Số lượng ${line.name}`} type="number" min={1} max={100} defaultValue={quantity} disabled={disabled} onBlur={event => { const value = Number(event.currentTarget.value); if (value !== quantity) update("cart-set", { productId: line.productId, quantity: value }); }} />
                 <button type="button" aria-label={`Tăng số lượng ${line.name}`} disabled={disabled || quantity >= Math.min(100, stock)} onClick={() => update("cart-set", { productId: line.productId, quantity: quantity + 1 })}>+</button>
               </div></div>
-              <div className={styles.lineTotal}><span className={styles.mobileLabel}>Thành tiền</span><strong>{money(Number(line.price) * quantity)}</strong>
+              <div className={styles.lineTotal}><span className={styles.mobileLabel}>Thành tiền</span><strong>{money(Number(line.currentPrice ?? line.price) * quantity)}</strong>
                 <button type="button" className={styles.remove} aria-label={`Xóa ${line.name} khỏi giỏ`} title="Xóa sản phẩm" disabled={disabled} onClick={() => update("cart-set", { productId: line.productId, quantity: 0 })}><Icon name="delete" /></button>
               </div>
             </article>;
@@ -68,17 +70,18 @@ export function CartView({ summary, fetching, error, disabled, blocked, refresh,
           {!summary.shipping.enabled && <p className={styles.warning} role="status">{shippingPauseMessage(summary.shipping)}</p>}
           <div className={styles.actions}><Link href="/products">← &nbsp; Tiếp tục chọn đặc sản</Link><div>
             <button type="button" disabled={disabled} onClick={refresh}><Icon name="refresh" /> Làm mới giỏ hàng</button>
-            <button type="button" disabled={disabled} onClick={() => update("cart-refresh")}><Icon name="sync" /> Cập nhật giá mới</button>
+            <button type="button" disabled={disabled || !rows.some((line) => line.priceChanged)} onClick={() => update("cart-refresh")}><Icon name="sync" /> Xác nhận giá mới</button>
             <button type="button" className={styles.clear} disabled={disabled} onClick={() => setConfirmClear(true)}><Icon name="delete_sweep" /> Xóa tất cả</button>
           </div></div>
           <aside className={styles.packing}><span className={styles.packingIcon}><Icon name="verified" /></span><div><h2>Quy chuẩn đóng gói Cố Đô</h2><p>Đặc sản được chuẩn bị cẩn thận để gửi đến bạn và người thân.</p></div></aside>
         </div>
         <aside className={styles.summary}><header><h2>Tóm tắt đơn hàng</h2><Icon name="receipt_long" /></header>
-          <dl><div><dt>Tạm tính ({rows.length} món)</dt><dd>{money(summary.subtotal)}</dd></div><div><dt>Phí vận chuyển ước tính</dt><dd>{money(summary.shippingFee)}</dd></div></dl>
-          {threshold > 0 && <div className={styles.shipping}>{summary.subtotal >= threshold ? "Đơn hàng đủ điều kiện miễn phí giao hàng." : `Còn ${money(threshold - summary.subtotal)} nữa để được miễn phí giao hàng.`}</div>}
+          <dl><div><dt>Tạm tính ({rows.length} món)</dt><dd>{money(summary.subtotal)}</dd></div><DiscountPriceRow summary={summary} /><div><dt>Phí vận chuyển ước tính</dt><dd>{money(summary.shippingFee)}</dd></div></dl>
+          <CartOfferHint hint={summary.offerHint} />
+          {threshold > 0 && <div className={styles.shipping}>{summary.netSubtotal >= threshold ? "Đơn hàng đủ điều kiện miễn phí giao hàng." : `Còn ${money(threshold - summary.netSubtotal)} nữa để được miễn phí giao hàng.`}</div>}
           <div className={styles.divider} aria-hidden="true"><span>✥</span></div>
           <div className={styles.total}><strong>Tổng cộng</strong><strong>{money(summary.total)}</strong></div>
-          <p className={styles.summaryNote}>Giá và phí giao hàng được kiểm tra lại khi xác nhận.</p>
+          <p className={styles.summaryNote}>Giá, ưu đãi và phí giao hàng được kiểm tra lại khi xác nhận.</p>
           <button type="button" className={styles.primary} disabled={!canCheckout} onClick={checkout}>Tiến hành đặt hàng <span aria-hidden="true">→</span></button>
           <ul className={styles.benefits}><li><Icon name="payments" />Thanh toán khi nhận hàng (COD)</li><li><Icon name="package_2" />Theo dõi đơn hàng trong tài khoản</li><li><Icon name="support_agent" />Hỗ trợ sau bán hàng</li></ul>
         </aside>

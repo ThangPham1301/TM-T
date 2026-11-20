@@ -58,7 +58,7 @@ public class PlatformApi {
     }
     boolean admin(Map<String,Object> a) {return "ADMIN".equals(a.get("role"));}
     void permission(Map<String,Object> a,String p) {
-        Set<String> granted=admin(a)?Set.of("policy.manage","privacy.decide","return.decide","audit.read","catalog.manage","order.manage"):Set.of("self.manage","return.create","privacy.create","cart.manage","order.create");
+        Set<String> granted=admin(a)?Set.of("policy.manage","privacy.decide","return.decide","audit.read","catalog.manage","discount.manage","pricing.manage","order.manage"):Set.of("self.manage","return.create","privacy.create","cart.manage","order.create");
         if(!granted.contains(p))throw new Problem(403,"Bạn không có quyền thực hiện thao tác này.");
     }
     Map<String,Object> safe(Map<String,Object> a) {var m=new LinkedHashMap<>(a);m.remove("password_hash");return m;}
@@ -143,6 +143,8 @@ public class PlatformApi {
                            WHEN 'order' THEN r.data->>'number'
                            WHEN 'return' THEN r.data->>'orderNumber'
                            WHEN 'product' THEN r.data->>'name'
+                           WHEN 'discount' THEN r.data->>'name'
+                           WHEN 'pricing-rule' THEN r.data->>'name'
                            WHEN 'category' THEN r.data->>'name'
                            WHEN 'policy' THEN r.data->>'version'
                        END AS "subjectLabel"
@@ -220,6 +222,21 @@ public class PlatformApi {
         row.put("isDefault", isDefault);
         if (!id.isEmpty()) row.put("revision",number(row,"revision")+1);
         return save("address",owner,row);
+    }
+
+    private int reservedReturnQuantity(Map<String, Object> request) {
+        return request.containsKey("approvedQuantity") ? number(request, "approvedQuantity") : number(request, "quantity");
+    }
+
+    private int returnAmount(Map<String, Object> request, int quantity) {
+        if (!(request.get("refundSlots") instanceof List<?> slots)) return number(request, "unitPrice") * quantity;
+        int lineNet = number(request, "lineNetTotal"), lineQuantity = number(request, "lineQuantity");
+        int remainder = lineNet % lineQuantity;
+        int amount = (lineNet / lineQuantity) * quantity;
+        for (Object slot : slots.subList(0, quantity)) {
+            if (((Number) slot).intValue() < remainder) amount++;
+        }
+        return amount;
     }
 
     @PostMapping("/command") @Transactional public Object command(@RequestBody Map<String,Object> b,@RequestHeader("Idempotency-Key") String key,HttpServletRequest req) {
@@ -301,9 +318,34 @@ public class PlatformApi {
             require(str(o,"status").equals("DELIVERED"),"Chỉ tạo yêu cầu sau khi đơn đã giao.");
             boolean late=Instant.parse(str(o,"deliveredAt")).plus(Duration.ofDays(7)).isBefore(Instant.now());require(!late||Set.of("UNSAFE","QUALITY").contains(reason),"Đã quá cửa sổ dự thảo 7 ngày; lỗi chất lượng/an toàn vẫn được tiếp nhận.");
             String lineId=text(b,"lineId",50);var line=((List<Map<String,Object>>)o.getOrDefault("items",List.of())).stream().filter(l->str(l,"productId").equals(lineId)).findFirst().orElseThrow(()->new Problem(422,"Dòng hàng không thuộc đơn."));
-            int qty=number(b,"quantity");require(qty>0&&qty<=number(line,"quantity"),"Số lượng yêu cầu không hợp lệ.");int used=list("return",a).stream().filter(r->str(r,"orderId").equals(str(o,"id"))&&str(r,"lineId").equals(lineId)&&!Set.of("REJECTED","WITHDRAWN").contains(str(r,"status"))).mapToInt(r->r.containsKey("approvedQuantity")?number(r,"approvedQuantity"):number(r,"quantity")).sum();require(qty>0&&qty+used<=number(line,"quantity"),"Số lượng vượt phần còn được yêu cầu.");
+            int qty = number(b, "quantity"), lineQuantity = number(line, "quantity");
+            require(qty > 0 && qty <= lineQuantity, "Số lượng yêu cầu không hợp lệ.");
+            var existing = list("return", a).stream()
+                    .filter(r -> str(r, "orderId").equals(str(o, "id")) && str(r, "lineId").equals(lineId)
+                            && !Set.of("REJECTED", "WITHDRAWN").contains(str(r, "status"))).toList();
+            int used = existing.stream().mapToInt(this::reservedReturnQuantity).sum();
+            require(qty + used <= lineQuantity, "Số lượng vượt phần còn được yêu cầu.");
             List<String> evidence=(List<String>)b.getOrDefault("evidenceIds",List.of());require(evidence.size()<=5,"Tối đa 5 ảnh.");for(String id:evidence){var e=record(id,"evidence",a);require(str(e,"status").equals("STORED_UNSCANNED"),"Ảnh chưa lưu thành công.");}
-            var r=new LinkedHashMap<String,Object>();r.put("orderId",str(o,"id"));r.put("orderNumber",str(o,"number"));r.put("lineId",lineId);r.put("product",str(line,"name"));r.put("unitPrice",number(line,"price"));r.put("quantity",qty);r.put("reason",reason);if(b.containsKey("caseId") && "return-submit".equals(str(b,"internalAction")))r.put("caseId",str(b,"caseId"));r.put("description",text(b,"description",2000));r.put("evidenceIds",evidence);r.put("status","REQUESTED");r.put("goods","NOT_REQUIRED");r.put("fulfillment","NOT_STARTED");r.put("resolution",text(b,"resolution",30));validateReturnResolution(reason,str(r,"resolution"),false);r.put("policyVersion","return-1.0-draft");r.put("amount",0);r.put("history",new ArrayList<>(List.of(Map.of("at",Instant.now().toString(),"status","REQUESTED","note","Đã tiếp nhận yêu cầu"))));return save("return",uid,r);
+            var r=new LinkedHashMap<String,Object>();r.put("orderId",str(o,"id"));r.put("orderNumber",str(o,"number"));r.put("lineId",lineId);r.put("product",str(line,"name"));r.put("unitPrice",number(line,"price"));
+            if (line.containsKey("netTotal")) {
+                var reserved = new BitSet(lineQuantity);
+                for (var previous : existing) {
+                    if (previous.get("refundSlots") instanceof List<?> slots) {
+                        for (Object slot : slots.subList(0, reservedReturnQuantity(previous)))
+                            reserved.set(((Number) slot).intValue());
+                    }
+                }
+                var slots = new ArrayList<Integer>();
+                for (int index = 0; index < qty; index++) {
+                    int slot = reserved.nextClearBit(0);
+                    reserved.set(slot);
+                    slots.add(slot);
+                }
+                r.put("refundSlots", slots);
+                r.put("lineNetTotal", line.get("netTotal"));
+                r.put("lineQuantity", lineQuantity);
+            }
+            r.put("quantity",qty);r.put("reason",reason);if(b.containsKey("caseId") && "return-submit".equals(str(b,"internalAction")))r.put("caseId",str(b,"caseId"));r.put("description",text(b,"description",2000));r.put("evidenceIds",evidence);r.put("status","REQUESTED");r.put("goods","NOT_REQUIRED");r.put("fulfillment","NOT_STARTED");r.put("resolution",text(b,"resolution",30));validateReturnResolution(reason,str(r,"resolution"),false);r.put("policyVersion","return-1.0-draft");r.put("amount",0);r.put("history",new ArrayList<>(List.of(Map.of("at",Instant.now().toString(),"status","REQUESTED","note","Đã tiếp nhận yêu cầu"))));return save("return",uid,r);
         }
         boolean privacy=action.startsWith("privacy-");String kind=privacy?"privacy":"return";var r=record(text(b,"id",50),kind,a);UUID owner=owner(str(r,"id"));
         if(number(b,"revision")!=number(r,"revision"))throw new Problem(409,"Hồ sơ vừa thay đổi. Hãy tải lại.");
@@ -389,7 +431,7 @@ public class PlatformApi {
                         String previousResolution = str(r,"resolution");
                         String resolution = text(b,"resolution",30);
                         r.put("approvedQuantity",q);
-                        r.put("amount",number(r,"unitPrice")*q);
+                        r.put("amount",returnAmount(r, q));
                         r.put("resolution",resolution);
                         validateReturnResolution(str(r,"reason"),resolution,true);
                         if (resolution.equals("ADJUST_DUE")) validateReturnPayment(r,a);
@@ -403,7 +445,7 @@ public class PlatformApi {
                         }
                     }
                     case "RECEIVED" -> {require(status.equals("APPROVED")&&str(r,"goods").equals("AWAITING_PICKUP"),"Chưa có thu hồi được duyệt.");int received=b.containsKey("receivedQuantity")?number(b,"receivedQuantity"):number(r,"approvedQuantity");require(received>=0&&received<=number(r,"approvedQuantity"),"Số lượng nhận không hợp lệ.");r.put("receivedQuantity",received);r.put("goods","RECEIVED");if(received<number(r,"approvedQuantity")){r.put("resumeStatus",received==0?"APPROVED":"RECEIVED");next="EXCEPTION";}}
-                    case "INSPECTED" -> {require(status.equals("RECEIVED"),"Chưa nhận hàng trả.");String disposition=text(b,"disposition",30);require(Set.of("QUARANTINE","DAMAGED","DISPOSE").contains(disposition),"Thực phẩm trả không tự nhập lại tồn bán.");int inspected=b.containsKey("inspectedQuantity")?number(b,"inspectedQuantity"):number(r,"approvedQuantity");int received=r.containsKey("receivedQuantity")?number(r,"receivedQuantity"):number(r,"approvedQuantity");require(inspected>0&&inspected<=received,"Số lượng đạt kiểm hàng không hợp lệ.");if(inspected<number(r,"approvedQuantity")){r.put("approvedQuantity",inspected);r.put("amount",number(r,"unitPrice")*inspected);}r.put("goods",disposition);}
+                    case "INSPECTED" -> {require(status.equals("RECEIVED"),"Chưa nhận hàng trả.");String disposition=text(b,"disposition",30);require(Set.of("QUARANTINE","DAMAGED","DISPOSE").contains(disposition),"Thực phẩm trả không tự nhập lại tồn bán.");int inspected=b.containsKey("inspectedQuantity")?number(b,"inspectedQuantity"):number(r,"approvedQuantity");int received=r.containsKey("receivedQuantity")?number(r,"receivedQuantity"):number(r,"approvedQuantity");require(inspected>0&&inspected<=received,"Số lượng đạt kiểm hàng không hợp lệ.");if(inspected<number(r,"approvedQuantity")){r.put("approvedQuantity",inspected);r.put("amount",returnAmount(r, inspected));}r.put("goods",disposition);}
                     case "PROCESSING" -> {require((status.equals("APPROVED")&&str(r,"goods").equals("NOT_REQUIRED"))||status.equals("INSPECTED"),"Chưa đủ điều kiện thực hiện.");validateReturnPayment(r,a);r.put("fulfillment","MANUAL_PENDING");}
                     case "REPLACEMENT_SENT" -> {require(status.equals("PROCESSING")&&Set.of("REPLACEMENT","MAKE_UP").contains(str(r,"resolution")),"Chưa thể gửi hàng.");r.put("replacementTracking",text(b,"reference",200));}
                     case "RESOLVED" -> {

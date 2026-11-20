@@ -4,6 +4,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, money, type Row, useStore } from "@/lib/store";
 import { ProductImage } from "./product-image";
+import { offerForProduct } from "@/lib/discounts";
+import { applyPricing, priceSource } from "@/lib/pricing";
+import { ProductPrice } from "../pricing/price-display";
+import { usePricing } from "../pricing/use-pricing";
+import { ProductOffer } from "../discounts/offer-display";
+import { usePublicOffers } from "../discounts/use-public-offers";
 import { LoadState, ProductCard } from "./lan-primitives";
 
 const tabs = [
@@ -12,7 +18,9 @@ const tabs = [
   "Thưởng thức & Bảo quản",
 ];
 export function ProductDetail({ slug }: { slug: string }) {
-  const [product, setProduct] = useState<Row | null>(null),
+  const offers = usePublicOffers();
+  const { feed, reload: reloadPrices } = usePricing();
+  const [storedProduct, setProduct] = useState<Row | null>(null),
     [related, setRelated] = useState<Row[]>([]),
     [categories, setCategories] = useState<Row[]>([]),
     [loading, setLoading] = useState(true),
@@ -70,6 +78,7 @@ export function ProductDetail({ slug }: { slug: string }) {
       live = false;
     };
   }, [slug, attempt]);
+  const product = storedProduct ? applyPricing(storedProduct, feed) : null;
   async function purchase(buyNow = false) {
     if (!product) return;
     if (!state) {
@@ -88,11 +97,18 @@ export function ProductDetail({ slug }: { slug: string }) {
         next > Math.min(100, Number(p.stock))
       )
         throw new Error("Số lượng vượt tồn kho hoặc giới hạn giỏ hàng.");
-      await mutate("commerce", "cart-set", {
-        productId: p.id,
-        quantity: next,
-        cartToken: summary.cartToken,
-      });
+      try {
+        await mutate("commerce", "cart-set", {
+          productId: p.id,
+          quantity: next,
+          cartToken: summary.cartToken,
+          expectedUnitPrice: p.price,
+          expectedPriceSource: priceSource(p)?.source ?? "BASE",
+        });
+      } catch (problem) {
+        if (problem instanceof ApiError && problem.status === 409) reloadPrices();
+        throw problem;
+      }
       if (buyNow) router.push("/checkout");
     });
   }
@@ -170,9 +186,10 @@ export function ProductDetail({ slug }: { slug: string }) {
               </p>
               <h1>{String(product.name)}</h1>
               <p>{String(product.description ?? "")}</p>
+              {Number(product.stock) > 0 && (priceSource(product)?.source ?? "BASE") === "BASE" && <ProductOffer offer={offerForProduct(offers, product.id)} />}
               <div className="lan-price lan-frame">
-                <small>Giá niêm yết</small>
-                <strong>{money(product.price)}</strong>
+                <small>Đơn giá đang bán</small>
+                <ProductPrice product={product} detail />
               </div>
               <fieldset className="lan-packaging">
                 <legend>Loại sản phẩm / Quy cách</legend>
@@ -368,7 +385,8 @@ export function ProductDetail({ slug }: { slug: string }) {
               {related.map((p) => (
                 <ProductCard
                   key={p.id}
-                  product={p}
+                  product={applyPricing(p, feed)}
+                  offer={offerForProduct(offers, p.id)}
                   category={String(
                     categories.find((c) => c.code === p.category)?.name ??
                       p.category,

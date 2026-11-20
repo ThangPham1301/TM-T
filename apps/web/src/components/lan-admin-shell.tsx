@@ -6,6 +6,8 @@ const links = [
   ["orders", "Quản lý đơn hàng"],
   ["products", "Quản lý sản phẩm"],
   ["categories", "Quản lý danh mục"],
+  ["discounts", "Quản lý ưu đãi"],
+  ["pricing", "Quản lý giá bán"],
   ["settings", "Cấu hình bán hàng"],
   ["returns", "Xử lý đổi trả"],
   ["privacy", "Quyền riêng tư"],

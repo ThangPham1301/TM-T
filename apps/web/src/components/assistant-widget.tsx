@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
@@ -20,6 +21,19 @@ const CHIPS = [
   "Tư vấn quà tặng mẹ dưới 200k",
   "Chính sách đổi trả thế nào?",
 ];
+
+const SOCIAL_LINKS = [
+  {
+    name: "Facebook",
+    href: "https://www.facebook.com/profile.php?id=61596519685169",
+    icon: "/images/social/facebook.png",
+  },
+  {
+    name: "TikTok",
+    href: "https://www.tiktok.com/@goihue",
+    icon: "/images/social/tiktok.png",
+  },
+] as const;
 
 /** Minimal inline formatting for the assistant's plain markdown: **bold** and [label](href). */
 function renderRich(text: string) {
@@ -57,8 +71,11 @@ export function AssistantWidget() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, open]);
 
-  if (pathname?.startsWith("/admin") || pathname?.startsWith("/account"))
-    return null;
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) return null;
+  const showAssistant =
+    pathname !== "/account" && !pathname.startsWith("/account/");
+  const chatOpen = showAssistant && open;
+  const onCart = pathname === "/cart";
 
   async function send(raw: string, base: Msg[] = messages) {
     const text = raw.trim();
@@ -156,8 +173,12 @@ export function AssistantWidget() {
 
   return (
     <>
-      {open && (
-        <section className={styles.panel} aria-label="Trợ lý Gói Huế">
+      {chatOpen && (
+        <section
+          className={styles.panel}
+          data-cart={onCart || undefined}
+          aria-label="Trợ lý Gói Huế"
+        >
           <header className={styles.head}>
             <span className={styles.mark} aria-hidden="true">
               G
@@ -298,42 +319,66 @@ export function AssistantWidget() {
           </form>
         </section>
       )}
-      <div className={styles.launcher}>
-        {!open && (
-          <button
-            type="button"
-            className={styles.pill}
-            onClick={() => setOpen(true)}
-          >
-            Hỏi trợ lý Gói Huế
-          </button>
-        )}
-        <button
-          type="button"
-          className={styles.fab}
-          aria-label={open ? "Đóng trợ lý" : "Mở trợ lý Gói Huế"}
-          onClick={() => setOpen((v) => !v)}
-        >
-          {open ? (
-            "×"
-          ) : (
-            <svg
-              width="26"
-              height="26"
-              viewBox="0 0 24 24"
-              fill="none"
-              aria-hidden="true"
+      <div
+        className={styles.launcher}
+        data-cart={onCart || undefined}
+        data-chat-open={chatOpen || undefined}
+      >
+        <div className={styles.socialLinks}>
+          {SOCIAL_LINKS.map(({ name, href, icon }) => (
+            <a
+              key={name}
+              className={styles.fab}
+              data-platform={name}
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`${name} Gói Huế (mở tab mới)`}
+              title={name}
             >
-              <path
-                d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          )}
-        </button>
+              <Image src={icon} width={26} height={26} alt="" unoptimized />
+            </a>
+          ))}
+        </div>
+        {showAssistant && (
+          <div className={styles.chatControls}>
+            {!chatOpen && (
+              <button
+                type="button"
+                className={styles.pill}
+                onClick={() => setOpen(true)}
+              >
+                Hỏi trợ lý Gói Huế
+              </button>
+            )}
+            <button
+              type="button"
+              className={styles.fab}
+              aria-label={open ? "Đóng trợ lý" : "Mở trợ lý Gói Huế"}
+              onClick={() => setOpen((v) => !v)}
+            >
+              {open ? (
+                "×"
+              ) : (
+                <svg
+                  width="26"
+                  height="26"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </>
   );

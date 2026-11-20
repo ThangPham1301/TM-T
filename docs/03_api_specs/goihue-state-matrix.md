@@ -7,7 +7,7 @@ Hợp đồng của khung thống nhất sau xây dựng lại. Trạng thái DR
 Opaque session lưu hash trong DB, cookie `goihue_session`, HttpOnly/SameSite Strict, path `/api/store`, 8 giờ. Logout hủy phiên hiện tại; đóng tài khoản hủy toàn bộ phiên. Mật khẩu BCrypt, tối thiểu 12 ký tự/tối đa 72 byte UTF-8; kiểm tra email trùng. Rate limit login theo email trong bộ nhớ, 12 lần/15 phút; reset sau thành công/restart. Local HTTP; triển khai public cần TLS/Secure cookie.
 
 - CUSTOMER: self.manage, cart.manage, order.create, privacy.create, return.create; chỉ hồ sơ/đơn/ảnh của mình.
-- ADMIN: catalog.manage, order.manage, policy.manage, privacy.decide, return.decide, audit.read; không mặc định là khách để tạo giỏ/đơn.
+- ADMIN: catalog.manage, discount.manage, pricing.manage, order.manage, policy.manage, privacy.decide, return.decide, audit.read; không mặc định là khách để tạo giỏ/đơn.
 
 Mọi thao tác ghi yêu cầu Origin tin cậy. BFF chỉ chấp nhận same-origin, backend allowlist localhost/127.0.0.1:3000. Mã đơn/hồ sơ không phải thông tin xác thực; API trả 404 chung cho sai ownership.
 
@@ -22,7 +22,11 @@ Mọi thao tác ghi yêu cầu Origin tin cậy. BFF chỉ chấp nhận same-or
 | GET admin/products | Không | Toàn bộ sản phẩm, catalog.manage |
 | GET categories / admin/categories | Không | Danh mục active public / toàn bộ danh mục cho catalog.manage |
 | GET shipping | Không | Phí cơ bản, ngưỡng miễn phí, enabled, revision và pauseMessage nếu đã lưu; public |
-| GET cart/summary | Không | CUSTOMER: items, cartToken, subtotal, shippingFee, total, shipping |
+| GET discounts | Không | Công khai. Trả ưu đãi đang chạy, ưu tiên quảng bá, thời điểm máy chủ và mốc lịch kế tiếp nếu có. Thẻ nổi chọn chương trình được ưu tiên trước, tự chuyển sang ưu đãi còn chạy và cho khách chuyển qua các chương trình khác. Danh mục và chi tiết có nhãn theo sản phẩm. |
+| GET admin/discounts | Không | ADMIN discount.manage. Danh sách chương trình gồm bản nháp chưa bật, đã lên lịch, đang chạy, tạm dừng và đã hết hạn. |
+| GET pricing | Không | Công khai. Giá đang bán, giá thường, nguồn giá theo sản phẩm, thời điểm báo giá và mốc đổi tiếp theo. Dải Home và danh mục dùng cùng bộ giá. |
+| GET admin/pricing | Không | ADMIN pricing.manage. Danh sách quy tắc, sản phẩm, giá và revision. |
+| GET cart/summary | Không | CUSTOMER: items, cartToken, priceToken, quoteToken, nextPriceChangeAt, pricedAt, subtotal, discountAmount, netSubtotal, shippingFee, total, shipping, tùy chọn discount/offerHint. Các giá trị dùng cùng một ảnh chụp dữ liệu chỉ đọc. |
 | PUT catalog/images/{id}/content | Binary PNG/JPEG ≤5MB | ADMIN; intent từ catalog-image-intent; decode/re-encode PNG |
 | GET catalog/images/{id} | Không | Public khi gắn catalog active; còn lại chỉ ADMIN |
 | POST auth/register | name ≤100, email ≤150, password | CUSTOMER mới, không tạo đơn mẫu; cookie phiên |
@@ -44,9 +48,11 @@ POST commerce/command bắt buộc `Idempotency-Key` 16–80 chữ/số/gạch n
 
 | action | Trường | Quy tắc |
 | --- | --- | --- |
-| cart-set | cartToken, productId UUID, quantity 0..100 | 0 xóa dòng; kiểm tra active của sản phẩm/danh mục và tồn; giá lấy server; một dòng/product/customer |
+| cart-set | cartToken, productId UUID, quantity 0..100, expectedUnitPrice/expectedPriceSource khi thêm từ chi tiết | 0 xóa dòng; kiểm tra active của sản phẩm/danh mục và tồn; giá lấy server; một dòng/product/customer |
 | cart-clear / cart-refresh | cartToken | Xóa toàn giỏ / chủ động nhận snapshot giá mới; không tự giảm số lượng |
-| checkout | cartToken, shippingRevision, recipient ≤100, phone 8..30, address ≤400, paymentMethod tùy chọn COD/VIETQR | Kiểm tra giỏ, giá/tồn và phí; mặc định COD. VietQR demo tạo thông tin thanh toán PENDING, có hạn; giảm tồn và xóa giỏ atomically. Khi đặt thành công, khách thấy hộp thoại VietQR. Đóng hộp thoại giữ nguyên đơn và cho phép mở lại mã từ chi tiết đơn khi phiên còn hiệu lực. COD mở thẳng chi tiết đơn. |
+| pricing-save / pricing-toggle | name, type, targets, threshold hoặc startsAt/endsAt, enabled; id/revision khi sửa hoặc bật tắt | ADMIN pricing.manage. Lịch theo giờ Việt Nam hiển thị trong UI và gửi UTC. Hai lịch giao nhau cùng sản phẩm trả 409. Mỗi sản phẩm có tối đa một quy tắc tồn kho và một quy tắc sức mua đang bật. |
+| pricing-floor | id sản phẩm, revision, floor | ADMIN pricing.manage. Sàn từ 1 đ đến giá thường và không vượt qua giá của quy tắc đang bật hoặc đã lên lịch. |
+| checkout | cartToken, quoteToken, shippingRevision, recipient ≤100, phone 8..30, address ≤400, paymentMethod tùy chọn COD/VIETQR | Kiểm tra giỏ, giá/tồn, ưu đãi và phí; Giá đã xem hoặc quoteToken thay đổi trả 409 để khách xem và xác nhận tổng mới ngay tại checkout. Đổi giá trước khi xác nhận giỏ cũng trả 409 nếu priceToken không còn đúng. Bản ghi đơn giữ tổng giảm và giảm theo dòng. Mặc định COD. VietQR demo tạo thông tin thanh toán PENDING, có hạn; giảm tồn và xóa giỏ atomically. Khi đặt thành công, khách thấy hộp thoại VietQR. Đóng hộp thoại giữ nguyên đơn và cho phép mở lại mã từ chi tiết đơn khi phiên còn hiệu lực. COD mở thẳng chi tiết đơn. |
 
 VietQR/IPN là luồng demo. IPN yêu cầu chữ ký và đối chiếu số tiền với tổng đơn. Khách thấy trạng thái VietQR trên thẻ đơn, có thể mở mã còn hạn và sao chép nội dung chuyển khoản. Admin lọc theo trạng thái và xem chứng từ tại chi tiết đơn.
 
@@ -61,10 +67,20 @@ VietQR/IPN là luồng demo. IPN yêu cầu chữ ký và đối chiếu số ti
 | product-save | id/revision khi sửa, name≤150, slug≤120, category≤120, description≤4000, imageId tùy chọn, price 1..10.000.000, stock 0..1.000.000, active boolean | ADMIN; category active, slug duy nhất; imageId READY hoặc rỗng để gỡ ảnh; không nhận URL ảnh mới; sửa stock tuyệt đối có audit |
 | category-save / category-delete | id/revision khi sửa/xóa; code/name/description/sortOrder/active/imageId khi lưu | ADMIN; code duy nhất; đổi code cập nhật mapping product; chỉ xóa khi không có product |
 | product-delete / catalog-toggle | id/revision; kind/active khi toggle | ADMIN; chỉ xóa product chưa có cart/order tham chiếu; còn lại dùng ẩn |
+| discount-save | name, scope (PRODUCT/PRODUCTS/CART), productId cho PRODUCT hoặc productIds gồm 1–100 UUID riêng biệt cho PRODUCTS, condition (QUANTITY/SUBTOTAL), minimum, method (PERCENT/FIXED), value, startsAt, endsAt, enabled, featured, priority; message tùy chọn; id/revision khi sửa | ADMIN discount.manage. Lịch bắt đầu bao gồm mốc, kết thúc loại trừ mốc. Ngày UTC phải thuộc năm 2000–9999. Nháp hoặc tạm dừng dùng enabled=false. Lịch cũ không hợp lệ bị bỏ qua khi tính ưu đãi. |
+| discount-toggle | id, revision, enabled | ADMIN discount.manage. Bật hoặc tạm dừng không xóa dữ liệu. Phiên bản cũ trả 409. |
 | shipping-save | revision, baseFee, freeShippingThreshold, enabled, optional pauseMessage (250 characters) | ADMIN catalog.manage+order.manage; không thay phí đơn cũ |
 | catalog-image-intent | name≤120 | ADMIN; fileId để upload, idempotency bắt buộc |
 
 Không có voucher, loyalty, phí thanh toán online hay API carrier. Giá đơn hàng là snapshot, không bị đổi theo catalog sau khi đặt.
+
+Với PRODUCTS, cộng số lượng hoặc tiền hàng của các sản phẩm thuộc nhóm trong giỏ, và phân bổ khoản giảm chỉ trên các dòng thuộc nhóm. Nhóm có thể chứa một hoặc nhiều sản phẩm. Sản phẩm đã ẩn, hết hàng hoặc bị xóa không xuất hiện trong nhóm công khai. Các ưu đãi PRODUCT hiện có tiếp tục dùng productId.
+
+Định giá ưu tiên lịch → tồn kho → sức mua → giá thường. Ngưỡng tồn kho so với tồn bán được hiện tại. Sức mua cộng số lượng của đơn đã xác nhận trong 3 ngày lịch trọn vẹn trước đó, bỏ các đơn đã hủy hoặc hoàn về trước mốc 00:00 giờ Việt Nam. Tiến trình nền công bố ảnh chụp theo ngày trong PostgreSQL. Trong lúc chờ ảnh chụp ngày mới, dùng ảnh chụp ngày liền trước nếu có. Khi cả hai chưa có, tạm bỏ qua quy tắc sức mua.
+
+Chỉ các dòng giá thường tham gia điều kiện và nhận Dynamic Discount. Giá sàn bảo vệ tiền hàng trên từng đơn vị sau giảm. Nếu chưa thiết lập sàn, hệ thống dùng giá thường làm sàn. Giảm phần trăm được giới hạn riêng trên từng dòng. Giảm cố định được phân bổ trong phần chênh còn lại của các dòng đủ điều kiện. Giỏ hàng và checkout cùng chọn ưu đãi có tổng mức giảm thực tế cao nhất. Khi tổng tiền đổi trên màn hình thanh toán, khách phải xác nhận tổng mới trước khi gửi đơn. Backend tiếp tục trả 409 nếu báo giá gửi lên đã cũ. Đơn giữ đơn giá, nguồn giá và khoản giảm đã chốt theo từng dòng phục vụ thanh toán và đổi trả.
+
+Ưu đãi dùng đơn vị đồng nguyên; mỗi giỏ chọn khoản giảm cao nhất, hòa thì theo thứ tự ưu tiên quảng bá, thời gian bắt đầu, ID. Giảm giá giới hạn để mỗi đơn vị hàng giữ tối thiểu 1 đ cho luồng COD/VietQR. Phí giao được xét sau giảm. Đổi trả lấy phần tiền đã chốt theo đơn vị trong dòng hàng, bao gồm phần sai khác do làm tròn; các đơn cũ dùng đơn giá đã lưu.
 
 Chi tiết giới hạn và trạng thái CRUD 1.1 tại [catalog-commerce-crud.md](catalog-commerce-crud.md). `state` bổ sung cartCount. Giỏ cũ hoặc cấu hình phí cũ trả 409, UI hướng dẫn tải lại. Cảnh báo giá đổi/hết hàng/ngừng bán chặn checkout đến khi người dùng xử lý. Danh sách quản trị có tìm kiếm, lọc và phân trang client 8 dòng/trang; chưa có server pagination. Ảnh catalog được decode/re-encode; ảnh evidence vẫn thuộc luồng private riêng, chưa có antivirus.
 

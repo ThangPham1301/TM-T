@@ -8,6 +8,9 @@ import {
   StorePauseBanner,
 } from "@/components/site-shell";
 import { AssistantWidget } from "@/components/assistant-widget";
+import floating from "@/components/assistant-widget.module.css";
+import { StoreFeaturedOffer } from "@/components/discounts/offer-display";
+import { PublicOffersProvider } from "@/components/discounts/use-public-offers";
 import "@/styles/heritage.css";
 import "@/styles/tokens.css";
 import "@/styles/store.css";
@@ -51,9 +54,14 @@ export default function RootLayout({
           <SiteHeader />
           <StorePauseBanner />
           <StatusMessages />
-          {children}
-          <SiteFooter />
-          <AssistantWidget />
+          <PublicOffersProvider>
+            {children}
+            <SiteFooter />
+            <div className={floating.dock}>
+              <StoreFeaturedOffer />
+              <AssistantWidget />
+            </div>
+          </PublicOffersProvider>
         </StoreProvider>
       </body>
     </html>

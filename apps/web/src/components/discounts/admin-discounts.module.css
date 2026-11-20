@@ -1,0 +1,342 @@
+.overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(9.5rem, 100%), 1fr));
+  gap: 12px;
+  margin: 0 0 22px;
+}
+
+.overview > div,
+.panel {
+  background: var(--gh-background);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-md);
+}
+
+.overview > div {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 14px 16px;
+  border-top: 2px solid var(--gh-accent);
+}
+
+.overview span,
+.panelHeading small,
+.table small,
+.help {
+  color: var(--gh-text-muted);
+  font-size: var(--gh-text-sm);
+}
+
+.overview strong {
+  color: var(--gh-primary);
+  font: 700 1.75rem/1.2 var(--gh-font-display);
+  font-variant-numeric: tabular-nums;
+}
+
+.panel {
+  min-width: 0;
+  overflow: hidden;
+  box-shadow: var(--gh-shadow);
+}
+
+.panelHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 18px clamp(12px, 2vw, 22px);
+}
+
+.panelHeading h2 {
+  margin: 0 0 3px;
+  color: var(--gh-primary);
+  font: 700 1.45rem/1.25 var(--gh-font-display);
+}
+
+.filters,
+.fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.filters {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  padding: 0 clamp(12px, 2vw, 22px) 18px;
+}
+
+.filters label,
+.form label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--gh-text);
+  font-size: var(--gh-text-sm);
+  font-weight: 650;
+}
+
+.filters input,
+.filters select,
+.form input:not([type="checkbox"]),
+.form select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 11px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-sm);
+  background: var(--gh-background);
+  color: var(--gh-text);
+  font: 400 0.95rem/1.4 var(--gh-font-body);
+}
+
+.filters :is(input, select):focus-visible,
+.form :is(input, select):focus-visible {
+  outline: 2px solid var(--gh-focus);
+  outline-offset: 2px;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 49rem;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  text-align: left;
+  color: var(--gh-text);
+}
+
+.table th {
+  background: var(--gh-surface);
+  color: var(--gh-primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.table th,
+.table td {
+  padding: 12px clamp(10px, 1.2vw, 18px);
+  vertical-align: top;
+  border-top: 1px solid var(--gh-border);
+}
+
+.table tbody tr:hover {
+  background: var(--gh-surface);
+}
+.table td:first-child {
+  width: 29%;
+  overflow-wrap: anywhere;
+}
+.table td:nth-child(2) {
+  width: 23%;
+  overflow-wrap: anywhere;
+}
+.table td:nth-child(3) {
+  width: 18%;
+}
+.table td time {
+  white-space: nowrap;
+}
+.table td strong {
+  display: block;
+  line-height: 1.4;
+}
+
+.table small {
+  display: block;
+  margin-top: 4px;
+  line-height: 1.45;
+}
+
+.discount {
+  display: block;
+  margin-top: 4px;
+  color: var(--gh-primary);
+  font-weight: 700;
+}
+
+.ruleActions {
+  display: flex;
+  align-items: start;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ruleActions button {
+  min-height: 36px;
+  padding: 5px 8px;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.feedback,
+.pagination {
+  margin: 0;
+  padding: 16px 20px;
+}
+
+.editor[open] {
+  display: flex;
+  flex-direction: column;
+  width: min(47rem, calc(100vw - 1.5rem));
+  max-height: min(48rem, calc(100dvh - 2rem));
+  padding: 0;
+  overflow: hidden;
+  border-top: 3px solid var(--gh-accent);
+}
+
+.editor > :first-child {
+  flex: none;
+  align-items: center;
+  margin: 0;
+  padding: 14px clamp(14px, 3vw, 24px);
+  border-bottom: 1px solid var(--gh-border);
+}
+
+.editor > :first-child h2 {
+  font-size: clamp(1.3rem, 3vw, 1.85rem);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.formBody {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 0;
+  margin: 0;
+  padding: 14px clamp(14px, 3vw, 24px) 18px;
+  scroll-padding: 12px;
+}
+
+.formSection {
+  display: grid;
+  gap: 12px;
+  padding: 0 0 16px;
+}
+
+.formSection + .formSection {
+  padding-top: 14px;
+  border-top: 1px solid var(--gh-border);
+}
+
+.formSection:last-child {
+  padding-bottom: 0;
+}
+
+.formSection h3 {
+  margin: 0;
+  color: var(--gh-primary);
+  font-size: 1rem;
+}
+
+.productPicker {
+  display: grid;
+  grid-column: 1 / -1;
+  min-width: 0;
+  gap: 9px;
+  margin: 0;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-radius-sm);
+}
+
+.productPicker legend {
+  padding: 0 4px;
+  font-weight: 650;
+}
+
+.productChoices {
+  display: grid;
+  max-height: 10rem;
+  overflow: auto;
+  padding: 4px;
+}
+
+.productChoices .check {
+  padding: 7px 8px;
+  border-radius: var(--gh-radius-sm);
+}
+
+.productChoices .check:has(input:checked),
+.productChoices .check:hover {
+  background: var(--gh-surface);
+}
+
+.form .check {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.check input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--gh-primary);
+}
+.help {
+  margin: 0;
+}
+
+.preview {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--gh-accent);
+  border-radius: var(--gh-radius-sm);
+  background: var(--gh-surface);
+  color: var(--gh-primary);
+  overflow-wrap: anywhere;
+}
+.preview > strong {
+  font: 700 1.5rem/1.2 var(--gh-font-display);
+}
+
+.formFooter {
+  flex: none;
+  padding: 12px clamp(14px, 3vw, 24px);
+  border-top: 1px solid var(--gh-border);
+  background: var(--gh-background);
+}
+
+.formFooter > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.error,
+.success {
+  padding: 8px 12px;
+  margin: 0 0 12px;
+  border-radius: var(--gh-radius-sm);
+  font-size: var(--gh-text-sm);
+}
+
+.error {
+  color: var(--gh-danger);
+  background: var(--gh-danger-surface);
+}
+.success {
+  color: var(--gh-success);
+  background: var(--gh-success-surface);
+}
+
+@media (max-width: 570px) {
+  .filters,
+  .fields {
+    grid-template-columns: 1fr;
+  }
+}

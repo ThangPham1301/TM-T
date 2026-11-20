@@ -26,11 +26,113 @@ paths:
       security: []
       responses:
         '200': {description: id/code/baseFee/freeShippingThreshold/enabled/revision and optional pauseMessage; threshold zero disables free shipping}
+  /discounts:
+    get:
+      operationId: publicDiscounts
+      security: []
+      description: Returns current enabled offers ordered by display priority, then start and ID. Product offers require at least one selected product with an active product and category and available stock. Group offers expose the currently available productIds. All times are UTC.
+      responses:
+        '200':
+          description: Offer feed and optional next schedule boundary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [offers, asOf]
+                properties:
+                  offers: {type: array, items: {$ref: '#/components/schemas/PublicDiscount'}}
+                  asOf: {type: string, format: date-time}
+                  nextChangeAt: {type: string, format: date-time}
+  /pricing:
+    get:
+      operationId: effectiveCatalogPrices
+      security: []
+      responses:
+        '200':
+          description: Effective per-product prices and the next scheduled or daily evaluation boundary.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [asOf, nextChangeAt, prices]
+                properties:
+                  asOf: {type: string, format: date-time}
+                  nextChangeAt: {type: string, format: date-time, nullable: true}
+                  prices:
+                    type: object
+                    additionalProperties: {$ref: '#/components/schemas/EffectivePrice'}
+  /admin/pricing:
+    get:
+      operationId: listPricingRules
+      description: ADMIN with pricing.manage. Lists all rules with their revision, including paused and ended rules.
+      responses:
+        '200':
+          description: Pricing rules
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/PricingRule'}}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+  /admin/discounts:
+    get:
+      operationId: manageDiscounts
+      description: ADMIN with discount.manage. Includes paused, scheduled, and ended programs.
+      responses:
+        '200':
+          description: Discount records including ID, revision, and configured enabled flag
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/AdminDiscount'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
   /cart/summary:
     get:
       operationId: cartQuote
       responses:
-        '200': {description: CUSTOMER items/cartToken/subtotal/shippingFee/total/shipping settings with revision}
+        '200':
+          description: CUSTOMER cart quote from a consistent read-only snapshot. Dynamic Discount applies only to base-price lines and is capped per line by the product floor, which defaults to the base price. Shipping threshold is evaluated on merchandise after discount.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, cartToken, priceToken, quoteToken, subtotal, discountAmount, netSubtotal, shippingFee, total, shipping]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        price: {type: integer, description: Unit amount last accepted by the customer}
+                        currentPrice: {type: integer, description: Effective unit amount included in this quote}
+                        currentPricing: {$ref: '#/components/schemas/EffectivePrice'}
+                        priceChanged: {type: boolean, description: A change in amount or pricing source requires acceptance}
+                  cartToken: {type: string}
+                  priceToken: {type: string, description: Identifies the reviewed effective prices and eligibility sources}
+                  nextPriceChangeAt: {type: string, format: date-time, nullable: true}
+                  pricedAt: {type: string, format: date-time}
+                  quoteToken: {type: string}
+                  subtotal: {type: integer, format: int64}
+                  discountAmount: {type: integer, format: int64, description: Actual discount after applying the product floors.}
+                  netSubtotal: {type: integer, format: int64}
+                  discount:
+                    type: object
+                    required: [id, revision, name]
+                    properties:
+                      id: {type: string, format: uuid}
+                      revision: {type: integer, minimum: 1}
+                      name: {type: string}
+                  offerHint:
+                    type: object
+                    required: [offer, remainingQuantity, remainingAmount]
+                    properties:
+                      offer: {$ref: '#/components/schemas/PublicDiscount'}
+                      remainingQuantity: {type: integer}
+                      remainingAmount: {type: integer, format: int64}
+                  shippingFee: {type: integer}
+                  total: {type: integer, format: int64}
+                  shipping: {type: object, description: Shipping settings including revision}
         '401': {$ref: '#/components/responses/Error'}
   /catalog/images/{id}/content:
     parameters:
@@ -65,7 +167,7 @@ paths:
       operationId: listProducts
       security: []
       responses:
-        '200': {description: Active catalog array}
+        '200': {description: Active catalog array. price is the effective unit amount with basePrice and pricing metadata.}
   /products/recommended:
     get:
       operationId: recommendedProducts
@@ -75,7 +177,7 @@ paths:
         - {in: query, name: productId, required: false, schema: {type: string, format: uuid}}
         - {in: query, name: limit, required: false, schema: {type: integer, minimum: 1, maximum: 8, default: 4}}
       responses:
-        '200': {description: Ranked sellable products with the strategy that produced them (POPULAR, or BOUGHT_TOGETHER on the product surface from DELIVERED orders)}
+        '200': {description: Ranked sellable products with effective price, basePrice, pricing metadata and the strategy that produced them (POPULAR, or BOUGHT_TOGETHER on the product surface from DELIVERED orders)}
   /agent/chat:
     post:
       operationId: agentChat
@@ -107,13 +209,13 @@ paths:
       parameters:
         - {in: path, name: slug, required: true, schema: {type: string}}
       responses:
-        '200': {description: Product}
+        '200': {description: Product with effective price, basePrice and pricing metadata}
         '404': {$ref: '#/components/responses/Error'}
   /admin/products:
     get:
       operationId: manageCatalog
       responses:
-        '200': {description: ADMIN catalog including inactive products}
+        '200': {description: ADMIN catalog including inactive products with base price and optional priceFloor}
         '403': {$ref: '#/components/responses/Error'}
   /state:
     get:
@@ -125,7 +227,7 @@ paths:
     get:
       operationId: currentCart
       responses:
-        '200': {description: CUSTOMER cart array}
+        '200': {description: CUSTOMER cart array with previously accepted price and effective currentPrice/currentPricing}
         '401': {$ref: '#/components/responses/Error'}
   /policy:
     get:
@@ -172,11 +274,24 @@ paths:
                   properties:
                     pauseMessage: {type: string, maxLength: 250, description: Optional customer-facing notice for shipping-save when new orders are paused}
                     addressId: {type: string, format: uuid, description: Optional saved CUSTOMER destination for checkout in place of manual recipient fields}
+                    productIds: {type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid}, description: Required for discount-save with scope PRODUCTS.}
+                    priceToken: {type: string, minLength: 64, maxLength: 64, description: Submit the reviewed price token for cart-refresh. A change returns 409.}
+                    expectedUnitPrice: {type: integer, minimum: 1, description: Unit price shown before adding a product. A change returns 409.}
+                    expectedPriceSource: {type: string, enum: [BASE, SCHEDULE, STOCK, DEMAND], description: Required with expectedUnitPrice.}
+                    type: {type: string, enum: [SCHEDULE, STOCK, DEMAND], description: Rule type for pricing-save.}
+                    name: {type: string, maxLength: 90, description: Name for pricing-save.}
+                    targets: {type: array, minItems: 1, maxItems: 100, items: {$ref: '#/components/schemas/PricingTarget'}}
+                    floor: {type: integer, minimum: 1, maximum: 10000000, description: Minimum merchandise unit price after dynamic pricing or cart discounts. Required for pricing-floor and cannot exceed the base price.}
+                    threshold: {type: integer, minimum: 0, maximum: 1000000, description: Minimum available stock or maximum confirmed units in three completed days.}
+                    startsAt: {type: string, description: UTC ISO timestamp in years 2000–9999 for offers and scheduled pricing rules.}
+                    endsAt: {type: string, description: UTC ISO timestamp in years 2000–9999 for offers and scheduled pricing rules.}
+                    enabled: {type: boolean, description: Required for pricing-save and pricing-toggle.}
+                    quoteToken: {type: string, minLength: 64, maxLength: 64, description: Submit the latest quote token on checkout. A legacy client may omit it only when the current discount is zero. A changed quote returns 409.}
                     paymentMethod: {type: string, enum: [COD, VIETQR], description: Optional; defaults to COD. VietQR is a demo integration.}
                     resolution: {type: string, enum: [PAID_RECORDED, REFUNDED, EXTRA_REFUNDED], description: Outcome for payment-resolve}
                     transactionId: {type: string, maxLength: 100, description: Required for EXTRA_REFUNDED. Identifies the pending additional receipt on this order.}
                     collectedAmount: {type: integer, minimum: 0, description: Required to close an unpaid COD delivery or supplement a legacy delivery. Must equal the current COD amount due.}
-                    action: {type: string, enum: [cart-set, cart-clear, cart-refresh, checkout, order-cancel, order-status, order-paid, order-recipient, payment-resolve, product-save, product-delete, category-save, category-delete, catalog-toggle, shipping-save, catalog-image-intent]}
+                    action: {type: string, enum: [cart-set, cart-clear, cart-refresh, checkout, order-cancel, order-status, order-paid, order-recipient, payment-resolve, product-save, product-delete, category-save, category-delete, catalog-toggle, shipping-save, catalog-image-intent, discount-save, discount-toggle, pricing-save, pricing-toggle, pricing-floor]}
       responses:
         '200': {description: 'Persisted record or acknowledgement. COD orders may include codDueAmount after adjustment and codCollectedAmount after collection.'}
         '401': {$ref: '#/components/responses/Error'}
@@ -314,6 +429,76 @@ components:
     Id: {in: path, name: id, required: true, schema: {type: string, format: uuid}}
     Idempotency: {in: header, name: Idempotency-Key, required: true, schema: {type: string, pattern: '^[a-zA-Z0-9-]{16,80}$'}}
   schemas:
+    EffectivePrice:
+      type: object
+      required: [amount, basePrice, source]
+      properties:
+        amount: {type: integer, minimum: 1}
+        basePrice: {type: integer, minimum: 1}
+        source: {type: string, enum: [BASE, SCHEDULE, STOCK, DEMAND]}
+        ruleId: {type: string, format: uuid, nullable: true}
+        name: {type: string, nullable: true}
+        endsAt: {type: string, format: date-time, nullable: true}
+    PricingTarget:
+      type: object
+      required: [productId, price]
+      properties:
+        productId: {type: string, format: uuid}
+        price: {type: integer, minimum: 1, maximum: 10000000}
+    PricingRule:
+      type: object
+      required: [id, revision, name, type, enabled, threshold, targets]
+      properties:
+        id: {type: string, format: uuid}
+        revision: {type: integer, minimum: 1}
+        name: {type: string, maxLength: 90}
+        type: {type: string, enum: [SCHEDULE, STOCK, DEMAND]}
+        enabled: {type: boolean}
+        startsAt: {type: string, format: date-time, nullable: true}
+        endsAt: {type: string, format: date-time, nullable: true}
+        threshold: {type: integer, minimum: 0, maximum: 1000000}
+        targets: {type: array, minItems: 1, maxItems: 100, items: {$ref: '#/components/schemas/PricingTarget'}}
+    DiscountRule:
+      type: object
+      required: [name, scope, condition, minimum, method, value, startsAt, endsAt, featured, priority]
+      properties:
+        name: {type: string, maxLength: 90}
+        scope: {type: string, enum: [PRODUCT, PRODUCTS, CART]}
+        productId: {type: string, description: Product UUID for PRODUCT scope and empty for other scopes}
+        productIds:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items: {type: string, format: uuid}
+          description: Required with at least one item for PRODUCTS mutations. Public offers list the currently available targets and include the single target for PRODUCT scope.
+        condition: {type: string, enum: [QUANTITY, SUBTOTAL]}
+        minimum: {type: integer, minimum: 1, maximum: 100000000, description: Minimum units or VND in the selected scope}
+        method: {type: string, enum: [PERCENT, FIXED]}
+        value: {type: integer, minimum: 1, maximum: 100000000, description: Percent 1–100 or fixed whole VND capped by eligible merchandise}
+        startsAt: {type: string, format: date-time}
+        endsAt: {type: string, format: date-time}
+        featured: {type: boolean}
+        priority: {type: integer, minimum: 0, maximum: 999}
+        message: {type: string, maxLength: 120}
+    AdminDiscount:
+      allOf:
+        - {$ref: '#/components/schemas/DiscountRule'}
+        - type: object
+          required: [id, revision, enabled]
+          properties:
+            id: {type: string, format: uuid}
+            revision: {type: integer, minimum: 1}
+            enabled: {type: boolean}
+    PublicDiscount:
+      allOf:
+        - {$ref: '#/components/schemas/DiscountRule'}
+        - type: object
+          required: [id, revision, productName, productSlug]
+          properties:
+            id: {type: string, format: uuid}
+            revision: {type: integer, minimum: 1}
+            productName: {type: string}
+            productSlug: {type: string}
     Mutation:
       type: object
       required: [action]

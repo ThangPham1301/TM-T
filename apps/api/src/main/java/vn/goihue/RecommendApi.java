@@ -17,7 +17,11 @@ import java.util.*;
 public class RecommendApi {
     final PlatformApi app;
     final JdbcTemplate db;
-    public RecommendApi(PlatformApi app, JdbcTemplate db){this.app=app;this.db=db;}
+    final PricingService pricing;
+    final CatalogService catalog;
+    public RecommendApi(PlatformApi app, JdbcTemplate db, PricingService pricing, CatalogService catalog){
+        this.app=app;this.db=db;this.pricing=pricing;this.catalog=catalog;
+    }
 
     static String s(Object v){return v==null?"":v.toString();}
     static int n(Object v){
@@ -45,7 +49,7 @@ public class RecommendApi {
                               @RequestParam(defaultValue="4") int limit){
         int lim=Math.max(1,Math.min(8,limit));
         // Sellable catalog, in catalog order (same query shape as GET /products).
-        var products=db.query("SELECT r.data::text FROM records r WHERE kind='product' AND data->>'active'='true' AND EXISTS(SELECT 1 FROM records c WHERE c.kind='category' AND c.data->>'code'=r.data->>'category' AND c.data->>'active'='true') ORDER BY created_at",(r,i)->app.decode(r.getString(1)));
+        var products = catalog.publicProducts();
         Map<String,Map<String,Object>> sellable=new LinkedHashMap<>();
         for(var p:products)if(n(p.get("stock"))>0)sellable.put(s(p.get("id")),p);
         // Popularity: units sold across every order that was not cancelled.
@@ -74,11 +78,12 @@ public class RecommendApi {
         }
         if("product".equals(surface)&&productId!=null)ranked.removeIf(p->productId.equals(s(p.get("id"))));
         List<Map<String,Object>> out=new ArrayList<>();
+        var book = pricing.book(Instant.now());
         for(var p:ranked){
             if(out.size()>=lim)break;
             var v=new LinkedHashMap<String,Object>();
             v.put("id",p.get("id"));v.put("slug",p.get("slug"));v.put("name",p.get("name"));
-            v.put("price",p.get("price"));v.put("image",p.get("image"));
+            pricing.publish(v, pricing.resolve(p, book));v.put("image",p.get("image"));
             v.put("stock",p.get("stock"));v.put("category",p.get("category"));
             out.add(v);
         }

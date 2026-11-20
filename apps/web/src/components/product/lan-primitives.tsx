@@ -1,13 +1,19 @@
 import Link from "next/link";
-import { money, type Row } from "@/lib/store";
+import type { Row } from "@/lib/store";
+import { priceSource } from "@/lib/pricing";
+import { ProductPrice } from "../pricing/price-display";
 import { ProductImage } from "./product-image";
+import type { Offer } from "@/lib/discounts";
+import { ProductOffer } from "../discounts/offer-display";
 export const ART = "/goi-hue/assets/";
 export function ProductCard({
   product: p,
   category,
+  offer,
 }: {
   product: Row;
   category?: string;
+  offer?: Offer;
 }) {
   return (
     <article className="lan-product lan-frame">
@@ -25,8 +31,9 @@ export function ProductCard({
           <Link href={`/products/${p.slug}`}>{String(p.name)}</Link>
         </h3>
         <p>{String(p.description ?? "")}</p>
+        {Number(p.stock) > 0 && (priceSource(p)?.source ?? "BASE") === "BASE" && <ProductOffer offer={offer} />}
         <div>
-          <strong>{money(p.price)}</strong>
+          <ProductPrice product={p} />
           <Link className="lan-button" href={`/products/${p.slug}`}>
             Chọn mua →
           </Link>

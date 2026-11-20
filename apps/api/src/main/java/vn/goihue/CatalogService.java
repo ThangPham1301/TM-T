@@ -11,6 +11,15 @@ public class CatalogService {
     public CatalogService(PlatformApi app,JdbcTemplate db){this.app=app;this.db=db;}
     Map<String,Object> get(String id,String kind){return app.record(id,kind,Map.of("role","ADMIN"));}
     public List<Map<String,Object>> categories(boolean all){return db.query("SELECT data::text FROM records WHERE kind='category'"+(all?"":" AND data->>'active'='true'")+" ORDER BY (data->>'sortOrder')::int,data->>'name'",(r,i)->app.decode(r.getString(1)));}
+    List<Map<String, Object>> publicProducts() {
+        return db.query("""
+                SELECT p.data::text FROM records p
+                WHERE p.kind='product' AND p.data->>'active'='true'
+                  AND EXISTS (SELECT 1 FROM records c WHERE c.kind='category'
+                      AND c.data->>'code'=p.data->>'category' AND c.data->>'active'='true')
+                ORDER BY p.created_at, p.id
+                """, (rs, index) -> app.decode(rs.getString(1)));
+    }
     boolean categoryActive(String code){return db.queryForObject("SELECT count(*) FROM records WHERE kind='category' AND data->>'code'=? AND data->>'active'='true'",Integer.class,code)>0;}
     boolean visible(Map<String,Object> p){return Boolean.TRUE.equals(p.get("active"))&&categoryActive(app.str(p,"category"));}
     public Map<String,Object> shipping(){return db.query("SELECT data::text FROM records WHERE kind='settings' AND data->>'code'='shipping'",(r,i)->app.decode(r.getString(1))).getFirst();}
@@ -28,6 +37,7 @@ public class CatalogService {
         app.require(categoryActive(category),"Chọn danh mục đang hoạt động.");
         app.require(db.queryForObject("SELECT count(*) FROM records WHERE kind='product' AND data->>'slug'=? AND id<>?",Integer.class,slug,edit?app.uuid(app.str(p,"id")):UUID.randomUUID())==0,"Slug đã tồn tại.");
         int price=app.number(b,"price"),stock=app.number(b,"stock");app.require(price>0&&price<=10_000_000&&stock>=0&&stock<=1_000_000,"Giá hoặc tồn kho không hợp lệ.");
+        app.require(!p.containsKey("priceFloor") || price >= app.number(p, "priceFloor"), "Giá thường không được thấp hơn giá sàn.");
         p.put("slug",slug);p.put("category",category);p.put("name",app.text(b,"name",150));p.put("description",app.text(b,"description",4000));p.put("price",price);p.put("stock",stock);p.put("active",Boolean.TRUE.equals(b.get("active")));if(!p.containsKey("image"))p.put("image","/images/product-placeholder.svg");image(p,b);if(edit)p.put("revision",app.number(p,"revision")+1);return app.save("product",null,p);
     }
     public Map<String,Object> mutation(Map<String,Object> a,Map<String,Object> b){

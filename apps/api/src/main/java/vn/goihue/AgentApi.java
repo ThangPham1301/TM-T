@@ -40,9 +40,10 @@ public class AgentApi {
     final JdbcTemplate db;
     final CatalogService catalog;
     final RecommendApi recommend;
+    final PricingService pricing;
     final ObjectMapper json;
-    public AgentApi(PlatformApi app, JdbcTemplate db, CatalogService catalog, RecommendApi recommend, ObjectMapper json){
-        this.app=app;this.db=db;this.catalog=catalog;this.recommend=recommend;this.json=json;
+    public AgentApi(PlatformApi app, JdbcTemplate db, CatalogService catalog, RecommendApi recommend, PricingService pricing, ObjectMapper json){
+        this.app=app;this.db=db;this.catalog=catalog;this.recommend=recommend;this.pricing=pricing;this.json=json;
     }
     @Value("${APP_BEDROCK_MODEL:amazon.nova-lite-v1:0}") String modelId;
     @Value("${APP_BEDROCK_REGION:ap-southeast-2}") String bedrockRegion;
@@ -84,9 +85,13 @@ public class AgentApi {
 
     @SuppressWarnings("unchecked")
     Grounding ground(Map<String,Object> actor, String message, Long budget){
-        var products=db.query("SELECT r.data::text FROM records r WHERE kind='product' AND data->>'active'='true' AND EXISTS(SELECT 1 FROM records c WHERE c.kind='category' AND c.data->>'code'=r.data->>'category' AND c.data->>'active'='true') ORDER BY created_at",(r,i)->app.decode(r.getString(1)));
+        var products = catalog.publicProducts();
+        var book = pricing.book(java.time.Instant.now());
         List<Map<String,Object>> sellable=new ArrayList<>();
-        for(var p:products)if(n(p.get("stock"))>0)sellable.add(p);
+        for(var p:products) if(n(p.get("stock"))>0) {
+            pricing.publish(p, pricing.resolve(p, book));
+            sellable.add(p);
+        }
         var shipping=catalog.shipping();
         // Candidates come from the recommendation engine, never invented.
         List<Map<String,Object>> candidates=new ArrayList<>();

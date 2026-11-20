@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import java.time.Instant;
@@ -15,8 +16,10 @@ public class CommerceApi {
     final PlatformApi app;
     final JdbcTemplate db;
     final CatalogService catalog;
+    final DiscountService discounts;
+    final PricingService pricing;
     final com.fasterxml.jackson.databind.ObjectMapper json;
-    public CommerceApi(PlatformApi app,JdbcTemplate db,CatalogService catalog,com.fasterxml.jackson.databind.ObjectMapper json){this.app=app;this.db=db;this.catalog=catalog;this.json=json;}
+    public CommerceApi(PlatformApi app,JdbcTemplate db,CatalogService catalog,DiscountService discounts,PricingService pricing,com.fasterxml.jackson.databind.ObjectMapper json){this.app=app;this.db=db;this.catalog=catalog;this.discounts=discounts;this.pricing=pricing;this.json=json;}
     @Value("${APP_BANK_BIN:970422}") String bankBin;
     @Value("${APP_BANK_ACCOUNT:012345678901}") String bankAccount;
     @Value("${APP_BANK_NAME:GOI HUE}") String bankName;
@@ -38,24 +41,118 @@ public class CommerceApi {
         app.save("system",null,new LinkedHashMap<>(Map.of("id","00000000-0000-4000-8000-000000000601","code","catalog-initialized")));
     }
     Map<String,Object> product(String id){return catalog.get(id,"product");}
-    @GetMapping("/products") public Object products(){return db.query("SELECT r.data::text FROM records r WHERE kind='product' AND data->>'active'='true' AND EXISTS(SELECT 1 FROM records c WHERE c.kind='category' AND c.data->>'code'=r.data->>'category' AND c.data->>'active'='true') ORDER BY created_at",(r,i)->app.decode(r.getString(1)));}
-    @GetMapping("/products/{slug}") public Object detail(@PathVariable String slug){var rows=db.query("SELECT data::text FROM records WHERE kind='product' AND data->>'slug'=?",(r,i)->app.decode(r.getString(1)),slug);if(rows.isEmpty()||!catalog.visible(rows.getFirst()))throw new PlatformApi.Problem(404,"Không tìm thấy sản phẩm.");return rows.getFirst();}
+    @GetMapping("/products") public Object products() {
+        var book = pricing.book(Instant.now());
+        var products = catalog.publicProducts();
+        products.forEach(product -> pricing.publish(product, pricing.resolve(product, book)));
+        return products;
+    }
+
+    @GetMapping("/pricing") public Object pricingFeed() {
+        var book = pricing.book(Instant.now());
+        var prices = new LinkedHashMap<String, PricingService.Price>();
+        for (var product : catalog.publicProducts()) {
+            prices.put(app.str(product, "id"), pricing.resolve(product, book));
+        }
+        var response = new LinkedHashMap<String, Object>();
+        response.put("asOf", book.asOf());
+        response.put("nextChangeAt", book.nextChangeAt());
+        response.put("prices", prices);
+        return response;
+    }
+
+    @GetMapping("/admin/pricing") public Object pricingRules(HttpServletRequest req) {
+        app.permission(app.actor(req), "pricing.manage");
+        return pricing.rules();
+    }
+    @GetMapping("/products/{slug}") public Object detail(@PathVariable String slug){var rows=db.query("SELECT data::text FROM records WHERE kind='product' AND data->>'slug'=?",(r,i)->app.decode(r.getString(1)),slug);if(rows.isEmpty()||!catalog.visible(rows.getFirst()))throw new PlatformApi.Problem(404,"Không tìm thấy sản phẩm.");var product=rows.getFirst();pricing.publish(product,pricing.resolve(product,pricing.book(Instant.now())));return product;}
     @GetMapping("/admin/products") public Object adminProducts(HttpServletRequest req){var a=app.actor(req);app.permission(a,"catalog.manage");return app.list("product",a);}
+
+    @GetMapping("/discounts") public Object publicDiscounts() {
+        return discounts.publicFeed();
+    }
+
+    @GetMapping("/admin/discounts") public Object adminDiscounts(HttpServletRequest req) {
+        var actor = app.actor(req);
+        app.permission(actor, "discount.manage");
+        return app.list("discount", actor);
+    }
 
     List<Map<String,Object>> cartOf(UUID uid){return db.query("SELECT data::text FROM records WHERE kind='cart' AND owner_id=? ORDER BY id",(r,i)->app.decode(r.getString(1)),uid);}
     String cartToken(UUID uid){return app.hash(app.encode(cartOf(uid)));}
     void checkCart(UUID uid,Map<String,Object> b){if(!cartToken(uid).equals(app.text(b,"cartToken",100)))throw new PlatformApi.Problem(409,"Giỏ hàng đã thay đổi. Hãy tải lại trước khi tiếp tục.");}
-    List<Map<String,Object>> cartView(UUID uid){
-        var rows=cartOf(uid);
-        for(var line:rows){var p=product(app.str(line,"productId"));line.put("currentPrice",p.get("price"));line.put("stock",p.get("stock"));line.put("available",catalog.visible(p));line.put("priceChanged",app.number(line,"price")!=app.number(p,"price"));line.put("name",p.get("name"));line.put("image",p.get("image"));}
+    List<Map<String,Object>> cartView(UUID uid, PricingService.Book book) {
+        var rows = cartOf(uid);
+        for (var line : rows) {
+            var p = product(app.str(line, "productId"));
+            var price = pricing.resolve(p, book);
+            line.put("currentPrice", price.amount());
+            line.put("currentPricing", price);
+            line.put("stock", p.get("stock"));
+            line.put("available", catalog.visible(p));
+            line.put("priceChanged", priceChanged(line, price));
+            line.put("name", p.get("name"));
+            line.put("image", p.get("image"));
+        }
         return rows;
     }
-    @GetMapping("/cart") public Object cart(HttpServletRequest req){var a=app.actor(req);app.permission(a,"cart.manage");return cartView((UUID)a.get("id"));}
-    @GetMapping("/cart/summary") @Transactional public Object summary(HttpServletRequest req){
-        app.lock();var a=app.actor(req);app.permission(a,"cart.manage");UUID uid=(UUID)a.get("id");var rows=cartView(uid);long subtotal=rows.stream().mapToLong(l->(long)app.number(l,"price")*app.number(l,"quantity")).sum();var shipping=catalog.shipping();int fee=catalog.shippingFee(subtotal);
-        return Map.of("items",rows,"cartToken",cartToken(uid),"subtotal",subtotal,"shippingFee",fee,"total",subtotal+fee,"shipping",shipping);
+
+    private boolean priceChanged(Map<String, Object> line, PricingService.Price current) {
+        String previous = line.get("pricing") instanceof Map<?, ?> snapshot
+                ? Objects.toString(snapshot.get("source"), "BASE") : "BASE";
+        return app.number(line, "price") != current.amount() || !previous.equals(current.source());
     }
-    Map<String,Object> cartSnapshot(Map<String,Object> p,int qty,UUID id,int revision){var line=new LinkedHashMap<String,Object>();line.put("id",id.toString());line.put("productId",p.get("id"));line.put("name",p.get("name"));line.put("price",p.get("price"));line.put("quantity",qty);line.put("image",p.get("image"));line.put("revision",revision);line.put("version",UUID.randomUUID().toString());return line;}
+
+    private String priceToken(List<Map<String, Object>> rows) {
+        return app.hash(app.encode(rows.stream().map(line -> {
+            var price = (PricingService.Price) line.get("currentPricing");
+            return List.of(app.str(line, "productId"), price.amount(), price.source());
+        }).toList()));
+    }
+
+    @GetMapping("/cart") public Object cart(HttpServletRequest req){var a=app.actor(req);app.permission(a,"cart.manage");return cartView((UUID)a.get("id"),pricing.book(Instant.now()));}
+    @GetMapping("/cart/summary")
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public Object summary(HttpServletRequest req){
+        var actor = app.actor(req);
+        app.permission(actor, "cart.manage");
+        UUID uid = (UUID) actor.get("id");
+        Instant now = Instant.now();
+        var book = pricing.book(now);
+        var rows = cartView(uid, book);
+        boolean blocked = rows.stream().anyMatch(row -> !Boolean.TRUE.equals(row.get("available"))
+                || app.number(row, "quantity") > app.number(row, "stock"));
+        var quote = quote(rows, blocked ? List.of() : discounts.activeOffers(now), "currentPricing");
+        var shipping = catalog.shipping();
+        int fee = catalog.shippingFee(quote.netSubtotal());
+        var result = quote.breakdown();
+        result.put("items", rows);
+        result.put("cartToken", cartToken(uid));
+        result.put("priceToken", priceToken(rows));
+        result.put("nextPriceChangeAt", book.nextChangeAt());
+        result.put("pricedAt", now);
+        result.put("quoteToken", quoteToken(quote));
+        result.put("shippingFee", fee);
+        result.put("total", quote.netSubtotal() + fee);
+        result.put("shipping", shipping);
+        if (quote.offerHint() != null) result.put("offerHint", quote.offerHint());
+        return result;
+    }
+
+    DiscountService.Quote quote(List<Map<String, Object>> rows, List<DiscountService.Offer> offers, String field) {
+        return DiscountService.calculate(rows.stream().map(row -> {
+            var price = (PricingService.Price) row.get(field);
+            return new DiscountService.Line(app.str(row, "productId"), price.amount(),
+                    app.number(row, "quantity"), price.discountEligible(), price.floor());
+        }).toList(), offers);
+    }
+
+    String quoteToken(DiscountService.Quote quote) {
+        var offer = quote.discount();
+        return app.hash(app.encode(List.of(quote.subtotal(), quote.discountAmount(),
+                offer == null ? "" : offer.id(), offer == null ? 0 : offer.revision())));
+    }
+    Map<String,Object> cartSnapshot(Map<String,Object> p,PricingService.Price price,int qty,UUID id,int revision){var line=new LinkedHashMap<String,Object>();line.put("id",id.toString());line.put("productId",p.get("id"));line.put("name",p.get("name"));line.put("price",price.amount());line.put("pricing",price);line.put("quantity",qty);line.put("image",p.get("image"));line.put("revision",revision);line.put("version",UUID.randomUUID().toString());return line;}
 
     @PostMapping("/commerce") @Transactional @SuppressWarnings("unchecked")
     public Object mutate(@RequestBody Map<String,Object> b,@RequestHeader("Idempotency-Key") String key,HttpServletRequest req){
@@ -63,25 +160,143 @@ public class CommerceApi {
         if(!previous.isEmpty()){if(!previous.getFirst().get("fingerprint").equals(fingerprint))throw new PlatformApi.Problem(409,"Khóa đã dùng cho thao tác khác.");return app.decode((String)previous.getFirst().get("result"));}
         String action=app.text(b,"action",50);Map<String,Object> result;
         switch(action){
+            case "pricing-save", "pricing-toggle", "pricing-floor" -> result = pricing.mutate(a, b);
+            case "discount-save", "discount-toggle" -> result = discounts.mutate(a, b);
             case "product-save" -> result=catalog.saveProduct(a,b);
             case "category-save","category-delete","product-delete","catalog-toggle","shipping-save","catalog-image-intent" -> result=catalog.mutation(a,b);
             case "cart-set" -> {
                 app.permission(a,"cart.manage");checkCart(uid,b);var p=product(app.text(b,"productId",50));int qty=app.number(b,"quantity");app.require(qty>=0&&qty<=100,"Số lượng từ 0 đến 100.");if(qty>0)app.require(catalog.visible(p)&&qty<=app.number(p,"stock"),"Sản phẩm không đủ tồn hoặc đã ngừng bán.");
-                UUID id=UUID.nameUUIDFromBytes((uid+":"+app.str(p,"id")).getBytes(java.nio.charset.StandardCharsets.UTF_8));if(qty==0){db.update("DELETE FROM records WHERE id=? AND owner_id=?",id,uid);result=Map.of("ok",true);}else{var old=cartOf(uid).stream().filter(l->app.str(l,"id").equals(id.toString())).findFirst();int revision=old.isPresent()?app.number(old.get(),"revision")+1:1;result=app.save("cart",uid,cartSnapshot(p,qty,id,revision));}
+                UUID id = UUID.nameUUIDFromBytes((uid + ":" + app.str(p,"id")).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                if (qty == 0) {
+                    db.update("DELETE FROM records WHERE id=? AND owner_id=?", id, uid);
+                    result = Map.of("ok", true);
+                } else {
+                    var existing = cartOf(uid).stream().filter(line -> app.str(line, "id").equals(id.toString())).findFirst();
+                    var price = pricing.resolve(p, pricing.book(Instant.now()));
+                    boolean hasExpectedPrice = b.containsKey("expectedUnitPrice");
+                    if (hasExpectedPrice && (price.amount() != app.number(b, "expectedUnitPrice")
+                            || !price.source().equals(app.str(b, "expectedPriceSource"))))
+                        throw new PlatformApi.Problem(409, "Giá vừa thay đổi. Xem mức giá mới trước khi thêm vào giỏ.");
+                    if (existing.isPresent() && !hasExpectedPrice) {
+                        var line = existing.get();
+                        line.put("quantity", qty);
+                        line.put("version", UUID.randomUUID().toString());
+                        line.put("revision", app.number(line, "revision") + 1);
+                        result = app.save("cart", uid, line);
+                    } else {
+                        int revision = existing.map(line -> app.number(line, "revision") + 1).orElse(1);
+                        result = app.save("cart", uid, cartSnapshot(p, price, qty, id, revision));
+                    }
+                }
             }
             case "cart-clear","cart-refresh" -> {
                 app.permission(a,"cart.manage");checkCart(uid,b);
                 if(action.equals("cart-clear"))db.update("DELETE FROM records WHERE kind='cart' AND owner_id=?",uid);
-                else for(var line:cartOf(uid)){var p=product(app.str(line,"productId"));app.save("cart",uid,cartSnapshot(p,app.number(line,"quantity"),app.uuid(app.str(line,"id")),app.number(line,"revision")+1));}
+                else {
+                    var rows = cartView(uid, pricing.book(Instant.now()));
+                    String submitted = app.str(b, "priceToken");
+                    if (!submitted.isEmpty() && !submitted.equals(priceToken(rows)))
+                        throw new PlatformApi.Problem(409, "Giá lại thay đổi. Kiểm tra và xác nhận mức giá mới.");
+                    for (var line : rows) {
+                        line.put("price", line.get("currentPrice"));
+                        line.put("pricing", line.get("currentPricing"));
+                        for (String field : List.of("currentPrice", "currentPricing", "stock", "available", "priceChanged"))
+                            line.remove(field);
+                        line.put("revision", app.number(line, "revision") + 1);
+                        line.put("version", UUID.randomUUID().toString());
+                        app.save("cart", uid, line);
+                    }
+                }
                 result=Map.of("ok",true);
             }
             case "checkout" -> {
-                app.permission(a,"order.create");checkCart(uid,b);var shipping=catalog.shipping();String pauseMessage=app.str(shipping,"pauseMessage");app.require(Boolean.TRUE.equals(shipping.get("enabled")),pauseMessage.isEmpty()?"Cửa hàng đang tạm ngừng nhận đơn.":pauseMessage);catalog.revision(shipping,Map.of("revision",app.number(b,"shippingRevision")));
-                var cart=cartOf(uid);app.require(!cart.isEmpty(),"Giỏ hàng đang trống.");var items=new ArrayList<Map<String,Object>>();long subtotal=0;
-                for(var line:cart){var p=product(app.str(line,"productId"));int qty=app.number(line,"quantity");app.require(catalog.visible(p)&&app.number(p,"stock")>=qty,"Sản phẩm không đủ tồn hoặc đã ngừng bán: "+app.str(p,"name"));app.require(app.number(p,"price")==app.number(line,"price"),"Giá đã thay đổi. Cập nhật giỏ hàng trước khi đặt.");subtotal+=(long)app.number(p,"price")*qty;var item=new LinkedHashMap<String,Object>();item.put("productId",p.get("id"));item.put("name",p.get("name"));item.put("slug",p.get("slug"));item.put("image",p.get("image"));item.put("quantity",qty);item.put("price",p.get("price"));items.add(item);p.put("stock",app.number(p,"stock")-qty);p.put("revision",app.number(p,"revision")+1);app.save("product",null,p);}
-                app.require(subtotal<=100_000_000,"Đơn vượt hạn mức 100 triệu đồng.");int fee=catalog.shippingFee(subtotal);var order=new LinkedHashMap<String,Object>();order.put("number","GH-"+UUID.randomUUID().toString().substring(0,8).toUpperCase());order.put("items",items);order.put("subtotal",subtotal);order.put("shippingFee",fee);order.put("shippingRevision",shipping.get("revision"));order.put("total",subtotal+fee);order.put("status","PLACED");String method=app.str(b,"paymentMethod");if(method.isEmpty())method="COD";app.require(Set.of("COD","VIETQR").contains(method),"Phương thức thanh toán không được hỗ trợ.");order.put("paymentMethod",method);order.put("paymentStatus","UNPAID");recipient(order,app.str(b,"addressId").isEmpty()?b:app.record(app.str(b,"addressId"),"address",a));String firstNote;
-                if(method.equals("VIETQR")){var payment=new LinkedHashMap<String,Object>();long total=subtotal+fee;payment.put("method","VIETQR");payment.put("amount",total);payment.put("content",app.str(order,"number"));payment.put("bankBin",bankBin);payment.put("bankAccount",bankAccount);payment.put("bankName",bankName);payment.put("payload",VietQr.payload(bankBin,bankAccount,bankName,total,app.str(order,"number")));payment.put("status","PENDING");payment.put("expiresAt",Instant.now().plusSeconds(paymentTtlMinutes*60L).toString());order.put("payment",payment);firstNote="Đã tiếp nhận đơn hàng, chờ thanh toán VietQR trong "+paymentTtlMinutes+" phút.";}else firstNote="Đã tiếp nhận đơn hàng, thanh toán khi nhận hàng";
-                order.put("history",new ArrayList<>(List.of(Map.of("at",Instant.now().toString(),"status","PLACED","note",firstNote))));result=app.save("order",uid,order);db.update("DELETE FROM records WHERE owner_id=? AND kind='cart'",uid);
+                app.permission(a, "order.create");
+                checkCart(uid, b);
+                var shipping = catalog.shipping();
+                String pauseMessage = app.str(shipping, "pauseMessage");
+                app.require(Boolean.TRUE.equals(shipping.get("enabled")),
+                        pauseMessage.isEmpty() ? "Cửa hàng đang tạm ngừng nhận đơn." : pauseMessage);
+                catalog.revision(shipping, Map.of("revision", app.number(b, "shippingRevision")));
+
+                Instant now = Instant.now();
+                var book = pricing.book(now);
+                var cart = cartOf(uid);
+                app.require(!cart.isEmpty(), "Giỏ hàng đang trống.");
+                var items = new ArrayList<Map<String, Object>>();
+                var products = new LinkedHashMap<String, Map<String, Object>>();
+                for (var line : cart) {
+                    String productId = app.str(line, "productId");
+                    var p = product(productId);
+                    int quantity = app.number(line, "quantity");
+                    app.require(catalog.visible(p) && app.number(p, "stock") >= quantity,
+                            "Sản phẩm không đủ tồn hoặc đã ngừng bán: " + app.str(p, "name"));
+                    var price = pricing.resolve(p, book);
+                    if (priceChanged(line, price))
+                        throw new PlatformApi.Problem(409, "Giá bán đã thay đổi. Kiểm tra và xác nhận tổng tiền mới.");
+                    var item = new LinkedHashMap<String, Object>();
+                    item.put("productId", productId);
+                    item.put("name", p.get("name"));
+                    item.put("slug", p.get("slug"));
+                    item.put("image", p.get("image"));
+                    item.put("quantity", quantity);
+                    item.put("price", price.amount());
+                    item.put("pricing", price);
+                    items.add(item);
+                    products.put(productId, p);
+                }
+                var quote = quote(items, discounts.activeOffers(now), "pricing");
+                String submittedQuote = app.str(b, "quoteToken");
+                if (!(submittedQuote.isEmpty() && quote.discountAmount() == 0) && !quoteToken(quote).equals(submittedQuote))
+                    throw new PlatformApi.Problem(409, "Ưu đãi trong giỏ đã thay đổi. Kiểm tra tổng tiền mới trước khi xác nhận.");
+                app.require(quote.subtotal() <= 100_000_000, "Đơn vượt hạn mức 100 triệu đồng.");
+
+                for (var item : items) {
+                    String productId = app.str(item, "productId");
+                    long reduction = quote.lineDiscounts().getOrDefault(productId, 0L);
+                    int quantity = app.number(item, "quantity");
+                    if (reduction > 0) {
+                        item.put("discountAmount", reduction);
+                        item.put("netTotal", (long) app.number(item, "price") * quantity - reduction);
+                    }
+                    var p = products.get(productId);
+                    p.put("stock", app.number(p, "stock") - quantity);
+                    p.put("revision", app.number(p, "revision") + 1);
+                    app.save("product", null, p);
+                }
+                int fee = catalog.shippingFee(quote.netSubtotal());
+                long total = quote.netSubtotal() + fee;
+                var order = quote.breakdown();
+                String number = "GH-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+                order.put("number", number);
+                order.put("items", items);
+                order.put("shippingFee", fee);
+                order.put("shippingRevision", shipping.get("revision"));
+                order.put("total", total);
+                order.put("status", "PLACED");
+                String method = app.str(b, "paymentMethod");
+                if (method.isEmpty()) method = "COD";
+                app.require(Set.of("COD", "VIETQR").contains(method), "Phương thức thanh toán không được hỗ trợ.");
+                order.put("paymentMethod", method);
+                order.put("paymentStatus", "UNPAID");
+                recipient(order, app.str(b, "addressId").isEmpty() ? b : app.record(app.str(b, "addressId"), "address", a));
+                String firstNote = "Đã tiếp nhận đơn hàng, thanh toán khi nhận hàng";
+                if (method.equals("VIETQR")) {
+                    var payment = new LinkedHashMap<String, Object>();
+                    payment.put("method", "VIETQR");
+                    payment.put("amount", total);
+                    payment.put("content", number);
+                    payment.put("bankBin", bankBin);
+                    payment.put("bankAccount", bankAccount);
+                    payment.put("bankName", bankName);
+                    payment.put("payload", VietQr.payload(bankBin, bankAccount, bankName, total, number));
+                    payment.put("status", "PENDING");
+                    payment.put("expiresAt", now.plusSeconds(paymentTtlMinutes * 60L).toString());
+                    order.put("payment", payment);
+                    firstNote = "Đã tiếp nhận đơn hàng, chờ thanh toán VietQR trong " + paymentTtlMinutes + " phút.";
+                }
+                order.put("history", new ArrayList<>(List.of(Map.of("at", now.toString(), "status", "PLACED", "note", firstNote))));
+                result = app.save("order", uid, order);
+                db.update("DELETE FROM records WHERE owner_id=? AND kind='cart'", uid);
             }
             case "order-cancel","order-status","order-paid","order-recipient","payment-resolve" -> {
                 var order=app.record(app.text(b,"id",50),"order",a);catalog.revision(order,b);String status=app.str(order,"status"),note=app.text(b,"note",2000);
@@ -94,6 +309,7 @@ public class CommerceApi {
                             "Đơn đã thu tiền hoặc đang đối soát. Vui lòng liên hệ hỗ trợ để xử lý.");
                     releaseOrderStock(order);
                     order.put("status","CANCELLED");
+                    order.put("pricingClosedAt", Instant.now().toString());
                 }else if(action.equals("order-recipient")){
                     app.require(Set.of("PLACED","CONFIRMED").contains(status),"Chỉ sửa thông tin nhận trước khi đóng gói.");recipient(order,b);
                 }else{
@@ -131,6 +347,8 @@ public class CommerceApi {
                             releaseOrderStock(order);
                             order.put("returnedAt", Instant.now().toString());
                         }
+                        if (next.equals("CONFIRMED")) order.put("confirmedAt", Instant.now().toString());
+                        if (next.equals("RETURNED")) order.put("pricingClosedAt", Instant.now().toString());
                         order.put("status", next);
                     }
                 }
@@ -175,6 +393,7 @@ public class CommerceApi {
             if (Set.of("PLACED", "CONFIRMED", "PACKED").contains(order.get("status"))) {
                 releaseOrderStock(order);
                 order.put("status", "CANCELLED");
+                order.put("pricingClosedAt", now);
             }
         } else {
             throw new PlatformApi.Problem(422, "Cách xử lý đối soát không hợp lệ.");

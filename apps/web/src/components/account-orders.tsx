@@ -887,6 +887,12 @@ export function AccountOrders({
                             )}
                           </span>
                         </div>
+                        {Number(order.discountAmount) > 0 && (
+                          <div className="orders-price-row">
+                            <span>{String((order.discount as Row | undefined)?.name ?? "Ưu đãi")}</span>
+                            <strong>−{money(Number(order.discountAmount))}</strong>
+                          </div>
+                        )}
                         <div className="orders-price-row">
                           <span>Phí vận chuyển:</span>
                           <span

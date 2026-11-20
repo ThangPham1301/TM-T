@@ -271,6 +271,7 @@ public class PaymentApi {
                 app.save("product", null, p);
             }
             order.put("status", "CANCELLED");
+            order.put("pricingClosedAt", Instant.now().toString());
             ((List<Object>) order.get("history")).add(Map.of(
                     "at", Instant.now().toString(),
                     "status", "CANCELLED",

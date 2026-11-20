@@ -3,8 +3,15 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, type Row } from "@/lib/store";
 import { ProductImage } from "./product/product-image";
+import { offerForProduct } from "@/lib/discounts";
+import { usePublicOffers } from "./discounts/use-public-offers";
+import { applyPricing, priceSource } from "@/lib/pricing";
+import { usePricing } from "./pricing/use-pricing";
+import pricingStyles from "./pricing/price-display.module.css";
 import { ART, ProductCard, LoadState } from "./product/lan-primitives";
 export function HomeExperience() {
+  const offers = usePublicOffers();
+  const { feed } = usePricing();
   const [products, setProducts] = useState<Row[]>([]),
     [categories, setCategories] = useState<Row[]>([]),
     [category, setCategory] = useState("");
@@ -45,10 +52,12 @@ export function HomeExperience() {
       live = false;
     };
   }, []);
-  const visible = products
+  const pricedProducts = products.map((p) => applyPricing(p, feed));
+  const hasScheduledPrices = pricedProducts.some((p) => Number(p.stock) > 0 && priceSource(p)?.source === "SCHEDULE");
+  const visible = pricedProducts
     .filter((p) => !category || p.category === category)
     .slice(0, 6);
-  const gifts = products
+  const gifts = pricedProducts
     .filter((p) =>
       /qu[aà]|gift/i.test(
         `${p.category} ${categories.find((c) => c.code === p.category)?.name ?? ""}`,
@@ -83,6 +92,10 @@ export function HomeExperience() {
           />
         </div>
       </section>
+      {hasScheduledPrices && <section className={pricingStyles.banner} aria-label="Giá giờ vàng">
+        <div><strong>Giá giờ vàng</strong><p>Xem giá đang áp dụng cho những thức quà được chọn.</p></div>
+        <Link className="lan-button" href="/products?pricing=scheduled">Xem sản phẩm →</Link>
+      </section>}
       <section className="lan-values" aria-label="Giá trị Gói Huế">
         {[
           ["Tinh hoa truyền thống", "Những thức quà gắn với phong vị Cố Đô."],
@@ -134,6 +147,7 @@ export function HomeExperience() {
               <ProductCard
                 key={p.id}
                 product={p}
+                offer={offerForProduct(offers, p.id)}
                 category={String(
                   categories.find((c) => c.code === p.category)?.name ??
                     p.category,
@@ -154,10 +168,11 @@ export function HomeExperience() {
             <Link href="/products">Xem tất cả →</Link>
           </header>
           <div className="lan-products">
-            {recs.map((p) => (
+            {recs.map((row) => applyPricing(row, feed)).map((p) => (
               <ProductCard
                 key={p.id}
                 product={p}
+                offer={offerForProduct(offers, p.id)}
                 category={String(
                   categories.find((c) => c.code === p.category)?.name ??
                     p.category,
@@ -177,7 +192,7 @@ export function HomeExperience() {
         </header>
         <div className="lan-gift-grid">
           {gifts.map((p) => (
-            <ProductCard key={p.id} product={p} />
+            <ProductCard key={p.id} product={p} offer={offerForProduct(offers, p.id)} />
           ))}
           {!loading && !error && !gifts.length && (
             <p>

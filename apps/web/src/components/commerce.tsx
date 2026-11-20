@@ -2,6 +2,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, type Row } from "@/lib/store";
+import { offerForProduct } from "@/lib/discounts";
+import { applyPricing, priceSource } from "@/lib/pricing";
+import { usePricing } from "./pricing/use-pricing";
+import { usePublicOffers } from "./discounts/use-public-offers";
 import {
   ProductCard,
   LoadState,
@@ -14,6 +18,13 @@ export function Catalog({ slug }: { slug?: string }) {
   return slug ? <ProductDetail slug={slug} /> : <Collection />;
 }
 function Collection() {
+  const offers = usePublicOffers();
+  const { feed } = usePricing();
+  const [scheduled, setScheduled] = useState(false);
+  const [discountId, setDiscountId] = useState("");
+  const group = offers.find(
+    (offer) => offer.scope === "PRODUCTS" && offer.id === discountId,
+  );
   const [products, setProducts] = useState<Row[]>([]),
     [categories, setCategories] = useState<Row[]>([]),
     [loading, setLoading] = useState(true),
@@ -35,6 +46,8 @@ function Collection() {
         setCategories(c);
         setCategory(params.get("category") ?? "");
         setQuery(params.get("q") ?? "");
+        setDiscountId(params.get("discount") ?? "");
+        setScheduled(params.get("pricing") === "scheduled");
         setError("");
       })
       .catch((e) => {
@@ -54,8 +67,10 @@ function Collection() {
       .replace(/đ/g, "d")
       .replace(/Đ/g, "D")
       .toLocaleLowerCase("vi");
-  const filtered = products.filter(
+  const filtered = products.map((product) => applyPricing(product, feed)).filter(
     (p) =>
+      (!scheduled || (Number(p.stock) > 0 && priceSource(p)?.source === "SCHEDULE")) &&
+      (!group || group.productIds?.includes(p.id)) &&
       (!query ||
         normalize(`${p.name} ${p.description}`).includes(normalize(query))) &&
       (!category || p.category === category) &&
@@ -79,6 +94,8 @@ function Collection() {
     rows = filtered.slice((current - 1) * 9, current * 9);
   function reset() {
     setQuery("");
+    setDiscountId("");
+    setScheduled(false);
     setCategory("");
     setPrice("");
     setStock(false);
@@ -128,6 +145,27 @@ function Collection() {
               "Tất cả đặc sản",
           )}
         </span>
+        {group && (
+          <button
+            type="button"
+            onClick={() => {
+              setDiscountId("");
+              setPage(1);
+              const url = new URL(window.location.href);
+              url.searchParams.delete("discount");
+              window.history.replaceState(null, "", url);
+            }}
+          >
+            {group.name} ×
+          </button>
+        )}
+        {scheduled && <button type="button" onClick={() => {
+          setScheduled(false);
+          setPage(1);
+          const url = new URL(window.location.href);
+          url.searchParams.delete("pricing");
+          window.history.replaceState(null, "", url);
+        }}>Giá giờ vàng ×</button>}
         {query && (
           <button onClick={() => setQuery("")}>Từ khóa: {query} ×</button>
         )}
@@ -238,6 +276,7 @@ function Collection() {
               <ProductCard
                 key={p.id}
                 product={p}
+                offer={offerForProduct(offers, p.id)}
                 category={String(
                   categories.find((c) => c.code === p.category)?.name ??
                     p.category,

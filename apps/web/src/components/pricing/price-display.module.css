@@ -1,0 +1,46 @@
+.price {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+.price del {
+  color: var(--gh-text-muted);
+  font-size: var(--gh-text-sm);
+}
+.label {
+  padding: 2px 7px;
+  border-radius: var(--gh-radius-pill);
+  background: var(--gh-surface);
+  color: var(--gh-primary);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+.detail {
+  flex-basis: 100%;
+  font-size: var(--gh-text-sm);
+  color: var(--gh-text-muted);
+}
+.cartPricing {
+  display: grid;
+  gap: 3px;
+  margin-block: 5px;
+  color: var(--gh-primary);
+  font-size: var(--gh-text-sm);
+}
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  margin-block: 16px;
+  border: 1px solid var(--gh-accent);
+  border-radius: var(--gh-radius-sm);
+  background: var(--gh-surface);
+  color: var(--gh-primary);
+}
+.banner p {
+  margin: 0;
+}

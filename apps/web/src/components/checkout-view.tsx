@@ -3,22 +3,29 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { money, shippingPauseMessage, type Row } from "@/lib/store";
+import type { CartSummary } from "@/lib/discounts";
+import { CartPricing } from "./pricing/price-display";
+import { DiscountPriceRow } from "./discounts/offer-display";
 import { AddressFields } from "./account-settings";
 import { ProductImage } from "./product/product-image";
 import styles from "./checkout-view.module.css";
 
-type CheckoutSummary = { items: Row[]; subtotal: number; shippingFee: number; total: number; shipping: Row };
 type CheckoutViewProps = {
-  summary: CheckoutSummary | null; user: Row; addresses: Row[]; selectedAddress?: Row;
+  summary: CartSummary | null; user: Row; addresses: Row[]; selectedAddress?: Row;
   fetching: boolean; error: string; busy: boolean; disabled: boolean; blocked: boolean; addingAddress: boolean;
+  previousTotal: number | null;
+  onAcceptPrices: () => void;
+  onAcceptTotal: () => void;
   onRefresh: () => void; onToggleAddress: () => void; onSelectAddress: (id: string) => void;
   onSaveAddress: (event: FormEvent<HTMLFormElement>) => void; onCheckout: (event: FormEvent<HTMLFormElement>) => void;
 };
 function Icon({ name }: { name: string }) { return <span className={`material-symbols-outlined ${styles.icon}`} aria-hidden="true">{name}</span>; }
 
-export function CheckoutView({ summary, user, addresses, selectedAddress, fetching, error, busy, disabled, blocked, addingAddress, onRefresh, onToggleAddress, onSelectAddress, onSaveAddress, onCheckout }: CheckoutViewProps) {
+export function CheckoutView({ summary, user, addresses, selectedAddress, fetching, error, busy, disabled, blocked, addingAddress, previousTotal, onRefresh, onAcceptPrices, onAcceptTotal, onToggleAddress, onSelectAddress, onSaveAddress, onCheckout }: CheckoutViewProps) {
   const [paymentMethod, setPaymentMethod] = useState<"COD" | "VIETQR">("COD");
   const rows = summary?.items ?? [];
+  const pricesChanged = rows.some((line) => line.priceChanged);
+  const unavailable = rows.some((line) => !line.available || Number(line.quantity) > Number(line.stock));
   const threshold = Number(summary?.shipping.freeShippingThreshold ?? 0);
   return <main className={styles.page}>
     <div className={styles.breadcrumbBand}><div className={styles.breadcrumb}>
@@ -32,7 +39,7 @@ export function CheckoutView({ summary, user, addresses, selectedAddress, fetchi
       {summary && rows.length > 0 && <div className={styles.grid}>
         <section className={styles.details}>
           <header className={styles.intro}><span className={styles.kicker}>Tiến trình xác nhận quà</span><h1>Địa chỉ gửi gắm &amp; Thông tin người nhận</h1><p>Vui lòng kiểm tra thông tin nhận hàng để Gói Huế chuẩn bị đơn chu đáo.</p></header>
-          {blocked && <p className={styles.warning} role="alert">Giỏ có thông tin thay đổi; vui lòng <Link href="/cart">quay lại giỏ hàng</Link> để xử lý trước khi đặt.</p>}
+          {unavailable && <p className={styles.warning} role="alert">Số lượng hoặc tình trạng hàng đã thay đổi. <Link href="/cart">Về giỏ hàng để điều chỉnh.</Link></p>}
           {!summary.shipping.enabled && <p className={styles.warning} role="status">{shippingPauseMessage(summary.shipping)}</p>}
           <section className={styles.card}>
             <div className={styles.cardHeading}><span className={styles.number}>1</span><h2>Địa chỉ giao nhận đặc sản</h2><button type="button" className={styles.textButton} disabled={busy} onClick={onToggleAddress}>{addingAddress ? "Đóng" : "+ Thêm địa chỉ"}</button></div>
@@ -61,16 +68,25 @@ export function CheckoutView({ summary, user, addresses, selectedAddress, fetchi
         </section>
         <aside className={styles.summary}>
           <header className={styles.summaryHeading}><div><span className={styles.kicker}>Tóm lược kiện quà</span><h2>Đơn hàng của bạn ({rows.length} món)</h2></div><Link href="/cart">Sửa ✎</Link></header>
+          {(pricesChanged || previousTotal !== null) && <div className={styles.warning}>
+            <p role="status">{previousTotal !== null
+              ? <>Tổng tiền đã đổi từ <del>{money(previousTotal)}</del> thành <strong>{money(summary.total)}</strong>. Vui lòng xác nhận trước khi đặt hàng.</>
+              : "Đơn giá đã đổi. Kiểm tra giá cũ, giá mới và tổng tiền trước khi đặt."}</p>
+            <button type="button" className={styles.secondary} disabled={disabled || unavailable}
+              onClick={pricesChanged ? onAcceptPrices : onAcceptTotal}>
+              {previousTotal !== null ? "Xác nhận tổng mới" : "Xác nhận giá mới"}
+            </button>
+          </div>}
           <div className={styles.items}>{rows.map(item => <article className={styles.item} key={item.id}>
             <ProductImage src={String(item.image ?? "")} alt={String(item.name)} width={64} height={64} className={styles.itemImage} />
             <div className={styles.itemInfo}><strong>{String(item.name)}</strong><small>Số lượng: {String(item.quantity)}</small>
-              {Boolean(item.priceChanged) && <span className={styles.itemWarning}>Giá mới: {money(item.currentPrice)}. Cập nhật trong giỏ.</span>}
+              <CartPricing line={item} />
               {!item.available ? <span className={styles.itemWarning}>Sản phẩm không còn bán.</span> : Number(item.quantity) > Number(item.stock) && <span className={styles.itemWarning}>Chỉ còn {String(item.stock)} sản phẩm.</span>}
             </div>
-            <div className={styles.itemPrice}><strong>{money(Number(item.price) * Number(item.quantity))}</strong><small>{money(item.price)} / sản phẩm</small></div>
+            <div className={styles.itemPrice}><strong>{money(Number(item.currentPrice ?? item.price) * Number(item.quantity))}</strong><small>{money(item.currentPrice ?? item.price)} / sản phẩm</small></div>
           </article>)}</div>
-          <dl className={styles.prices}><div><dt>Tạm tính ({rows.length} món)</dt><dd>{money(summary.subtotal)}</dd></div><div><dt>Phí vận chuyển</dt><dd>{money(summary.shippingFee)}</dd></div></dl>
-          {threshold > 0 && <p className={styles.shipping}>{summary.subtotal >= threshold ? "Đơn hàng đủ điều kiện miễn phí giao hàng." : `Còn ${money(threshold - summary.subtotal)} nữa để được miễn phí giao hàng.`}</p>}
+          <dl className={styles.prices}><div><dt>Tạm tính ({rows.length} món)</dt><dd>{money(summary.subtotal)}</dd></div><DiscountPriceRow summary={summary} /><div><dt>Phí vận chuyển</dt><dd>{money(summary.shippingFee)}</dd></div></dl>
+          {threshold > 0 && <p className={styles.shipping}>{summary.netSubtotal >= threshold ? "Đơn hàng đủ điều kiện miễn phí giao hàng." : `Còn ${money(threshold - summary.netSubtotal)} nữa để được miễn phí giao hàng.`}</p>}
           <div className={styles.total}>
             <div>
               <strong>{paymentMethod === "COD" ? "Trả khi nhận hàng" : "Tổng thanh toán"}</strong>
