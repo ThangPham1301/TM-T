@@ -74,6 +74,67 @@ async function proxy(
       headers: out,
     });
   } catch {
+    if (path === "state") {
+      return Response.json(
+        { message: "Chưa đăng nhập." },
+        { status: 401 },
+      );
+    }
+    if (path === "shipping") {
+      return Response.json({ enabled: true });
+    }
+    if (path === "categories") {
+      return Response.json([
+        { id: "1", code: "me-xung-keo-hue", name: "Mè xửng Huế" },
+        { id: "2", code: "tra-cung-dinh", name: "Trà Huế" },
+        { id: "3", code: "banh-cung-dinh", name: "Bánh & Mứt cung đình" },
+        { id: "4", code: "qua-bieu", name: "Quà biếu" },
+      ]);
+    }
+    if (path === "products" || path.startsWith("products")) {
+      const items = [
+        {
+          id: "sp-1",
+          slug: "me-xung-dau-phong-300g",
+          name: "Mè xửng đậu phộng truyền thống 300g",
+          price: 45000,
+          priceVnd: 45000,
+          category: "me-xung-keo-hue",
+          thumbnailUrl: "/images/products/me-xung-dau-phong-300g.jpg",
+        },
+        {
+          id: "sp-2",
+          slug: "tra-sen-cung-dinh-lon-150g",
+          name: "Trà sen Cung Đình hảo hạng 150g",
+          price: 120000,
+          priceVnd: 120000,
+          category: "tra-cung-dinh",
+          thumbnailUrl: "/images/products/tra-cung-dinh-tui-loc-100g.jpg",
+        },
+        {
+          id: "sp-3",
+          slug: "banh-in-dau-xanh-200g",
+          name: "Bánh in đậu xanh ngự thiện 200g",
+          price: 55000,
+          priceVnd: 55000,
+          category: "banh-cung-dinh",
+          thumbnailUrl: "/images/products/banh-in-dau-xanh-200g.png",
+        },
+        {
+          id: "sp-4",
+          slug: "hop-qua-doan-vien",
+          name: "Hộp quà Hương Huế truyền thống",
+          price: 280000,
+          priceVnd: 280000,
+          category: "qua-bieu",
+          thumbnailUrl: "/images/products/hop-qua-huong-hue.jpg",
+        },
+      ];
+      if (path.includes("recommended")) {
+        return Response.json({ items, strategy: "CURATED" });
+      }
+      return Response.json(items);
+    }
     return Response.json(
       { message: "Không kết nối được máy chủ Gói Huế. Vui lòng thử lại sau." },
       { status: 503 },

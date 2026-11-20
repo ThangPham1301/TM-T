@@ -234,7 +234,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       active = false;
     };
   }, [reload]);
-  const userId = state?.user.id;
+  const userId = state?.user?.id;
   useEffect(() => {
     if (!userId) return;
     let disposed = false;

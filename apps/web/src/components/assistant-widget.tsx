@@ -89,8 +89,8 @@ export function AssistantWidget() {
     return null;
   return (
     <ChatSession
-      key={state?.user.id ?? "guest"}
-      customer={state?.user.role === "CUSTOMER"}
+      key={state?.user?.id ?? "guest"}
+      customer={state?.user?.role === "CUSTOMER"}
     />
   );
 }

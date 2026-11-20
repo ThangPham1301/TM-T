@@ -13,7 +13,7 @@ type Props = {
 export function RecommendationRail(props: Props) {
   const { state } = useStore();
   if (process.env.NEXT_PUBLIC_RECOMMENDATIONS_ENABLED === "false") return null;
-  return <Rail key={state?.user.id ?? "guest"} {...props} />;
+  return <Rail key={state?.user?.id ?? "guest"} {...props} />;
 }
 
 function Rail({ surface, refreshKey, categories = [] }: Props) {

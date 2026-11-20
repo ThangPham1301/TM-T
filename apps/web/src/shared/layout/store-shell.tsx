@@ -1,106 +1,515 @@
 "use client";
+
 import Link from "next/link";
-import { BrandMark } from "./brand-mark";
-import styles from "./store-shell.module.css";
+import { usePathname } from "next/navigation";
+import { useEffect, useId, useRef, useState } from "react";
 
-export type StoreHeaderProps = { user: { name: string; role: string } | null; cartCount?: number; busy?: boolean; onLogout: () => void };
-export type StoreFooterProps = { categories: readonly { id: string; code: string; name: string }[] };
+export type StoreHeaderProps = {
+  user: { name: string; role: string } | null;
+  cartCount?: number;
+  busy?: boolean;
+  onLogout: () => void;
+};
 
-export function StoreHeader({ user, cartCount = 0, busy = false, onLogout }: StoreHeaderProps) {
+export type StoreFooterProps = {
+  categories?: readonly { id: string; code: string; name: string }[];
+};
+
+const collections = [
+  {
+    href: "/products?category=me-xung-keo-hue",
+    name: "Mè xửng Huế",
+    note: "Dẻo thơm mạch nha, mè rang",
+  },
+  {
+    href: "/products?category=tra-cung-dinh",
+    name: "Trà Huế",
+    note: "Trà sen, trà cung đình",
+  },
+  {
+    href: "/products?category=banh-cung-dinh",
+    name: "Bánh & Mứt cung đình",
+    note: "Bánh in, mứt, điểm tâm",
+  },
+  {
+    href: "/products?category=qua-bieu",
+    name: "Quà biếu",
+    note: "Hộp quà biếu tặng trang nhã",
+  },
+];
+
+function Dropdown({
+  label,
+  triggerClassName = "",
+  ariaLabel,
+  align = "start",
+  panelClassName = "",
+  children,
+}: {
+  label: React.ReactNode;
+  triggerClassName?: string;
+  ariaLabel?: string;
+  align?: "start" | "end";
+  panelClassName?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const id = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
   return (
-    <header className={styles.header}>
-      <div className={styles.mainNav}>
-        <div className={styles.brand}><BrandMark logoSrc="/images/stitch/asset-08.png" /></div>
-        <form className={styles.search} action="/products">
-          <label className="sr-only" htmlFor="search">
-            Tìm sản phẩm
-          </label>
-          <input
-            id="search"
-            name="q"
-            placeholder="Tìm kiếm mè xửng, mứt sen Tịnh Tâm, trà cung đình…"
-          />
-          <button aria-label="Tìm kiếm"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 6 6" /></svg></button>
-        </form>
-        <nav aria-label="Điều hướng chính">
-          <Link href="/products">Bộ sưu tập</Link>
-          <Link href="/#heritage-story">Câu chuyện Huế</Link>
-        </nav>
-
-        {user ? (
-          <details className={styles.dropdown}>
-            <summary className={styles.account} aria-label={`Tài khoản ${user.name}`}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="12" cy="8" r="3" /><path d="M5 20v-2a7 7 0 0 1 14 0v2H5Z" /></svg><span className={styles.chevron} aria-hidden="true">⌄</span>
-            </summary>
-            <div className={styles.menu}>
-              <strong>{String(user.name)}</strong>
-              <Link href="/account">Tài khoản</Link>
-              <Link href="/account/orders">Đơn hàng</Link>
-              <Link href="/account/privacy">Quyền dữ liệu</Link>
-              <Link href="/account/returns">Đổi trả của tôi</Link>
-              {user.role === "ADMIN" && (
-                <Link href="/admin">Quản trị</Link>
-              )}
-              <button disabled={busy} onClick={onLogout}>
-                Đăng xuất
-              </button>
-            </div>
-          </details>
-        ) : (
-          <Link className={styles.login} href="/login" aria-label="Đăng nhập">
-<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="12" cy="8" r="3" /><path d="M5 20v-2a7 7 0 0 1 14 0v2H5Z" /></svg>
-          </Link>
-        )}
-        <Link href="/cart" aria-label="Giỏ hàng" className={styles.cart}>
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M4 7h16v14H4Z" /><path d="M8 9V6a4 4 0 0 1 8 0v3" /></svg>
-          {user?.role === "CUSTOMER" && (
-            <b aria-label={`${cartCount} sản phẩm`}>
-              {cartCount}
-            </b>
-          )}
-        </Link>
-      </div>
-    </header>
+    <div className="gh-dropdown" ref={ref}>
+      <button
+        type="button"
+        className={triggerClassName}
+        aria-label={ariaLabel}
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {label}
+      </button>
+      {open && (
+        <div
+          id={id}
+          className={`gh-dropdown__panel gh-dropdown__panel--${align} ${panelClassName}`}
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest("a") || (e.target as HTMLElement).closest("button")) {
+              setOpen(false);
+            }
+          }}
+        >
+          {children}
+        </div>
+      )}
+    </div>
   );
 }
-export function StoreFooter({ categories }: StoreFooterProps) {
-  const giftCategory = categories.find(category => /quà|qua|gift/i.test(category.name));
+
+export function StoreHeader({
+  user,
+  cartCount = 0,
+  busy = false,
+  onLogout,
+}: StoreHeaderProps) {
+  const pathname = usePathname();
+  const userName = user?.name?.trim() || "Tài khoản";
+  const initial = userName.charAt(0).toLocaleUpperCase("vi") || "T";
+
   return (
-    <footer className={styles.footer}>
-      <div className={styles.footerGrid}>
-        <div>
-          <div className={styles.brand}><BrandMark logoSrc="/images/stitch/asset-08.png" /></div>
-          <p>Gói ghém phong vị và nét văn hoá tao nhã Cố Đô gửi trao người trân quý. Mỗi thức quà là tấm lòng gìn giữ tinh hoa truyền thống cung đình và làng nghề sông Hương.</p>
-          <span className={styles.heritageTag}>Mỹ vị dân gian &amp; Ngự thiện Cố Đô</span>
+    <>
+      <header className="gh-header gh-surface-imperial">
+        <div className="gh-wrap gh-header__main">
+          <Link className="gh-brand" aria-label="Gói Huế - Trang chủ" href="/">
+            <img
+              className="gh-brand__mark"
+              src="/images/heritage/logo-goi-hue.svg"
+              alt=""
+              width={38}
+              height={38}
+            />
+            <span className="gh-brand__text">Gói Huế</span>
+          </Link>
+
+          <nav className="gh-nav" aria-label="Điều hướng chính">
+            <Link
+              className="gh-nav-link"
+              aria-current={pathname === "/" ? "page" : undefined}
+              href="/"
+            >
+              Trang chủ
+            </Link>
+
+            <Dropdown
+              triggerClassName="gh-nav-link"
+              panelClassName="gh-collections-panel"
+              label={
+                <>
+                  Bộ sưu tập <span className="gh-chevron" aria-hidden="true">﹀</span>
+                </>
+              }
+            >
+              <ul>
+                {collections.map((c) => (
+                  <li key={c.href}>
+                    <Link href={c.href}>
+                      <strong>{c.name}</strong>
+                      <small>{c.note}</small>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              <Link className="gh-collections-panel__all" href="/products">
+                Xem tất cả sản phẩm →
+              </Link>
+            </Dropdown>
+
+            <Link className="gh-nav-link" href="/#heritage-story">
+              Chuyện Huế
+            </Link>
+            <Link className="gh-nav-link" href="/#ocop-traceability">
+              Truy xuất nguồn gốc
+            </Link>
+            <Link className="gh-nav-link" href="/promotions">
+              Ưu đãi
+            </Link>
+          </nav>
+
+          <div className="gh-header__tools">
+            <div className="gh-search-wide">
+              <form className="gh-search" role="search" action="/products" method="get">
+                <label className="sr-only" htmlFor="header-search">
+                  Tìm sản phẩm
+                </label>
+                <span className="gh-search__icon">
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    aria-hidden="true"
+                  >
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="M16 16l4.5 4.5" strokeLinecap="round" />
+                  </svg>
+                </span>
+                <input
+                  id="header-search"
+                  type="search"
+                  minLength={2}
+                  placeholder="Tìm mè xửng, trà sen…"
+                  name="q"
+                />
+              </form>
+            </div>
+
+            <div className="gh-search-compact">
+              <Dropdown
+                align="end"
+                ariaLabel="Tìm sản phẩm"
+                triggerClassName="gh-icon-button"
+                label={
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    aria-hidden="true"
+                  >
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="M16 16l4.5 4.5" strokeLinecap="round" />
+                  </svg>
+                }
+              >
+                <form
+                  className="gh-search"
+                  role="search"
+                  action="/products"
+                  method="get"
+                  style={{ padding: "8px" }}
+                >
+                  <input
+                    type="search"
+                    minLength={2}
+                    placeholder="Tìm mè xửng, trà sen…"
+                    name="q"
+                    autoFocus
+                  />
+                </form>
+              </Dropdown>
+            </div>
+
+            <Link
+              className="gh-icon-button gh-cart"
+              title="Giỏ hàng"
+              aria-label="Mở giỏ hàng"
+              href="/cart"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                aria-hidden="true"
+              >
+                <path d="M4 8h16l-1.2 12H5.2L4 8z" />
+                <path d="M8 8V6a4 4 0 0 1 8 0v2" />
+              </svg>
+              {cartCount > 0 && <span className="gh-cart-count">{cartCount}</span>}
+            </Link>
+
+            <div className="gh-dropdown">
+              {user ? (
+                <Dropdown
+                  align="end"
+                  ariaLabel={`Mở menu tài khoản của ${userName}`}
+                  triggerClassName="gh-account-trigger"
+                  label={
+                    <>
+                      <span className="gh-avatar" aria-hidden="true">
+                        {initial}
+                      </span>
+                      <span className="gh-account-trigger__name">{userName}</span>
+                      <span className="gh-chevron" aria-hidden="true">
+                        ﹀
+                      </span>
+                    </>
+                  }
+                >
+                  <div className="gh-account-menu__who">
+                    <strong>{userName}</strong>
+                  </div>
+                  <ul className="gh-account-menu">
+                    {user.role === "ADMIN" ? (
+                      <li>
+                        <Link href="/admin">Kênh quản trị</Link>
+                      </li>
+                    ) : (
+                      <>
+                        <li>
+                          <Link href="/account/profile">Hồ sơ cá nhân</Link>
+                        </li>
+                        <li>
+                          <Link href="/account/orders">Đơn hàng của tôi</Link>
+                        </li>
+                        <li>
+                          <Link href="/account/privacy">Quyền dữ liệu</Link>
+                        </li>
+                        <li>
+                          <Link href="/account/returns">Đổi trả của tôi</Link>
+                        </li>
+                      </>
+                    )}
+                    <li>
+                      <Link href="/account/security">Bảo mật tài khoản</Link>
+                    </li>
+                    <li>
+                      <button type="button" disabled={busy} onClick={onLogout}>
+                        Đăng xuất
+                      </button>
+                    </li>
+                  </ul>
+                </Dropdown>
+              ) : (
+                <Dropdown
+                  align="end"
+                  ariaLabel="Mở menu tài khoản"
+                  triggerClassName="gh-account-trigger gh-account-trigger--guest"
+                  label={
+                    <>
+                      <span
+                        className="gh-avatar gh-avatar--guest gh-emblem"
+                        aria-hidden="true"
+                      />
+                      <span className="gh-account-trigger__name">Tài khoản</span>
+                      <span className="gh-chevron" aria-hidden="true">
+                        ﹀
+                      </span>
+                    </>
+                  }
+                >
+                  <div className="gh-account-menu__who">
+                    <strong>Chào mừng đến Gói Huế</strong>
+                    <small>Đăng nhập để theo dõi đơn và nhận ưu đãi.</small>
+                  </div>
+                  <div className="gh-account-menu__actions">
+                    <Link
+                      className="gh-btn gh-btn--brown"
+                      href="/login?returnUrl=%2Faccount%2Fprofile"
+                    >
+                      Đăng nhập
+                    </Link>
+                    <Link className="gh-btn gh-btn--paper" href="/register">
+                      Đăng ký tài khoản
+                    </Link>
+                  </div>
+                  <ul className="gh-account-menu">
+                    <li>
+                      <Link href="/login?returnUrl=%2Faccount%2Forders">
+                        Xem đơn hàng
+                      </Link>
+                    </li>
+                    <li>
+                      <Link href="/support/request">Hỗ trợ khách hàng</Link>
+                    </li>
+                  </ul>
+                </Dropdown>
+              )}
+            </div>
+          </div>
         </div>
-        <div>
-          <h2>Khám phá</h2>
-          <ul className={styles.footerLinks}>
-            <li><Link href="/products">Bộ sưu tập sản phẩm</Link></li>
-            <li>{giftCategory ? <Link href={`/products?category=${encodeURIComponent(giftCategory.code)}`}>Set quà đoàn viên</Link> : <span title="Chưa có danh mục tương ứng">Set quà đoàn viên <small>(Đang cập nhật)</small></span>}</li>
-            <li><span title="Chưa có chức năng xếp hạng bán chạy">Bán chạy nhất <small>(Đang cập nhật)</small></span></li>
-          </ul>
+      </header>
+
+      <nav
+        className="gh-bottom-nav gh-surface-imperial"
+        aria-label="Điều hướng điện thoại"
+      >
+        <Link aria-current={pathname === "/" ? "page" : undefined} href="/">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            aria-hidden="true"
+          >
+            <path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1v-9.5z" />
+          </svg>
+          <span>Trang chủ</span>
+        </Link>
+        <Link href="/products">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            aria-hidden="true"
+          >
+            <rect x="3" y="3" width="7" height="7" />
+            <rect x="14" y="3" width="7" height="7" />
+            <rect x="3" y="14" width="7" height="7" />
+            <rect x="14" y="14" width="7" height="7" />
+          </svg>
+          <span>Danh mục</span>
+        </Link>
+        <Link href="/promotions">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            aria-hidden="true"
+          >
+            <rect x="3" y="8" width="18" height="13" rx="1" />
+            <path d="M12 8v13M3 12h18M12 8c-2-3-5-3-5-1s3 1 5 1 5 1 5-1-3-2-5 1z" />
+          </svg>
+          <span>Ưu đãi</span>
+        </Link>
+        <Link href="/products">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="M16 16l4.5 4.5" strokeLinecap="round" />
+          </svg>
+          <span>Tìm kiếm</span>
+        </Link>
+        <Link aria-label="Mở giỏ hàng" href="/cart">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            aria-hidden="true"
+          >
+            <path d="M4 8h16l-1.2 12H5.2L4 8z" />
+            <path d="M8 8V6a4 4 0 0 1 8 0v2" />
+          </svg>
+          <span>Giỏ hàng</span>
+        </Link>
+      </nav>
+    </>
+  );
+}
+
+export function StoreFooter(_props: StoreFooterProps) {
+  return (
+    <footer className="gh-footer gh-surface-imperial">
+      <div className="gh-wrap">
+        <div className="gh-footer__grid">
+          <div>
+            <Link className="gh-brand" aria-label="Gói Huế - Trang chủ" href="/">
+              <img
+                className="gh-brand__mark"
+                src="/images/heritage/logo-goi-hue.svg"
+                alt=""
+                width={38}
+                height={38}
+              />
+              <span className="gh-brand__text">Gói Huế</span>
+            </Link>
+            <p>
+              Gìn giữ và tôn vinh phong vị bánh mứt, mè xửng và trà xứ Huế, đóng
+              gói chỉn chu để trao gửi trọn tấm lòng.
+            </p>
+            <span className="gh-badge gh-badge--gold gh-footer__chip">
+              OCOP 4 sao Thừa Thiên Huế
+            </span>
+          </div>
+
+          <div>
+            <h2>Bộ sưu tập</h2>
+            <ul>
+              {collections.map((c) => (
+                <li key={c.href}>
+                  <Link href={c.href}>{c.name}</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <h2>Chăm sóc &amp; hỗ trợ</h2>
+            <ul>
+              <li>
+                <Link href="/support/request">Trung tâm hỗ trợ khách hàng</Link>
+              </li>
+              <li>
+                <Link href="/promotions">Ưu đãi</Link>
+              </li>
+              <li>
+                <Link href="/#ocop-traceability">Truy xuất nguồn gốc</Link>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h2>Phòng trưng bày &amp; xưởng bánh</h2>
+            <p>128 Lê Lợi, Phường Phú Nhuận, Thành phố Huế</p>
+            <p>(0234) 388 9988 · thuquan@omahue.vn</p>
+          </div>
         </div>
-        <div>
-          <h2>Chính sách &amp; Hỗ trợ</h2>
-          <ul className={styles.footerLinks}>
-            <li><Link href="/return-policy">Chính sách đổi trả <span className={styles.draft}>Bản thảo</span></Link></li>
-            <li><span>Quy định giao hàng COD <small>(Đang cập nhật)</small></span></li>
-            <li><span>Hướng dẫn bảo quản đặc sản <small>(Đang cập nhật)</small></span></li>
-            <li><Link href="/privacy-policy">Chính sách bảo mật</Link></li>
-          </ul>
+        <div className="gh-footer__bottom">
+          © 2026 Gói Huế · Tinh tuyển di sản · Chuẩn hóa OCOP
         </div>
-        <div>
-          <h2>Thông tin liên hệ</h2>
-          <div className={styles.contact}><span aria-hidden="true">⌖</span><div><strong>Xưởng &amp; Văn phòng:</strong><span>Đang cập nhật</span></div></div>
-          <div className={styles.contact}><span aria-hidden="true">☎</span><div><strong>Hotline:</strong><span>Đang cập nhật</span></div></div>
-          <div className={styles.contact}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1" /><path d="m3 6 9 7 9-7" /></svg><div><strong>Email hỗ trợ:</strong><span>Đang cập nhật</span></div></div>
-        </div>
-      </div>
-      <div className={styles.footerBottom}>
-        <span>© 2025 Gói Huế. Gói trọn phong vị Cố Đô. Tất cả quyền được bảo lưu.</span>
       </div>
     </footer>
   );
 }
-
