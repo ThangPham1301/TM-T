@@ -148,6 +148,18 @@ export function StoreHeader({
               }
             >
               <ul>
+                <li>
+                  <Link href="/products">
+                    <strong>Sản phẩm nổi bật</strong>
+                    <small>Những món được chọn lọc tại cửa hàng</small>
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/recommendations">
+                    <strong>Gợi ý từ cửa hàng</strong>
+                    <small>Gợi ý mua sắm dành cho bạn</small>
+                  </Link>
+                </li>
                 {collections.map((c) => (
                   <li key={c.href}>
                     <Link href={c.href}>
@@ -164,9 +176,6 @@ export function StoreHeader({
 
             <Link className="gh-nav-link" href="/#heritage-story">
               Chuyện Huế
-            </Link>
-            <Link className="gh-nav-link" href="/#ocop-traceability">
-              Truy xuất nguồn gốc
             </Link>
           </nav>
 
@@ -475,9 +484,6 @@ export function StoreFooter(_props: StoreFooterProps) {
               </li>
               <li>
                 <Link href="/privacy-policy">Chính sách bảo mật</Link>
-              </li>
-              <li>
-                <Link href="/#ocop-traceability">Truy xuất nguồn gốc</Link>
               </li>
             </ul>
           </div>

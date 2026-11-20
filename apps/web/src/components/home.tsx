@@ -1,11 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { api, type Row } from "@/lib/store";
 import { ProductImage } from "./product/product-image";
-import { RecommendationRail } from "./recommendation-rail";
 
 type Slide = {
   kicker: string;
@@ -72,13 +69,6 @@ const categoryItems = [
     note: "Hộp quà biếu tặng trang nhã",
     image: "/images/heritage/photos/cat-qua-bieu.jpg",
   },
-];
-
-const originBadges = [
-  "Chuẩn OCOP 4 sao",
-  "Mã QR từng lô",
-  "Chỉ dẫn địa lý",
-  "Nguồn gốc rõ ràng",
 ];
 
 function Motif({
@@ -282,37 +272,6 @@ function HeritageBanner({
 }
 
 export function HomeExperience() {
-  const router = useRouter();
-  const [traceCode, setTraceCode] = useState("");
-  const [featuredProducts, setFeaturedProducts] = useState<Row[]>([]);
-  const [productsLoaded, setProductsLoaded] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    api("products")
-      .then((data) => {
-        if (active) {
-          const list = Array.isArray(data) ? data : data?.items ?? [];
-          setFeaturedProducts(list.slice(0, 4));
-          setProductsLoaded(true);
-        }
-      })
-      .catch(() => {
-        if (active) setProductsLoaded(true);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const handleTraceSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const code = traceCode.trim();
-    if (code) {
-      router.push(`/trace/${encodeURIComponent(code)}`);
-    }
-  };
-
   return (
     <main className="gh-home" id="main-content">
       {/* 1. HERO BANNER */}
@@ -336,74 +295,8 @@ export function HomeExperience() {
                   →
                 </span>
               </Link>
-              <a className="gh-btn gh-btn--ghost" href="#ocop-traceability">
-                Truy xuất nguồn gốc
-              </a>
             </div>
           </HeritageBanner>
-        </div>
-      </section>
-
-      {/* 2. FEATURED SECTION */}
-      <section
-        className="gh-home-section"
-        id="featured"
-        aria-label="Sản phẩm nổi bật"
-      >
-        <div className="gh-wrap">
-          {productsLoaded && featuredProducts.length > 0 && (
-            <div className="recommendation-module__bxvk_W__rail">
-              <div className="recommendation-module__bxvk_W__header">
-                <div
-                  className="recommendation-module__bxvk_W__line"
-                  aria-hidden="true"
-                />
-                <h2>Sản phẩm nổi bật</h2>
-                <div
-                  className="recommendation-module__bxvk_W__line"
-                  aria-hidden="true"
-                />
-              </div>
-              <div className="recommendation-module__bxvk_W__grid">
-                {featuredProducts.map((p) => {
-                  const slug = String(p.slug || p.id || "");
-                  const price = Number(p.price || p.priceVnd || 0);
-                  const imageSrc =
-                    (p.thumbnailUrl as string) ||
-                    (p.image as string) ||
-                    "/images/heritage/photos/photo-sp-me-xung-dia.jpg";
-
-                  return (
-                    <Link
-                      key={p.id}
-                      className="gh-frame-card recommendation-module__bxvk_W__card"
-                      href={`/products/${encodeURIComponent(slug)}`}
-                    >
-                      <div className="gh-card-media recommendation-module__bxvk_W__media">
-                        <ProductImage
-                          fill
-                          sizes="(max-width: 760px) 45vw, 210px"
-                          src={imageSrc}
-                          alt={String(p.name || "")}
-                        />
-                      </div>
-                      <div className="recommendation-module__bxvk_W__body">
-                        <strong className="recommendation-module__bxvk_W__name">
-                          {String(p.name || "")}
-                        </strong>
-                        <span className="recommendation-module__bxvk_W__price">
-                          {new Intl.NumberFormat("vi-VN", {
-                            style: "currency",
-                            currency: "VND",
-                          }).format(price)}
-                        </span>
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
       </section>
 
@@ -412,11 +305,6 @@ export function HomeExperience() {
         <div className="gh-divider" aria-hidden="true">
           <span className="gh-divider__knot" />
         </div>
-      </div>
-
-      {/* 2b. RECOMMENDATION RAIL */}
-      <div className="gh-wrap" style={{ padding: "8px 16px 0" }}>
-        <RecommendationRail surface="home" />
       </div>
 
       {/* 3. COLLECTIONS */}
@@ -539,97 +427,6 @@ export function HomeExperience() {
                   →
                 </span>
               </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 5. OCOP TRACEABILITY */}
-      <section
-        className="gh-home-band"
-        id="ocop-traceability"
-        aria-labelledby="gh-trace-title"
-      >
-        <Motif name="09-cong-thanh" className="gh-band__gate" />
-        <Motif
-          name="02-canh-hoa-phai"
-          className="gh-band__blossom-right"
-        />
-        <div className="gh-wrap">
-          <div className="gh-banner-shell">
-            <div className="gh-banner gh-surface-imperial">
-              <div className="gh-banner__copy">
-                <div className="gh-banner__slides" aria-live="off">
-                  <div className="gh-banner__slide is-active">
-                    <span className="gh-banner__kicker">
-                      Hệ thống truy xuất nguồn gốc
-                    </span>
-                    <h2 id="gh-trace-title" className="gh-banner__title">
-                      Minh bạch nguồn gốc từng hộp quà
-                    </h2>
-                    <div className="gh-banner__rule" aria-hidden="true" />
-                    <p className="gh-banner__lead">
-                      Mỗi hộp xuất xưởng đều gắn mã định danh. Nhập mã QR trên
-                      nhãn để xem vùng nguyên liệu, lô sản xuất và chứng nhận.
-                    </p>
-                  </div>
-                </div>
-
-                <form className="gh-trace-form" onSubmit={handleTraceSubmit}>
-                  <label
-                    className="gh-trace-form__label"
-                    htmlFor="home-trace-code"
-                  >
-                    Mã QR trên nhãn hộp
-                  </label>
-                  <div className="gh-trace-form__row">
-                    <input
-                      id="home-trace-code"
-                      className="gh-field"
-                      required
-                      maxLength={160}
-                      placeholder="Ví dụ: QR-OMA-20261015-LOT08"
-                      value={traceCode}
-                      onChange={(e) => setTraceCode(e.target.value)}
-                    />
-                    <button type="submit" className="gh-btn gh-btn--fold">
-                      Kiểm tra{" "}
-                      <span className="gh-btn__arrow" aria-hidden="true">
-                        →
-                      </span>
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    className="gh-trace-form__sample"
-                    onClick={() => setTraceCode("QR-OMA-20261015-LOT08")}
-                  >
-                    Dùng mã mẫu
-                  </button>
-                </form>
-
-                <ul
-                  className="gh-banner__badges"
-                  aria-label="Cam kết nguồn gốc"
-                >
-                  {originBadges.map((badge) => (
-                    <li key={badge} className="gh-badge gh-badge--gold">
-                      {badge}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="gh-banner__visual">
-                <div className="gh-banner__photo is-active">
-                  <ProductImage
-                    fill
-                    sizes="(max-width: 960px) 100vw, 55vw"
-                    src="/images/heritage/photos/sp-goi-le-tra.jpg"
-                    alt="Túi mè xửng và trà cung đình Gói Huế có nhãn mã QR truy xuất"
-                  />
-                </div>
-              </div>
             </div>
           </div>
         </div>
