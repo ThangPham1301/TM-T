@@ -11,21 +11,23 @@ import java.util.stream.Collectors;
 
 @Service
 public class AgentTools {
-    private static final Set<String> GIFT_PREFERENCES = Set.of("qua", "tang", "bieu", "cho", "me", "bo", "ba", "ong", "gia", "dinh", "ban", "be", "nguoi", "than", "sinh", "nhat", "tet", "phu", "hop", "duoi", "tam", "ngan", "sach", "dong", "vnd", "k", "goi", "hang", "dang", "chay", "so", "sanh", "san", "pham", "mon", "cac", "nhung", "loai", "duoc", "nhieu", "pho", "bien", "combo", "popular", "bestseller", "best", "selling", "gift", "products");
+    private static final Set<String> GIFT_PREFERENCES = Set.of("qua", "tang", "bieu", "cho", "me", "bo", "ba", "ong", "gia", "dinh", "ban", "be", "nguoi", "than", "sinh", "nhat", "tet", "phu", "hop", "duoi", "tam", "ngan", "sach", "dong", "vnd", "k", "goi", "hang", "dang", "chay", "so", "sanh", "san", "pham", "mon", "cac", "nhung", "loai", "duoc", "nhieu", "pho", "bien", "combo", "popular", "bestseller", "best", "selling", "gift", "products", "doi", "tac");
     private final PlatformApi app;
     private final JdbcTemplate db;
     private final CatalogService catalog;
     private final RecommendApi recommendations;
     private final AiPrivacy privacy;
     private final ProductSearch search;
+    private final PurchasePlanner planner;
 
-    public AgentTools(PlatformApi app, JdbcTemplate db, CatalogService catalog, RecommendApi recommendations, AiPrivacy privacy, ProductSearch search) {
+    public AgentTools(PlatformApi app, JdbcTemplate db, CatalogService catalog, RecommendApi recommendations, AiPrivacy privacy, ProductSearch search, PurchasePlanner planner) {
         this.app = app;
         this.db = db;
         this.catalog = catalog;
         this.recommendations = recommendations;
         this.privacy = privacy;
         this.search = search;
+        this.planner = planner;
     }
 
     record Result(Map<String, Object> data, String text, String source, List<Map<String, Object>> cards) {}
@@ -35,7 +37,7 @@ public class AgentTools {
         return Normalizer.normalize(text.toLowerCase(Locale.ROOT).replace('đ', 'd'), Normalizer.Form.NFD).replaceAll("\\p{M}", "");
     }
 
-    static String money(int amount) { return String.format(Locale.ROOT, "%,d", amount).replace(',', '.') + "đ"; }
+    static String money(long amount) { return String.format(Locale.ROOT, "%,d", amount).replace(',', '.') + "đ"; }
 
     static Map<String, Object> slots(String message) {
         var slots = new LinkedHashMap<String, Object>();
@@ -62,7 +64,7 @@ public class AgentTools {
             var amount = Pattern.compile("(?:ngan sach|duoi|toi da|tam)\\s+(\\d{5,8})(?!\\d)").matcher(text);
             if (amount.find()) slots.put("budget", Integer.parseInt(amount.group(1)));
         }
-        var recipient = Pattern.compile("\\b(?:cho|tang|bieu)\\s+(me|bo|ba me|ong ba|ban gai|ban trai|dong nghiep|sep|khach hang|gia dinh|ban be)\\b").matcher(text);
+        var recipient = Pattern.compile("\\b(?:cho|tang|bieu)\\s+(me|bo|ba me|ong ba|ban gai|ban trai|dong nghiep|sep|khach hang|doi tac|gia dinh|ban be)\\b").matcher(text);
         if (recipient.find()) slots.put("recipient", recipient.group(1));
         var occasion = Pattern.compile("\\b(sinh nhat|tet|trung thu|ky niem|cam on|tham nha)\\b").matcher(text);
         if (occasion.find()) slots.put("occasion", occasion.group(1));
@@ -71,7 +73,11 @@ public class AgentTools {
 
     List<Tool> definitions() {
         return List.of(
-            definition("search_products", "Tìm sản phẩm theo từ khóa, loại trà/bánh/mè xửng hoặc nhóm hàng, không cần ngân sách. query có thể là tên hoặc từ khóa tiếng Việt có/không dấu; category tùy chọn là mã hoặc tên nhóm hàng. Tìm cả hàng hết kho và đọc available trước khi tư vấn mua. Chỉ bật inStockOnly nếu cần hàng còn kho. Không suy ra thành phần hay công dụng ngoài description. Dùng để khám phá và tìm sản phẩm trước khi so sánh hoặc đề xuất thêm giỏ; không dùng ngân sách thay cho từ khóa.",
+            definition("plan_purchase", "Tính phương án mua khi có ngân sách và nhiều người nhận: số người × sản phẩm/người, tổng tiền hàng, tồn và phí giao một đơn. Phân biệt ngân sách tổng với mỗi người. Backend lấy điều kiện từ lời khách/ngữ cảnh đã xác nhận, không dùng số tiền hay số lượng model tự đoán. Chỉ tư vấn, không ghi giỏ. Ưu tiên công cụ này thay cho lọc từng món dưới tổng ngân sách.",
+                Map.of("budget", Map.of("type", "integer", "minimum", 1, "maximum", 100000000), "recipientCount", Map.of("type", "integer", "minimum", 1, "maximum", 100),
+                    "unitsPerRecipient", Map.of("type", "integer", "minimum", 1, "maximum", 100), "budgetScope", Map.of("type", "string", "enum", List.of("TOTAL", "PER_RECIPIENT")),
+                    "shippingInBudget", Map.of("type", "string", "enum", List.of("UNSPECIFIED", "INCLUDED", "EXCLUDED")), "selectionMode", Map.of("type", "string", "enum", List.of("ANY", "SAME", "DIFFERENT"))), List.of()),
+            definition("search_products", "Tìm sản phẩm theo từ khóa, loại trà/bánh/mè xửng hoặc nhóm hàng, không cần ngân sách. query có thể là tên hoặc từ khóa tiếng Việt có/không dấu; category tùy chọn là mã hoặc tên nhóm hàng. Tìm cả hàng hết kho và đọc available trước khi tư vấn mua. Chỉ bật inStockOnly nếu cần hàng còn kho. Không tự gán thành phần, thông tin dinh dưỡng, chứng nhận hoặc công dụng sức khỏe cụ thể cho mã hàng khi dữ liệu chưa xác nhận. Kiến thức chung và tư vấn có điều kiện vẫn được dùng theo instruction tư vấn. Dùng để khám phá và tìm sản phẩm trước khi so sánh hoặc đề xuất thêm giỏ; không dùng ngân sách thay cho từ khóa.",
                 Map.of("query", Map.of("type", "string", "maxLength", 120), "category", Map.of("type", "string", "maxLength", 120), "inStockOnly", Map.of("type", "boolean"), "limit", Map.of("type", "integer", "minimum", 1, "maximum", 8), "budget", Map.of("type", "integer", "minimum", 1, "maximum", 100000000)), List.of()),
             definition("recommend_products", "Tìm sản phẩm còn bán được. budget là số tiền VND, chỉ truyền khi khách nêu rõ số tiền, không truyền 0; không có budget vẫn tìm được sản phẩm. Tra tên bằng query (tên ngắn, ví dụ Hương Huế), không đưa tên vào productId. productId chỉ là UUID ngữ cảnh mua cùng. rankingBasis=CATALOG nghĩa là chưa có dữ liệu bán chạy; deliveredQuantity=0 không chứng minh sản phẩm bán chạy.",
                 Map.of("budget", Map.of("type", "integer", "minimum", 1, "maximum", 100000000), "query", Map.of("type", "string", "maxLength", 120), "surface", Map.of("type", "string", "enum", List.of("home", "product", "cart")), "productId", Map.of("type", "string", "format", "uuid")), List.of()),
@@ -98,7 +104,7 @@ public class AgentTools {
     static Document document(Object value) {
         if (value == null) return Document.fromNull();
         if (value instanceof Boolean bool) return Document.fromBoolean(bool);
-        if (value instanceof Number number) return Document.fromNumber(number.intValue());
+        if (value instanceof Number number) return Document.fromNumber(number.longValue());
         if (value instanceof Map<?, ?> map) {
             var result = new LinkedHashMap<String, Document>();
             map.forEach((key, item) -> result.put(key.toString(), document(item)));
@@ -109,7 +115,16 @@ public class AgentTools {
     }
 
     Result execute(String name, Map<String, Object> input, Map<String, Object> actor) {
+        return execute(name, input, actor, ProductConversation.Scope.none());
+    }
+
+    Result execute(String name, Map<String, Object> input, Map<String, Object> actor, ProductConversation.Scope scope) {
+        return execute(name, input, actor, scope, PurchasePlanner.Context.empty(), "");
+    }
+
+    Result execute(String name, Map<String, Object> input, Map<String, Object> actor, ProductConversation.Scope scope, PurchasePlanner.Context purchase, String message) {
         Set<String> fields = switch (name) {
+            case "plan_purchase" -> Set.of("budget", "recipientCount", "unitsPerRecipient", "budgetScope", "shippingInBudget", "selectionMode");
             case "search_products" -> Set.of("query", "category", "inStockOnly", "limit", "budget");
             case "recommend_products" -> Set.of("budget", "query", "surface", "productId");
             case "compare_products" -> Set.of("first", "second");
@@ -121,7 +136,19 @@ public class AgentTools {
             default -> throw new PlatformApi.Problem(422, "Công cụ không được hỗ trợ.");
         };
         app.require(fields.containsAll(input.keySet()), "Tham số công cụ không hợp lệ.");
+        if (scope.active()) {
+            if (name.equals("search_products") || name.equals("recommend_products")) return contextProducts(scope);
+            if (name.equals("compare_products")) {
+                if (scope.ids().size() != 2 || scope.needsChoice()) return contextProducts(new ProductConversation.Scope(scope.ids(), true));
+                return compareProducts(Map.of("first", scope.ids().get(0), "second", scope.ids().get(1)));
+            }
+            if (name.equals("add_to_cart")) {
+                if (scope.ids().size() != 1 || scope.needsChoice()) return contextProducts(new ProductConversation.Scope(scope.ids(), true));
+                return proposeCart(Map.of("product", scope.ids().getFirst(), "quantity", input.getOrDefault("quantity", 1)));
+            }
+        }
         return switch (name) {
+            case "plan_purchase" -> planner.plan(purchase, scope, message);
             case "search_products" -> search.search(input);
             case "recommend_products" -> gifts(actor, input);
             case "compare_products" -> compareProducts(input);
@@ -135,6 +162,37 @@ public class AgentTools {
             }
             default -> throw new IllegalStateException("Unreachable tool");
         };
+    }
+
+    Result contextProducts(ProductConversation.Scope scope) {
+        var visible = new LinkedHashMap<String, Map<String, Object>>();
+        for (var product : search.visibleProducts()) visible.put(app.str(product, "id"), product);
+        var cards = scope.ids().stream().filter(visible::containsKey).map(id -> {
+            var card = recommendations.card(visible.get(id));
+            card.put("available", app.number(card, "stock") > 0);
+            return card;
+        }).toList();
+        String code = cards.isEmpty() ? "UNAVAILABLE" : scope.needsChoice() ? "AMBIGUOUS" : "MATCHED";
+        String text = cards.isEmpty() ? "Món vừa nhắc hiện không còn hiển thị trong danh mục. Bạn muốn chọn món khác không?"
+            : scope.needsChoice() ? "Bạn đang nhắc đến " + cards.stream().map(card -> app.str(card, "name")).collect(Collectors.joining(" hay ")) + "?"
+            : "Mình đối chiếu lại các món đang trao đổi:\n\n" + cards.stream().map(card -> "**" + app.str(card, "name") + "** · "
+                + money(app.number(card, "price")) + " · " + (Boolean.TRUE.equals(card.get("available")) ? "Còn " + app.number(card, "stock") + " sản phẩm." : "Hiện hết hàng.")
+                + "\n" + app.str(card, "description")).collect(Collectors.joining("\n\n"));
+        return new Result(Map.of("scope", "CONVERSATION", "code", code, "items", cards), text, "Danh mục hiện tại · các món đang trao đổi", cards);
+    }
+
+    String contextAdvice(ProductConversation.Scope scope, String message) {
+        var result = contextProducts(scope);
+        if (scope.needsChoice() || result.cards().isEmpty()) return result.text();
+        String text = normalized(message);
+        if (!text.contains("tang") && !text.contains("qua")) return result.text();
+        if (result.cards().size() == 1) {
+            var product = result.cards().getFirst();
+            return "**" + app.str(product, "name") + "** vẫn có thể cân nhắc làm quà nếu hợp khẩu vị và không có thành phần người nhận cần tránh. "
+                + app.str(product, "description");
+        }
+        return result.cards().stream().map(product -> "**" + app.str(product, "name") + "**: " + app.str(product, "description"))
+            .collect(Collectors.joining("\n\n")) + "\n\nBạn có thể chọn theo khẩu vị và thành phần người nhận cần tránh; nghiêng về một món không có nghĩa món còn lại không tặng được.";
     }
 
     @SuppressWarnings("unchecked")
@@ -383,7 +441,8 @@ public class AgentTools {
     Call productLookup(String message, Map<String, Object> slots, boolean giftContext) {
         String text = normalized(message);
         boolean tea = Pattern.compile("\\btra\\b").matcher(text).find() && !text.contains("tra cuu") && !text.contains("doi tra") && !text.contains("tra hang");
-        if (tea || text.contains("me xung") || text.contains("banh") || text.contains("keo") || text.contains("cua hang co gi")) {
+        boolean sesame = Pattern.compile("(?U)\\bmè\\b").matcher(message.toLowerCase(Locale.ROOT)).find();
+        if (tea || sesame || text.contains("me xung") || text.contains("banh") || text.contains("keo") || text.contains("cua hang co gi")) {
             var lookup = new LinkedHashMap<String, Object>();
             lookup.put("query", message.substring(0, Math.min(message.length(), 120)));
             if (slots.containsKey("budget")) lookup.put("budget", slots.get("budget"));

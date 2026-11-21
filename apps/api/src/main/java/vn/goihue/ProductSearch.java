@@ -25,7 +25,9 @@ public class ProductSearch {
     }
 
     static Set<String> terms(String query) {
-        String text = AgentTools.normalized(query).replaceAll("\\b(?:cho|tang|bieu)\\s+(?:me|bo|ba me|ong ba|ban gai|ban trai|dong nghiep|sep|khach hang|gia dinh|ban be)\\b", " ");
+        String text = AgentTools.normalized(query).replaceAll("\\b(?:cho|tang|bieu)\\s+(?:me|bo|ba me|ong ba|ban gai|ban trai|dong nghiep|sep|khach hang|doi tac|gia dinh|ban be)\\b", " ")
+            .replaceAll("\\bmon qua\\b|\\blien quan (?:den|toi)\\b", " ")
+            .replaceAll("^\\s*(?:the\\s+|vay\\s+)?con\\s+(.+?)\\s+thi\\s+sao\\s*[?!.]*\\s*$", "$1");
         var words = words(text);
         words.removeIf(word -> word.isEmpty() || FILLER.contains(word) || word.matches("[0-9]+(?:k|tr|vnd|d)?"));
         if (words.containsAll(Set.of("me", "xung"))) words.remove("banh");
@@ -33,13 +35,20 @@ public class ProductSearch {
     }
 
     private List<Entry> catalog() {
-        return db.query("""
+        var entries = db.query("""
             SELECT p.data::text, c.data->>'code', c.data->>'name'
             FROM records p JOIN records c ON c.kind='category'
               AND c.data->>'code'=p.data->>'category' AND c.data->>'active'='true'
             WHERE p.kind='product' AND p.data->>'active'='true'
             ORDER BY p.data->>'name', p.id
             """, (rs, i) -> new Entry(app.decode(rs.getString(1)), rs.getString(2), rs.getString(3)));
+        var book = pricing.book(Instant.now());
+        entries.forEach(entry -> pricing.publish(entry.product(), pricing.resolve(entry.product(), book)));
+        return entries;
+    }
+
+    List<Map<String, Object>> visibleProducts() {
+        return catalog().stream().map(Entry::product).toList();
     }
 
     AgentTools.Result search(Map<String, Object> input) {
@@ -53,8 +62,6 @@ public class ProductSearch {
         app.require(input.get("inStockOnly") == null || input.get("inStockOnly") instanceof Boolean, "Bộ lọc tồn kho không hợp lệ.");
         boolean inStockOnly = Boolean.TRUE.equals(input.get("inStockOnly"));
         var entries = catalog();
-        var book = pricing.book(Instant.now());
-        entries.forEach(entry -> pricing.publish(entry.product(), pricing.resolve(entry.product(), book)));
         var activeCategories = db.query("SELECT data->>'code', data->>'name' FROM records WHERE kind='category' AND data->>'active'='true' ORDER BY data->>'code'", (rs, i) -> Map.of("code", rs.getString(1), "name", rs.getString(2)));
         var terms = terms(query);
         var categoryTerms = terms(category);

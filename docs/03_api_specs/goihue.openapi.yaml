@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Goi Hue Unified Store API
-  version: 1.5.0-draft
+  version: 1.7.0-draft
   description: Unified persistence API. VietQR/IPN operations are experimental demo flows; shipping and refunds are recorded manually. See goihue-state-matrix.md.
 servers:
   - url: /api/store
@@ -81,7 +81,7 @@ paths:
       summary: Find the most recent guest order for this browser
       security: [{GuestCart: []}, {}]
       responses:
-        '200': {description: Object containing number, or an empty object when there is no session order}
+        '200': {description: 'Object containing number, or an empty object when there is no session order'}
   /guest/orders/lookup:
     post:
       operationId: lookupGuestOrder
@@ -110,7 +110,7 @@ paths:
       parameters:
         - {in: path, name: number, required: true, schema: {type: string, pattern: '^GH-[A-Z0-9]{8}$'}}
       responses:
-        '200': {description: Items, amounts, statuses, tracking and pending VietQR demo details. The original guest session also receives its lookup code. Delivery contacts and internal notes are excluded.}
+        '200': {description: 'Items, amounts, statuses, tracking and pending VietQR demo details. The original guest session also receives its lookup code. Delivery contacts and internal notes are excluded.'}
         '404': {$ref: '#/components/responses/Error'}
   /live:
     get:
@@ -145,6 +145,7 @@ paths:
   /discounts:
     get:
       operationId: publicDiscounts
+      summary: List active public discounts
       security: []
       description: Returns current enabled offers ordered by display priority, then start and ID. Product offers require at least one selected product with an active product and category and available stock. Group offers expose the currently available productIds. All times are UTC.
       responses:
@@ -162,6 +163,7 @@ paths:
   /pricing:
     get:
       operationId: effectiveCatalogPrices
+      summary: List effective catalog prices
       security: []
       responses:
         '200':
@@ -181,6 +183,7 @@ paths:
   /admin/pricing:
     get:
       operationId: listPricingRules
+      summary: List administrative pricing rules
       description: ADMIN with pricing.manage. Lists all rules with their revision, including paused and ended rules.
       responses:
         '200':
@@ -193,6 +196,7 @@ paths:
   /admin/discounts:
     get:
       operationId: manageDiscounts
+      summary: List administrative discounts
       description: ADMIN with discount.manage. Includes paused, scheduled, and ended programs.
       responses:
         '200':
@@ -370,7 +374,7 @@ paths:
       parameters:
         - {in: query, name: conversationId, schema: {type: string, format: uuid}}
       responses:
-        '200': {description: 'Owner-only latest conversationId (or requested UUID), messages (up to 40), memory (budget/recipient/occasion), revision. Consent gates reads. Guests receive 401. No other-owner conversation is returned.'}
+        '200': {description: 'Owner-only latest conversationId (or requested UUID), messages (up to 40), memory (budget/recipient/occasion), revision. Assistant messages include productIds (up to eight public references) and purchaseContext (budget scope, recipients, units each, shipping and selection constraints); legacy turns use empty arrays/objects. These are conversation state, separately gated by history consent. Guests receive 401. No other-owner conversation is returned.'}
         '401': {$ref: '#/components/responses/Error'}
         '403': {$ref: '#/components/responses/Error'}
     delete:
@@ -387,17 +391,38 @@ paths:
       operationId: agentChat
       summary: Agent chat
       description: >-
-        Eight tools are available, including search_products for public catalog discovery independently of recommendation ranking.
+        Nine tools are available, including plan_purchase for verified multi-recipient purchase arithmetic and search_products for public catalog discovery independently of recommendation ranking.
         Search accepts optional query, category code/name, inStockOnly, limit (1..8) and positive budget.
         Its budget is taken only from the current customer message, never silently inherited from older gift preferences.
         Results include items, categories, totalMatches, outOfStockMatches, budgetApplied and code
         (MATCHED, NO_MATCH, OUT_OF_STOCK or UNKNOWN_CATEGORY). Items include categoryName and available.
         Search matches Vietnamese names with or without accents and active category names/codes; inactive products/categories are excluded.
         Visible out-of-stock items can be returned and are explicitly identified, without enabling a cart proposal.
-        An answer that invents shipping fees without a get_shipping result in the current turn is replaced with verified tool summaries.
+        An answer that invents shipping fees without a verified get_shipping or plan_purchase result in the current turn is replaced with verified tool summaries.
+        General gift-selection advice may use common knowledge and conditional recommendations without forcing a catalog lookup.
+        Unknown product attributes remain unconfirmed rather than inferred absent; general knowledge is never presented as verified SKU data.
+        General references to considering delivery costs are permitted without asserting an unverified amount or free-shipping promise.
         Ambiguous compare_products/add_to_cart references return AMBIGUOUS choices as product cards, without a comparison or cart_proposal event.
         Product tools use effective catalog prices. A cart_proposal includes priceSource so the storefront can revalidate the reviewed unit price before adding the item.
         Only an exact or unique sellable product reference can create a cart proposal; the customer still confirms the actual cart mutation.
+        Optional contextProductIds carries up to eight public product references from the last displayed set. Saved owned history takes precedence.
+        References such as "one of these two" scope fresh product tools to that set rather than global popularity.
+        A shortened or misspelled reference is resolved only with a unique distinguishing name word within that set; ambiguity asks the customer to choose.
+        Context never authorizes access to hidden products, private orders or a cart write, and is persisted only with history consent.
+        Changing to a new product topic releases the previous set. Current price, stock and visibility are revalidated rather than trusted from history.
+        If the final answer names a recognized product outside a resolved conversational set, it is replaced with advice derived from that set's current catalog descriptions.
+        plan_purchase uses recipientCount times unitsPerRecipient (at most 100 total units), current prices/stock, and the current single-order shipping configuration.
+        Budget scope TOTAL and PER_RECIPIENT are distinct; per-recipient plans also verify a concrete distribution against each recipient's cap.
+        The bounded solver considers uniform choices, two-type mixes and a cheapest-stock combination within at most eight candidates; it does not claim exhaustive global preference optimization.
+        SAME and DIFFERENT selection requirements are respected; unsupported distribution or separate-address assumptions ask for clarification.
+        Parsed customer constraints and validated conversational state are authoritative over invented model budget/count arguments.
+        Computed quantities, totals and feasibility replace model rewrites in the final purchase-plan answer. No plan writes the cart or creates an order.
+        Plans resolve effective pricing and apply the same best eligible discount, floor limits and post-discount shipping threshold as checkout. Totals describe a new standalone order containing the proposed lines; existing cart contents are not included.
+        Unspecified shipping inclusion is disclosed with the verified single-order total, rather than assuming zero shipping cost.
+        SSE purchase_context carries the updated constraint object, and purchase_plan carries code, constraints, requiredQuantity, totalBudget, current items/shipping and up to three options.
+        Option fields include lines (productId/name/quantity/unitPrice/lineTotal), subtotal, discountAmount, netSubtotal, shippingFee, total, remainingBudget, fitsIncludingShipping, maxRecipientCost and uniform.
+        A planning product_cards event includes optional contextProductIds preserving the candidate set while items displays only products used by feasible options.
+        Purchase constraints and quote data are persisted only with history consent. Group budgets are not silently written as ordinary preference-memory budgets.
       security: []
       parameters:
         - {$ref: '#/components/parameters/Idempotency'}
@@ -411,6 +436,12 @@ paths:
               properties:
                 message: {type: string, maxLength: 1000}
                 conversationId: {type: string, format: uuid, description: Server supplies a UUID when absent; guest conversation context stays in browser memory.}
+                contextProductIds:
+                  type: array
+                  maxItems: 8
+                  items: {type: string, format: uuid}
+                  description: Public product references from the last displayed set, not trusted product facts. Unknown or hidden references never broaden a follow-up into the full catalog.
+                purchaseContext: {$ref: '#/components/schemas/PurchaseContext'}
                 history:
                   type: array
                   maxItems: 6
@@ -437,7 +468,7 @@ paths:
       parameters:
         - {in: path, name: slug, required: true, schema: {type: string}}
       responses:
-        '200': {description: Product with effective price, basePrice and pricing metadata}
+        '200': {description: 'Product with effective price, basePrice and pricing metadata'}
         '404': {$ref: '#/components/responses/Error'}
   /admin/products:
     get:
@@ -756,6 +787,17 @@ components:
             revision: {type: integer, minimum: 1}
             productName: {type: string}
             productSlug: {type: string}
+    PurchaseContext:
+      type: object
+      additionalProperties: false
+      description: Optional conversational constraints. Current explicit customer changes override prior values; owned saved history takes precedence over client state. Does not authorize prices, inventory or mutations.
+      properties:
+        budget: {type: integer, minimum: 1, maximum: 100000000}
+        budgetScope: {type: string, enum: [TOTAL, PER_RECIPIENT], default: TOTAL}
+        recipientCount: {type: integer, minimum: 1, maximum: 100}
+        unitsPerRecipient: {type: integer, minimum: 1, maximum: 100, default: 1}
+        shippingInBudget: {type: string, enum: [UNSPECIFIED, INCLUDED, EXCLUDED], default: UNSPECIFIED}
+        selectionMode: {type: string, enum: [ANY, SAME, DIFFERENT], default: ANY}
     Mutation:
       type: object
       required: [action]
