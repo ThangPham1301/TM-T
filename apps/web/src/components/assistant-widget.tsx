@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { api, ApiError, money, type Row, useStore } from "@/lib/store";
 import { ProductImage } from "./product/product-image";
 import { AiPreferences } from "./ai-preferences";
@@ -147,7 +147,6 @@ function ChatSession({
   onCart: boolean;
 }) {
   const { state, mutate } = useStore();
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [proposal, setProposal] = useState<CartProposal | null>(null);
   const [proposalQty, setProposalQty] = useState(1);
@@ -234,19 +233,15 @@ function ChatSession({
   async function confirmProposal() {
     if (!proposal || adding) return;
     const p = proposal;
-    if (!state) {
-      setProposal(null);
-      router.push("/login");
-      return;
-    }
-    if (state.user.role !== "CUSTOMER") {
+    if (state && state.user.role !== "CUSTOMER") {
       setProposal(null);
       noteLocal("Tài khoản của bạn không dùng giỏ hàng khách.");
       return;
     }
+    const prefix = state ? "" : "guest/";
     setAdding(true);
     try {
-      const summary = await api("cart/summary");
+      const summary = await api(`${prefix}cart/summary`);
       const current = (summary.items as Row[]).find(
         (c) => c.productId === p.productId,
       );
@@ -257,7 +252,7 @@ function ChatSession({
         next > Math.min(100, p.stock)
       )
         throw new Error("Số lượng vượt tồn kho hoặc giới hạn giỏ hàng.");
-      await mutate("commerce", "cart-set", {
+      await mutate(`${prefix}commerce`, "cart-set", {
         productId: p.productId,
         quantity: next,
         cartToken: summary.cartToken,

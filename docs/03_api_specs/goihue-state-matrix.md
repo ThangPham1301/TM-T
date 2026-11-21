@@ -13,6 +13,21 @@ Các thao tác ghi của trình duyệt yêu cầu Origin tin cậy và same-ori
 
 ## API
 
+### Mua không cần tài khoản
+
+| Method và path sau prefix | Trạng thái và cách xử lý |
+| --- | --- |
+| GET guest/cart/summary | 200 trả cùng cấu trúc báo giá CUSTOMER. Phiên chưa có hoặc hết hạn trả giỏ trống. |
+| POST guest/commerce | cart-set, cart-refresh, cart-clear và checkout dùng Origin BFF, cookie giỏ khách và `Idempotency-Key`. Lần thêm đầu tạo phiên. Nếu giá, ưu đãi, giỏ hoặc phí đổi, 409 và tải báo giá mới. Tồn thiếu/cửa hàng ngừng nhận đơn trả 422. COD và VietQR dùng cùng transaction chốt đơn và cập nhật tồn. |
+| POST guest/cart/merge | CUSTOMER xác nhận gộp giỏ, gửi token của cả hai giỏ. Thao tác cùng transaction và khóa gửi lặp. Giỏ đã đổi trả 409, hết tồn trả 422, dữ liệu hai giỏ được giữ lại khi lỗi. |
+| GET guest/orders/latest | Trả mã đơn mới nhất thuộc cookie giỏ hiện tại, hoặc đối tượng rỗng. |
+| POST guest/orders/lookup | Cần mã đơn và mã tra cứu. Trả 404 chung khi không có quyền; giới hạn số lần thử, vượt giới hạn trả 429. Thành công cấp cookie riêng, giới hạn đúng một đơn và có hiệu lực 30 phút. |
+| GET guest/orders/{number} | Cookie giỏ ban đầu hoặc quyền tra cứu của đúng đơn. Chỉ trả sản phẩm, số tiền, trạng thái và mã vận đơn. Mã QR chỉ trả khi còn chờ thanh toán và còn hạn. Phản hồi bỏ địa chỉ, điện thoại, ghi chú nội bộ và thông tin đối soát. |
+
+Cookie giỏ HttpOnly/SameSite Strict, thời hạn 7 ngày kể từ lần cập nhật giỏ cuối. Bật Secure theo cấu hình HTTPS hiện tại. Mã tra cứu lưu dạng hash và cấp lại chỉ cho trình duyệt có phiên giỏ ban đầu. Tác vụ dọn phiên xóa giỏ hết hạn và quyền truy cập tạm thời. Đơn hàng và dữ liệu giao hàng được giữ theo chính sách lưu trữ giao dịch của cửa hàng. Luồng quản trị nhận đơn khách với `customerType=GUEST`. Khách có thể xem đơn gần nhất hoặc mở đơn bằng mã tại `/tra-cuu-don-hang`. VietQR trên luồng này là demo.
+
+### API của cửa hàng và tài khoản
+
 | Method và path sau prefix | Input | Kết quả/quyền |
 | --- | --- | --- |
 | GET products | Không | Catalog đang active, public |

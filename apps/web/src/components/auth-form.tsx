@@ -10,7 +10,7 @@ import styles from "./auth-form.module.css";
 
 const heritageImage = "/images/stitch/asset-07.jpg";
 
-export function AuthForm({ register = false }: { register?: boolean }) {
+export function AuthForm({ register = false, returnToCheckout = false }: { register?: boolean; returnToCheckout?: boolean }) {
   const router = useRouter();
   const { busy, run, reload } = useStore();
   const [showPassword, setShowPassword] = useState(false);
@@ -58,7 +58,7 @@ export function AuthForm({ register = false }: { register?: boolean }) {
               void run(async () => {
                 const user = await api(`auth/${register ? "register" : "login"}`, "POST", b);
                 await reload();
-                router.push(user.role === "ADMIN" ? "/admin" : "/account");
+                router.push(user.role === "ADMIN" ? "/admin" : returnToCheckout ? "/checkout" : "/account");
               });
             }}>
               {register && <TextField label="Họ và tên" name="name" autoComplete="name" required maxLength={100} placeholder="Nhập họ và tên của bạn" />}

@@ -82,11 +82,25 @@ public class CommerceApi {
         return app.list("discount", actor);
     }
 
-    List<Map<String,Object>> cartOf(UUID uid){return db.query("SELECT data::text FROM records WHERE kind='cart' AND owner_id=? ORDER BY id",(r,i)->app.decode(r.getString(1)),uid);}
-    String cartToken(UUID uid){return app.hash(app.encode(cartOf(uid)));}
-    void checkCart(UUID uid,Map<String,Object> b){if(!cartToken(uid).equals(app.text(b,"cartToken",100)))throw new PlatformApi.Problem(409,"Giỏ hàng đã thay đổi. Hãy tải lại trước khi tiếp tục.");}
-    List<Map<String,Object>> cartView(UUID uid, PricingService.Book book) {
-        var rows = cartOf(uid);
+    record CartOwner(UUID id, boolean guest) {
+        String column() { return guest ? "guest_owner_id" : "owner_id"; }
+    }
+
+    List<Map<String,Object>> cartOf(CartOwner owner) {
+        if (owner.id() == null) return List.of();
+        return db.query("SELECT data::text FROM records WHERE kind='cart' AND " + owner.column() + "=? ORDER BY id",
+                (row, index) -> app.decode(row.getString(1)), owner.id());
+    }
+
+    String cartToken(CartOwner owner) { return app.hash(app.encode(cartOf(owner))); }
+
+    void checkCart(CartOwner owner, Map<String,Object> body) {
+        if (!cartToken(owner).equals(app.text(body, "cartToken", 100)))
+            throw new PlatformApi.Problem(409, "Giỏ hàng đã thay đổi. Hãy tải lại trước khi tiếp tục.");
+    }
+
+    List<Map<String,Object>> cartView(CartOwner owner, PricingService.Book book) {
+        var rows = cartOf(owner);
         for (var line : rows) {
             var p = product(app.str(line, "productId"));
             var price = pricing.resolve(p, book);
@@ -114,16 +128,19 @@ public class CommerceApi {
         }).toList()));
     }
 
-    @GetMapping("/cart") public Object cart(HttpServletRequest req){var a=app.actor(req);app.permission(a,"cart.manage");return cartView((UUID)a.get("id"),pricing.book(Instant.now()));}
+    @GetMapping("/cart") public Object cart(HttpServletRequest req){var a=app.actor(req);app.permission(a,"cart.manage");return cartView(new CartOwner((UUID)a.get("id"), false),pricing.book(Instant.now()));}
     @GetMapping("/cart/summary")
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public Object summary(HttpServletRequest req){
         var actor = app.actor(req);
         app.permission(actor, "cart.manage");
-        UUID uid = (UUID) actor.get("id");
+        return cartSummary(new CartOwner((UUID) actor.get("id"), false));
+    }
+
+    Map<String,Object> cartSummary(CartOwner owner) {
         Instant now = Instant.now();
         var book = pricing.book(now);
-        var rows = cartView(uid, book);
+        var rows = cartView(owner, book);
         boolean blocked = rows.stream().anyMatch(row -> !Boolean.TRUE.equals(row.get("available"))
                 || app.number(row, "quantity") > app.number(row, "stock"));
         var quote = quote(rows, blocked ? List.of() : discounts.activeOffers(now), "currentPricing");
@@ -131,7 +148,7 @@ public class CommerceApi {
         int fee = catalog.shippingFee(quote.netSubtotal());
         var result = quote.breakdown();
         result.put("items", rows);
-        result.put("cartToken", cartToken(uid));
+        result.put("cartToken", cartToken(owner));
         result.put("priceToken", priceToken(rows));
         result.put("nextPriceChangeAt", book.nextChangeAt());
         result.put("pricedAt", now);
@@ -168,139 +185,15 @@ public class CommerceApi {
             case "discount-save", "discount-toggle" -> result = discounts.mutate(a, b);
             case "product-save" -> result=catalog.saveProduct(a,b);
             case "category-save","category-delete","product-delete","catalog-toggle","shipping-save","catalog-image-intent" -> result=catalog.mutation(a,b);
-            case "cart-set" -> {
-                app.permission(a,"cart.manage");checkCart(uid,b);var p=product(app.text(b,"productId",50));int qty=app.number(b,"quantity");app.require(qty>=0&&qty<=100,"Số lượng từ 0 đến 100.");if(qty>0)app.require(catalog.visible(p)&&qty<=app.number(p,"stock"),"Sản phẩm không đủ tồn hoặc đã ngừng bán.");
-                UUID id = UUID.nameUUIDFromBytes((uid + ":" + app.str(p,"id")).getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                if (qty == 0) {
-                    db.update("DELETE FROM records WHERE id=? AND owner_id=?", id, uid);
-                    result = Map.of("ok", true);
-                } else {
-                    var existing = cartOf(uid).stream().filter(line -> app.str(line, "id").equals(id.toString())).findFirst();
-                    var price = pricing.resolve(p, pricing.book(Instant.now()));
-                    boolean hasExpectedPrice = b.containsKey("expectedUnitPrice");
-                    if (hasExpectedPrice && (price.amount() != app.number(b, "expectedUnitPrice")
-                            || !price.source().equals(app.str(b, "expectedPriceSource"))))
-                        throw new PlatformApi.Problem(409, "Giá vừa thay đổi. Xem mức giá mới trước khi thêm vào giỏ.");
-                    if (existing.isPresent() && !hasExpectedPrice) {
-                        var line = existing.get();
-                        line.put("quantity", qty);
-                        line.put("version", UUID.randomUUID().toString());
-                        line.put("revision", app.number(line, "revision") + 1);
-                        result = app.save("cart", uid, line);
-                    } else {
-                        int revision = existing.map(line -> app.number(line, "revision") + 1).orElse(1);
-                        result = app.save("cart", uid, cartSnapshot(p, price, qty, id, revision));
-                    }
-                }
-            }
-            case "cart-clear","cart-refresh" -> {
-                app.permission(a,"cart.manage");checkCart(uid,b);
-                if(action.equals("cart-clear"))db.update("DELETE FROM records WHERE kind='cart' AND owner_id=?",uid);
-                else {
-                    var rows = cartView(uid, pricing.book(Instant.now()));
-                    String submitted = app.str(b, "priceToken");
-                    if (!submitted.isEmpty() && !submitted.equals(priceToken(rows)))
-                        throw new PlatformApi.Problem(409, "Giá lại thay đổi. Kiểm tra và xác nhận mức giá mới.");
-                    for (var line : rows) {
-                        line.put("price", line.get("currentPrice"));
-                        line.put("pricing", line.get("currentPricing"));
-                        for (String field : List.of("currentPrice", "currentPricing", "stock", "available", "priceChanged"))
-                            line.remove(field);
-                        line.put("revision", app.number(line, "revision") + 1);
-                        line.put("version", UUID.randomUUID().toString());
-                        app.save("cart", uid, line);
-                    }
-                }
-                result=Map.of("ok",true);
+            case "cart-set", "cart-clear", "cart-refresh" -> {
+                app.permission(a, "cart.manage");
+                result = mutateCart(new CartOwner(uid, false), action, b);
             }
             case "checkout" -> {
                 app.permission(a, "order.create");
-                checkCart(uid, b);
-                var shipping = catalog.shipping();
-                String pauseMessage = app.str(shipping, "pauseMessage");
-                app.require(Boolean.TRUE.equals(shipping.get("enabled")),
-                        pauseMessage.isEmpty() ? "Cửa hàng đang tạm ngừng nhận đơn." : pauseMessage);
-                catalog.revision(shipping, Map.of("revision", app.number(b, "shippingRevision")));
-
-                Instant now = Instant.now();
-                var book = pricing.book(now);
-                var cart = cartOf(uid);
-                app.require(!cart.isEmpty(), "Giỏ hàng đang trống.");
-                var items = new ArrayList<Map<String, Object>>();
-                var products = new LinkedHashMap<String, Map<String, Object>>();
-                for (var line : cart) {
-                    String productId = app.str(line, "productId");
-                    var p = product(productId);
-                    int quantity = app.number(line, "quantity");
-                    app.require(catalog.visible(p) && app.number(p, "stock") >= quantity,
-                            "Sản phẩm không đủ tồn hoặc đã ngừng bán: " + app.str(p, "name"));
-                    var price = pricing.resolve(p, book);
-                    if (priceChanged(line, price))
-                        throw new PlatformApi.Problem(409, "Giá bán đã thay đổi. Kiểm tra và xác nhận tổng tiền mới.");
-                    var item = new LinkedHashMap<String, Object>();
-                    item.put("productId", productId);
-                    item.put("name", p.get("name"));
-                    item.put("slug", p.get("slug"));
-                    item.put("image", p.get("image"));
-                    item.put("quantity", quantity);
-                    item.put("price", price.amount());
-                    item.put("pricing", price);
-                    items.add(item);
-                    products.put(productId, p);
-                }
-                var quote = quote(items, discounts.activeOffers(now), "pricing");
-                String submittedQuote = app.str(b, "quoteToken");
-                if (!(submittedQuote.isEmpty() && quote.discountAmount() == 0) && !quoteToken(quote).equals(submittedQuote))
-                    throw new PlatformApi.Problem(409, "Ưu đãi trong giỏ đã thay đổi. Kiểm tra tổng tiền mới trước khi xác nhận.");
-                app.require(quote.subtotal() <= 100_000_000, "Đơn vượt hạn mức 100 triệu đồng.");
-
-                for (var item : items) {
-                    String productId = app.str(item, "productId");
-                    long reduction = quote.lineDiscounts().getOrDefault(productId, 0L);
-                    int quantity = app.number(item, "quantity");
-                    if (reduction > 0) {
-                        item.put("discountAmount", reduction);
-                        item.put("netTotal", (long) app.number(item, "price") * quantity - reduction);
-                    }
-                    var p = products.get(productId);
-                    p.put("stock", app.number(p, "stock") - quantity);
-                    p.put("revision", app.number(p, "revision") + 1);
-                    app.save("product", null, p);
-                }
-                int fee = catalog.shippingFee(quote.netSubtotal());
-                long total = quote.netSubtotal() + fee;
-                var order = quote.breakdown();
-                String number = "GH-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-                order.put("number", number);
-                order.put("items", items);
-                order.put("shippingFee", fee);
-                order.put("shippingRevision", shipping.get("revision"));
-                order.put("total", total);
-                order.put("status", "PLACED");
-                String method = app.str(b, "paymentMethod");
-                if (method.isEmpty()) method = "COD";
-                app.require(Set.of("COD", "VIETQR").contains(method), "Phương thức thanh toán không được hỗ trợ.");
-                order.put("paymentMethod", method);
-                order.put("paymentStatus", "UNPAID");
-                recipient(order, app.str(b, "addressId").isEmpty() ? b : app.record(app.str(b, "addressId"), "address", a));
-                String firstNote = "Đã tiếp nhận đơn hàng, thanh toán khi nhận hàng";
-                if (method.equals("VIETQR")) {
-                    var payment = new LinkedHashMap<String, Object>();
-                    payment.put("method", "VIETQR");
-                    payment.put("amount", total);
-                    payment.put("content", number);
-                    payment.put("bankBin", bankBin);
-                    payment.put("bankAccount", bankAccount);
-                    payment.put("bankName", bankName);
-                    payment.put("payload", VietQr.payload(bankBin, bankAccount, bankName, total, number));
-                    payment.put("status", "PENDING");
-                    payment.put("expiresAt", now.plusSeconds(paymentTtlMinutes * 60L).toString());
-                    order.put("payment", payment);
-                    firstNote = "Đã tiếp nhận đơn hàng, chờ thanh toán VietQR trong " + paymentTtlMinutes + " phút.";
-                }
-                order.put("history", new ArrayList<>(List.of(Map.of("at", now.toString(), "status", "PLACED", "note", firstNote))));
-                result = app.save("order", uid, order);
-                db.update("DELETE FROM records WHERE owner_id=? AND kind='cart'", uid);
+                var shippingAddress = app.str(b, "addressId");
+                result = checkout(new CartOwner(uid, false), b,
+                        shippingAddress.isEmpty() ? b : app.record(shippingAddress, "address", a));
             }
             case "order-cancel","order-status","order-paid","order-recipient","payment-resolve" -> {
                 var order=app.record(app.text(b,"id",50),"order",a);catalog.revision(order,b);String status=app.str(order,"status"),note=app.text(b,"note",2000);
@@ -361,6 +254,195 @@ public class CommerceApi {
             default -> throw new PlatformApi.Problem(422,"Thao tác không được hỗ trợ.");
         }
         app.audit(a,app.str(result,"id"),action);db.update("INSERT INTO operations VALUES(?,?,?,?::jsonb)",uid,key,fingerprint,app.encode(result));return result;
+    }
+
+    private Map<String,Object> saveOwned(CartOwner owner, String kind, Map<String,Object> data) {
+        return app.save(kind, owner.guest() ? null : owner.id(), owner.guest() ? owner.id() : null, data);
+    }
+
+    private void clearCart(CartOwner owner) {
+        db.update("DELETE FROM records WHERE kind='cart' AND " + owner.column() + "=?", owner.id());
+    }
+
+    Map<String,Object> mutateCart(CartOwner owner, String action, Map<String,Object> b) {
+        checkCart(owner, b);
+        return switch (action) {
+            case "cart-set" -> setCartLine(owner, b);
+            case "cart-clear" -> {
+                clearCart(owner);
+                yield Map.of("ok", true);
+            }
+            case "cart-refresh" -> {
+                var rows = cartView(owner, pricing.book(Instant.now()));
+                String submitted = app.str(b, "priceToken");
+                if (!submitted.isEmpty() && !submitted.equals(priceToken(rows)))
+                    throw new PlatformApi.Problem(409, "Giá lại thay đổi. Kiểm tra và xác nhận mức giá mới.");
+                for (var line : rows) {
+                    line.put("price", line.get("currentPrice"));
+                    line.put("pricing", line.get("currentPricing"));
+                    for (String field : List.of("currentPrice", "currentPricing", "stock", "available", "priceChanged"))
+                        line.remove(field);
+                    touchCartLine(line);
+                    saveOwned(owner, "cart", line);
+                }
+                yield Map.of("ok", true);
+            }
+            default -> throw new IllegalArgumentException("Unsupported cart action");
+        };
+    }
+
+    private UUID cartLineId(CartOwner owner, String productId) {
+        return UUID.nameUUIDFromBytes((owner.id() + ":" + productId).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    private void touchCartLine(Map<String,Object> line) {
+        line.put("revision", app.number(line, "revision") + 1);
+        line.put("version", UUID.randomUUID().toString());
+    }
+
+    private Map<String,Object> setCartLine(CartOwner owner, Map<String,Object> body) {
+        var product = product(app.text(body, "productId", 50));
+        UUID id = cartLineId(owner, app.str(product, "id"));
+        int quantity = app.number(body, "quantity");
+        app.require(quantity >= 0 && quantity <= 100, "Số lượng từ 0 đến 100.");
+        if (quantity == 0) {
+            db.update("DELETE FROM records WHERE kind='cart' AND id=? AND " + owner.column() + "=?", id, owner.id());
+            return Map.of("ok", true);
+        }
+        app.require(catalog.visible(product) && quantity <= app.number(product, "stock"),
+                "Sản phẩm không đủ tồn hoặc đã ngừng bán.");
+        var existing = cartOf(owner).stream().filter(line -> app.str(line, "id").equals(id.toString())).findFirst();
+        var price = pricing.resolve(product, pricing.book(Instant.now()));
+        boolean hasExpectedPrice = body.containsKey("expectedUnitPrice");
+        if (hasExpectedPrice && (price.amount() != app.number(body, "expectedUnitPrice")
+                || !price.source().equals(app.str(body, "expectedPriceSource"))))
+            throw new PlatformApi.Problem(409, "Giá vừa thay đổi. Xem mức giá mới trước khi thêm vào giỏ.");
+        if (existing.isPresent() && !hasExpectedPrice) {
+            var line = existing.get();
+            line.put("quantity", quantity);
+            touchCartLine(line);
+            return saveOwned(owner, "cart", line);
+        }
+        int revision = existing.map(line -> app.number(line, "revision") + 1).orElse(1);
+        return saveOwned(owner, "cart", cartSnapshot(product, price, quantity, id, revision));
+    }
+
+    Map<String,Object> checkout(CartOwner owner, Map<String,Object> b, Map<String,Object> destination) {
+        checkCart(owner, b);
+        var shipping = catalog.shipping();
+        String pauseMessage = app.str(shipping, "pauseMessage");
+        app.require(Boolean.TRUE.equals(shipping.get("enabled")),
+                pauseMessage.isEmpty() ? "Cửa hàng đang tạm ngừng nhận đơn." : pauseMessage);
+        catalog.revision(shipping, Map.of("revision", app.number(b, "shippingRevision")));
+
+        Instant now = Instant.now();
+        var book = pricing.book(now);
+        var cart = cartOf(owner);
+        app.require(!cart.isEmpty(), "Giỏ hàng đang trống.");
+        var items = new ArrayList<Map<String, Object>>();
+        var products = new LinkedHashMap<String, Map<String, Object>>();
+        for (var line : cart) {
+            String productId = app.str(line, "productId");
+            var p = product(productId);
+            int quantity = app.number(line, "quantity");
+            app.require(catalog.visible(p) && app.number(p, "stock") >= quantity,
+                    "Sản phẩm không đủ tồn hoặc đã ngừng bán: " + app.str(p, "name"));
+            var price = pricing.resolve(p, book);
+            if (priceChanged(line, price))
+                throw new PlatformApi.Problem(409, "Giá bán đã thay đổi. Kiểm tra và xác nhận tổng tiền mới.");
+            var item = new LinkedHashMap<String, Object>();
+            item.put("productId", productId);
+            item.put("name", p.get("name"));
+            item.put("slug", p.get("slug"));
+            item.put("image", p.get("image"));
+            item.put("quantity", quantity);
+            item.put("price", price.amount());
+            item.put("pricing", price);
+            items.add(item);
+            products.put(productId, p);
+        }
+        var quote = quote(items, discounts.activeOffers(now), "pricing");
+        String submittedQuote = app.str(b, "quoteToken");
+        if (!(submittedQuote.isEmpty() && quote.discountAmount() == 0) && !quoteToken(quote).equals(submittedQuote))
+            throw new PlatformApi.Problem(409, "Ưu đãi trong giỏ đã thay đổi. Kiểm tra tổng tiền mới trước khi xác nhận.");
+        app.require(quote.subtotal() <= 100_000_000, "Đơn vượt hạn mức 100 triệu đồng.");
+
+        for (var item : items) {
+            String productId = app.str(item, "productId");
+            long reduction = quote.lineDiscounts().getOrDefault(productId, 0L);
+            int quantity = app.number(item, "quantity");
+            if (reduction > 0) {
+                item.put("discountAmount", reduction);
+                item.put("netTotal", (long) app.number(item, "price") * quantity - reduction);
+            }
+            var p = products.get(productId);
+            p.put("stock", app.number(p, "stock") - quantity);
+            p.put("revision", app.number(p, "revision") + 1);
+            app.save("product", null, p);
+        }
+        int fee = catalog.shippingFee(quote.netSubtotal());
+        long total = quote.netSubtotal() + fee;
+        var order = quote.breakdown();
+        String number = nextOrderNumber();
+        order.put("number", number);
+        order.put("items", items);
+        order.put("shippingFee", fee);
+        order.put("shippingRevision", shipping.get("revision"));
+        order.put("total", total);
+        order.put("status", "PLACED");
+        String method = app.str(b, "paymentMethod");
+        if (method.isEmpty()) method = "COD";
+        app.require(Set.of("COD", "VIETQR").contains(method), "Phương thức thanh toán không được hỗ trợ.");
+        order.put("paymentMethod", method);
+        order.put("paymentStatus", "UNPAID");
+        recipient(order, destination);
+        String firstNote = "Đã tiếp nhận đơn hàng, thanh toán khi nhận hàng";
+        if (method.equals("VIETQR")) {
+            var payment = new LinkedHashMap<String, Object>();
+            payment.put("method", "VIETQR");
+            payment.put("amount", total);
+            payment.put("content", number);
+            payment.put("bankBin", bankBin);
+            payment.put("bankAccount", bankAccount);
+            payment.put("bankName", bankName);
+            payment.put("payload", VietQr.payload(bankBin, bankAccount, bankName, total, number));
+            payment.put("status", "PENDING");
+            payment.put("expiresAt", now.plusSeconds(paymentTtlMinutes * 60L).toString());
+            order.put("payment", payment);
+            firstNote = "Đã tiếp nhận đơn hàng, chờ thanh toán VietQR trong " + paymentTtlMinutes + " phút.";
+        }
+        order.put("history", new ArrayList<>(List.of(Map.of("at", now.toString(), "status", "PLACED", "note", firstNote))));
+        if (owner.guest()) order.put("customerType", "GUEST");
+        var result = saveOwned(owner, "order", order);
+        clearCart(owner);
+        return result;
+    }
+
+    void mergeGuestCart(CartOwner guest, CartOwner customer) {
+        var customerLines = new HashMap<String, Map<String,Object>>();
+        for (var line : cartOf(customer)) customerLines.put(app.str(line, "productId"), line);
+        var book = pricing.book(Instant.now());
+        for (var line : cartOf(guest)) {
+            String productId = app.str(line, "productId");
+            var product = product(productId);
+            var existing = customerLines.get(productId);
+            int quantity = app.number(line, "quantity") + (existing == null ? 0 : app.number(existing, "quantity"));
+            app.require(catalog.visible(product) && quantity <= Math.min(100, app.number(product, "stock")),
+                    "Không thể gộp giỏ vì sản phẩm hết hàng hoặc vượt số lượng cho phép: " + app.str(product, "name"));
+            UUID lineId = cartLineId(customer, productId);
+            int revision = existing == null ? 1 : app.number(existing, "revision") + 1;
+            saveOwned(customer, "cart", cartSnapshot(product, pricing.resolve(product, book), quantity, lineId, revision));
+        }
+        clearCart(guest);
+    }
+
+    private String nextOrderNumber() {
+        String number;
+        do {
+            number = "GH-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
+        } while (Boolean.TRUE.equals(db.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM records WHERE kind='order' AND data->>'number'=?)", Boolean.class, number)));
+        return number;
     }
 
     private void resolveVietQr(Map<String, Object> order, Map<String, Object> payment,

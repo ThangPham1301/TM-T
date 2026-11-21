@@ -12,6 +12,8 @@ import styles from "./cart-view.module.css";
 
 type CartViewProps = {
   recommendations?: React.ReactNode;
+  mergeNotice?: React.ReactNode;
+  guest: boolean;
   summary: CartSummary | null;
   fetching: boolean;
   error: string;
@@ -24,7 +26,7 @@ type CartViewProps = {
 function Icon({ name }: { name: string }) {
   return <span className={`material-symbols-outlined ${styles.icon}`} aria-hidden="true">{name}</span>;
 }
-export function CartView({ summary, fetching, error, disabled, blocked, refresh, update, checkout, recommendations }: CartViewProps) {
+export function CartView({ summary, fetching, error, disabled, blocked, refresh, update, checkout, recommendations, mergeNotice, guest }: CartViewProps) {
   const [confirmClear, setConfirmClear] = useState(false);
   const rows = summary?.items ?? [];
   const threshold = Number(summary?.shipping.freeShippingThreshold ?? 0);
@@ -38,6 +40,7 @@ export function CartView({ summary, fetching, error, disabled, blocked, refresh,
       <header className={styles.heading}><div><span className={styles.kicker}>Gói trọn ân tình</span><h1>Giỏ Hàng Cố Đô</h1></div>
         {summary && <span className={styles.count}><Icon name="inventory_2" /> Hiện có <strong>{rows.length} thức quà</strong> trong giỏ</span>}
       </header>
+      {mergeNotice}
       {fetching && <p role="status" aria-live="polite">Đang tải giỏ hàng…</p>}
       {error && <div className={styles.error} role="alert">{error} <button type="button" onClick={refresh} disabled={disabled}>Thử lại</button></div>}
       {!fetching && summary && rows.length === 0 && <section className={styles.empty}><Icon name="shopping_bag" /><h2>Giỏ hàng đang trống</h2><p>Hãy chọn một thức quà mang hương vị Huế.</p><Link href="/products" className={styles.primary}>Khám phá bộ sưu tập →</Link></section>}
@@ -84,7 +87,7 @@ export function CartView({ summary, fetching, error, disabled, blocked, refresh,
           <div className={styles.total}><strong>Tổng cộng</strong><strong>{money(summary.total)}</strong></div>
           <p className={styles.summaryNote}>Giá, ưu đãi và phí giao hàng được kiểm tra lại khi xác nhận.</p>
           <button type="button" className={styles.primary} disabled={!canCheckout} onClick={checkout}>Tiến hành đặt hàng <span aria-hidden="true">→</span></button>
-          <ul className={styles.benefits}><li><Icon name="payments" />Thanh toán khi nhận hàng (COD)</li><li><Icon name="package_2" />Theo dõi đơn hàng trong tài khoản</li><li><Icon name="support_agent" />Hỗ trợ sau bán hàng</li></ul>
+          <ul className={styles.benefits}><li><Icon name="payments" />Thanh toán khi nhận hàng (COD)</li><li><Icon name="package_2" />{guest ? "Theo dõi đơn hàng bằng mã tra cứu" : "Theo dõi đơn hàng trong tài khoản"}</li><li><Icon name="support_agent" />Hỗ trợ sau bán hàng</li></ul>
         </aside>
       </div>}
     </section>

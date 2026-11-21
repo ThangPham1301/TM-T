@@ -11,7 +11,9 @@ import { ProductImage } from "./product/product-image";
 import styles from "./checkout-view.module.css";
 
 type CheckoutViewProps = {
-  summary: CartSummary | null; user: Row; addresses: Row[]; selectedAddress?: Row;
+  summary: CartSummary | null; user?: Row; addresses: Row[]; selectedAddress?: Row;
+  mergeNotice?: React.ReactNode;
+  quoteChanged: boolean;
   fetching: boolean; error: string; busy: boolean; disabled: boolean; blocked: boolean; addingAddress: boolean;
   previousTotal: number | null;
   onAcceptPrices: () => void;
@@ -21,7 +23,7 @@ type CheckoutViewProps = {
 };
 function Icon({ name }: { name: string }) { return <span className={`material-symbols-outlined ${styles.icon}`} aria-hidden="true">{name}</span>; }
 
-export function CheckoutView({ summary, user, addresses, selectedAddress, fetching, error, busy, disabled, blocked, addingAddress, previousTotal, onRefresh, onAcceptPrices, onAcceptTotal, onToggleAddress, onSelectAddress, onSaveAddress, onCheckout }: CheckoutViewProps) {
+export function CheckoutView({ summary, user, addresses, selectedAddress, mergeNotice, quoteChanged, fetching, error, busy, disabled, blocked, addingAddress, previousTotal, onRefresh, onAcceptPrices, onAcceptTotal, onToggleAddress, onSelectAddress, onSaveAddress, onCheckout }: CheckoutViewProps) {
   const [paymentMethod, setPaymentMethod] = useState<"COD" | "VIETQR">("COD");
   const rows = summary?.items ?? [];
   const pricesChanged = rows.some((line) => line.priceChanged);
@@ -33,6 +35,7 @@ export function CheckoutView({ summary, user, addresses, selectedAddress, fetchi
       <span className={styles.motto}>● &nbsp; Gói trọn hương vị Cố Đô</span>
     </div></div>
     <div className={styles.container}>
+      {mergeNotice}
       {fetching && <p role="status">Đang tải giỏ hàng…</p>}
       {error && <div className={styles.warning} role="alert">{error} <button type="button" onClick={onRefresh} disabled={disabled}>Thử lại</button></div>}
       {!fetching && summary && !rows.length && <section className={styles.empty}><h1>Giỏ hàng đang trống</h1><p>Hãy chọn thức quà trước khi đặt hàng.</p><Link href="/products">Khám phá bộ sưu tập →</Link></section>}
@@ -41,7 +44,7 @@ export function CheckoutView({ summary, user, addresses, selectedAddress, fetchi
           <header className={styles.intro}><span className={styles.kicker}>Tiến trình xác nhận quà</span><h1>Địa chỉ gửi gắm &amp; Thông tin người nhận</h1><p>Vui lòng kiểm tra thông tin nhận hàng để Gói Huế chuẩn bị đơn chu đáo.</p></header>
           {unavailable && <p className={styles.warning} role="alert">Số lượng hoặc tình trạng hàng đã thay đổi. <Link href="/cart">Về giỏ hàng để điều chỉnh.</Link></p>}
           {!summary.shipping.enabled && <p className={styles.warning} role="status">{shippingPauseMessage(summary.shipping)}</p>}
-          <section className={styles.card}>
+          {user ? <section className={styles.card}>
             <div className={styles.cardHeading}><span className={styles.number}>1</span><h2>Địa chỉ giao nhận đặc sản</h2><button type="button" className={styles.textButton} disabled={busy} onClick={onToggleAddress}>{addingAddress ? "Đóng" : "+ Thêm địa chỉ"}</button></div>
             {addresses.length > 0 && <fieldset className={styles.addressChoices}><legend>Chọn nơi nhận hàng</legend>
               {addresses.map(address => <label key={address.id} className={styles.addressOption}><input type="radio" name="addressChoice" checked={selectedAddress?.id === address.id} onChange={() => onSelectAddress(address.id)} /><span><strong>{String(address.label)} · {String(address.recipient)}</strong><small>{String(address.phone)} · {String(address.address)}</small></span></label>)}
@@ -49,16 +52,19 @@ export function CheckoutView({ summary, user, addresses, selectedAddress, fetchi
             </fieldset>}
             {addingAddress && <form className={styles.addressForm} onSubmit={onSaveAddress}><h3>Thêm địa chỉ mới</h3><AddressFields /><button type="submit" className={styles.secondary} disabled={busy}>Lưu và chọn địa chỉ</button></form>}
             {!addresses.length && !addingAddress && <p className={styles.hint}>Nhập thông tin người nhận bên dưới, hoặc thêm địa chỉ để sử dụng cho những lần sau.</p>}
-          </section>
+          </section> : <div className={styles.guestNotice}>
+            <div><strong>Mua không cần tài khoản</strong><p>Gói Huế sẽ cấp mã riêng để bạn theo dõi đơn sau khi đặt.</p></div>
+            <Link href="/login?returnUrl=%2Fcheckout">Đăng nhập để dùng địa chỉ đã lưu</Link>
+          </div>}
           {!addingAddress && <form id="goihue-checkout" className={styles.checkoutForm} onSubmit={onCheckout}>
-            {!selectedAddress && <section className={styles.card}><div className={styles.cardHeading}><span className={styles.number}>2</span><h2>Thông tin người nhận</h2><span className={styles.required}>* Bắt buộc nhập</span></div>
+            {!selectedAddress && <section className={styles.card}><div className={styles.cardHeading}><span className={styles.number}>{user ? "2" : "1"}</span><h2>Thông tin người nhận</h2><span className={styles.required}>* Bắt buộc nhập</span></div>
               <div className={styles.fields}>
-                <label>Họ và tên người nhận <span>*</span><input name="recipient" autoComplete="name" defaultValue={String(user.name)} required maxLength={100} /></label>
-                <label>Số điện thoại nhận hàng <span>*</span><input name="phone" type="tel" autoComplete="tel" defaultValue={String(user.phone ?? "")} required minLength={8} maxLength={30} /></label>
-                <label>Địa chỉ giao hàng <span>*</span><textarea name="address" autoComplete="street-address" defaultValue={String(user.address ?? "")} required maxLength={400} rows={3} placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố" /></label>
+                <label>Họ và tên người nhận <span>*</span><input name="recipient" autoComplete="name" defaultValue={String(user?.name ?? "")} required maxLength={100} /></label>
+                <label>Số điện thoại nhận hàng <span>*</span><input name="phone" type="tel" autoComplete="tel" defaultValue={String(user?.phone ?? "")} required minLength={8} maxLength={30} /></label>
+                <label>Địa chỉ giao hàng <span>*</span><textarea name="address" autoComplete="street-address" defaultValue={String(user?.address ?? "")} required maxLength={400} rows={3} placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố" /></label>
               </div>
             </section>}
-            <fieldset className={styles.card}><legend className={styles.visuallyHidden}>Phương thức thanh toán</legend><div className={styles.cardHeading}><span className={styles.number}>{selectedAddress ? "2" : "3"}</span><h2>Phương thức thanh toán</h2></div>
+            <fieldset className={styles.card}><legend className={styles.visuallyHidden}>Phương thức thanh toán</legend><div className={styles.cardHeading}><span className={styles.number}>{!user || selectedAddress ? "2" : "3"}</span><h2>Phương thức thanh toán</h2></div>
               <div className={styles.payments}>
                 <label className={styles.payment}><input type="radio" name="paymentMethod" value="COD" checked={paymentMethod === "COD"} onChange={() => setPaymentMethod("COD")} /><span><strong>Tiền mặt khi nhận hàng (COD)</strong><small>Thanh toán cho người giao khi nhận đơn.</small></span><Icon name="payments" /></label>
                 <label className={styles.payment}><input type="radio" name="paymentMethod" value="VIETQR" checked={paymentMethod === "VIETQR"} onChange={() => setPaymentMethod("VIETQR")} /><span><strong>VietQR (demo)</strong><small>Mã QR xuất hiện sau khi đặt hàng. Không chuyển tiền thật.</small></span><Icon name="qr_code_2" /></label>
@@ -68,13 +74,14 @@ export function CheckoutView({ summary, user, addresses, selectedAddress, fetchi
         </section>
         <aside className={styles.summary}>
           <header className={styles.summaryHeading}><div><span className={styles.kicker}>Tóm lược kiện quà</span><h2>Đơn hàng của bạn ({rows.length} món)</h2></div><Link href="/cart">Sửa ✎</Link></header>
-          {(pricesChanged || previousTotal !== null) && <div className={styles.warning}>
+          {(pricesChanged || quoteChanged) && <div className={styles.warning}>
             <p role="status">{previousTotal !== null
               ? <>Tổng tiền đã đổi từ <del>{money(previousTotal)}</del> thành <strong>{money(summary.total)}</strong>. Vui lòng xác nhận trước khi đặt hàng.</>
-              : "Đơn giá đã đổi. Kiểm tra giá cũ, giá mới và tổng tiền trước khi đặt."}</p>
+              : pricesChanged ? "Đơn giá đã đổi. Kiểm tra giá cũ, giá mới và tổng tiền trước khi đặt."
+              : "Ưu đãi hoặc phí giao đã thay đổi. Vui lòng kiểm tra và xác nhận lại."}</p>
             <button type="button" className={styles.secondary} disabled={disabled || unavailable}
               onClick={pricesChanged ? onAcceptPrices : onAcceptTotal}>
-              {previousTotal !== null ? "Xác nhận tổng mới" : "Xác nhận giá mới"}
+              {quoteChanged ? "Xác nhận tổng mới" : "Xác nhận giá mới"}
             </button>
           </div>}
           <div className={styles.items}>{rows.map(item => <article className={styles.item} key={item.id}>

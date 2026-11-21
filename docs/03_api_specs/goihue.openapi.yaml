@@ -1,13 +1,117 @@
 openapi: 3.0.3
 info:
   title: Goi Hue Unified Store API
-  version: 1.4.0-draft
+  version: 1.5.0-draft
   description: Unified persistence API. VietQR/IPN operations are experimental demo flows; shipping and refunds are recorded manually. See goihue-state-matrix.md.
 servers:
   - url: /api/store
 security:
   - Session: []
 paths:
+  /guest/cart/summary:
+    get:
+      operationId: guestCartQuote
+      summary: Read the current guest cart and quote
+      security: [{GuestCart: []}, {}]
+      responses:
+        '200':
+          $ref: '#/paths/~1cart~1summary/get/responses/200'
+  /guest/commerce:
+    post:
+      operationId: mutateGuestCartOrCheckout
+      summary: Update a guest cart or place a guest order
+      description: 'Uses the regular quote and stock transaction. First cart-set creates the guest cookie. A valid account session uses regular commerce. Checkout requires manual delivery fields, a current quote, and a live guest cart. Replay with the same idempotency key returns the existing result.'
+      security: [{GuestCart: []}, {}]
+      parameters:
+        - $ref: '#/components/parameters/Idempotency'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, cartToken]
+              properties:
+                action: {type: string, enum: [cart-set, cart-clear, cart-refresh, checkout]}
+                cartToken: {type: string}
+                productId: {type: string, format: uuid, description: Required for cart-set}
+                quantity: {type: integer, minimum: 0, maximum: 100, description: Required for cart-set}
+                priceToken: {type: string, description: Current price token for cart-refresh}
+                expectedUnitPrice: {type: integer}
+                expectedPriceSource: {type: string}
+                quoteToken: {type: string, pattern: '^[a-f0-9]{64}$', description: Required for checkout}
+                shippingRevision: {type: integer, description: Required for checkout}
+                recipient: {type: string, maxLength: 100, description: Required for checkout}
+                phone: {type: string, maxLength: 30, description: Required for checkout}
+                address: {type: string, maxLength: 400, description: Required for checkout}
+                paymentMethod: {type: string, enum: [COD, VIETQR], default: COD}
+      responses:
+        '200': {description: Cart mutation result or guest receipt with number and lookupCode}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+  /guest/cart/merge:
+    post:
+      operationId: mergeGuestCart
+      summary: Merge the browser's guest cart into the signed-in customer cart
+      description: 'Explicit action. Combines quantities and rechecks visibility, stock and prices in one transaction. Stale carts or unavailable quantities leave both carts intact.'
+      security: [{Session: [], GuestCart: []}]
+      parameters:
+        - $ref: '#/components/parameters/Idempotency'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cartToken, customerCartToken]
+              properties:
+                cartToken: {type: string}
+                customerCartToken: {type: string}
+      responses:
+        '200': {description: Both carts were updated or the previous successful merge was replayed}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+  /guest/orders/latest:
+    get:
+      operationId: latestGuestOrder
+      summary: Find the most recent guest order for this browser
+      security: [{GuestCart: []}, {}]
+      responses:
+        '200': {description: Object containing number, or an empty object when there is no session order}
+  /guest/orders/lookup:
+    post:
+      operationId: lookupGuestOrder
+      summary: Exchange a guest order code for one-order access
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [number, lookupCode]
+              properties:
+                number: {type: string, pattern: '^GH-[A-Z0-9]{8}$'}
+                lookupCode: {type: string, minLength: 32, maxLength: 35}
+      responses:
+        '200': {description: Guest order summary and a 30-minute order-scoped access cookie}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+  /guest/orders/{number}:
+    get:
+      operationId: guestOrderDetail
+      summary: Read a guest order using the browser session or an order-scoped access cookie
+      security: [{GuestCart: []}, {GuestOrderAccess: []}]
+      parameters:
+        - {in: path, name: number, required: true, schema: {type: string, pattern: '^GH-[A-Z0-9]{8}$'}}
+      responses:
+        '200': {description: Items, amounts, statuses, tracking and pending VietQR demo details. The original guest session also receives its lookup code. Delivery contacts and internal notes are excluded.}
+        '404': {$ref: '#/components/responses/Error'}
   /live:
     get:
       operationId: subscribeStoreChanges
@@ -106,7 +210,7 @@ paths:
       summary: Cart quote
       responses:
         '200':
-          description: CUSTOMER cart quote from a consistent read-only snapshot. Dynamic Discount applies only to base-price lines and is capped per line by the product floor, which defaults to the base price. Shipping threshold is evaluated on merchandise after discount.
+          description: Cart quote from a consistent read-only snapshot. Dynamic Discount applies only to base-price lines and is capped per line by the product floor, which defaults to the base price. Shipping threshold is evaluated on merchandise after discount.
           content:
             application/json:
               schema:
@@ -576,6 +680,8 @@ paths:
 components:
   securitySchemes:
     Session: {type: apiKey, in: cookie, name: goihue_session}
+    GuestCart: {type: apiKey, in: cookie, name: goihue_guest}
+    GuestOrderAccess: {type: apiKey, in: cookie, name: goihue_order_access}
   parameters:
     Id: {in: path, name: id, required: true, schema: {type: string, format: uuid}}
     Idempotency: {in: header, name: Idempotency-Key, required: true, schema: {type: string, pattern: '^[a-zA-Z0-9-]{16,80}$'}}

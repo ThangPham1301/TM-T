@@ -366,6 +366,8 @@ const auditActions: Record<string, [string, string]> = {
   "order-recipient": ["Đơn hàng", "Cập nhật người nhận"],
   "payment-resolve": ["Đơn hàng", "Đối soát thanh toán"],
   "cart-set": ["Giỏ hàng", "Cập nhật giỏ"],
+  "guest-cart-merge": ["Giỏ hàng", "Gộp giỏ khách vào tài khoản"],
+  "guest-checkout": ["Đơn hàng", "Khách vãng lai đặt đơn"],
   "cart-clear": ["Giỏ hàng", "Xóa giỏ hàng"],
   "cart-refresh": ["Giỏ hàng", "Làm mới giỏ hàng"],
   "product-save": ["Danh mục và sản phẩm", "Lưu sản phẩm"],

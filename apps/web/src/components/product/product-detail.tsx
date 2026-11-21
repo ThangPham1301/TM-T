@@ -130,7 +130,7 @@ export function ProductDetail({ slug }: { slug: string }) {
   const zoom = useRef<HTMLDialogElement>(null),
     tabList = useRef<HTMLDivElement>(null);
   const [relatedStrategy, setRelatedStrategy] = useState("");
-  const { state, busy, run, mutate } = useStore();
+  const { state, loading: sessionLoading, busy, run, mutate } = useStore();
   const router = useRouter();
   useEffect(() => {
     let live = true;
@@ -182,14 +182,11 @@ export function ProductDetail({ slug }: { slug: string }) {
   const product = storedProduct ? applyPricing(storedProduct, feed) : null;
   async function purchase(buyNow = false) {
     if (!product) return;
-    if (!state) {
-      router.push("/login");
-      return;
-    }
-    if (state.user.role !== "CUSTOMER") return;
+    if (state && state.user.role !== "CUSTOMER") return;
+    const prefix = state ? "" : "guest/";
     const p = product;
     await run(async () => {
-      const summary = await api("cart/summary");
+      const summary = await api(`${prefix}cart/summary`);
       const current = summary.items.find((c: Row) => c.productId === p.id);
       const next = Number(current?.quantity ?? 0) + quantity;
       if (
@@ -199,7 +196,7 @@ export function ProductDetail({ slug }: { slug: string }) {
       )
         throw new Error("Số lượng vượt tồn kho hoặc giới hạn giỏ hàng.");
       try {
-        await mutate("commerce", "cart-set", {
+        await mutate(`${prefix}commerce`, "cart-set", {
           productId: p.id,
           quantity: next,
           cartToken: summary.cartToken,
@@ -217,7 +214,7 @@ export function ProductDetail({ slug }: { slug: string }) {
   const category = categories.find((c) => c.code === product?.category),
     stock = Math.max(0, Number(product?.stock ?? 0));
   const canBuy =
-    !busy && stock > 0 && (!state || state.user.role === "CUSTOMER");
+    !busy && !sessionLoading && stock > 0 && (!state || state.user.role === "CUSTOMER");
   const spec = SPECS[String(product?.slug ?? "")];
   return (
     <main className="lan-page lan-detail">

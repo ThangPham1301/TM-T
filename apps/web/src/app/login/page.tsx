@@ -1,4 +1,8 @@
 import { AuthForm } from "@/components/auth-form";
-export default function Page() {
-  return <AuthForm />;
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ returnUrl?: string | string[] }>;
+}) {
+  return <AuthForm returnToCheckout={(await searchParams).returnUrl === "/checkout"} />;
 }

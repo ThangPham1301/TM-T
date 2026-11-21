@@ -7,7 +7,9 @@ async function proxy(
 ) {
   const path = (await ctx.params).path.join("/");
   const webhook = path === "payments/sepay/webhook" && req.method === "POST";
+  const guestApi = /^guest\/(commerce|cart\/(summary|merge)|orders\/(lookup|latest|GH-[A-Z0-9]{8}))$/u.test(path);
   if (
+    !guestApi &&
     !/^(policy|state|password|command|commerce|agent\/(chat|consent|history)|recommendations\/consent|payments\/sepay\/webhook|cart(?:\/summary)?|shipping|discounts|pricing|categories|products(?:\/[a-z0-9-]+)?|admin\/(products|categories|discounts|pricing)|catalog\/images\/[a-f0-9-]{36}(?:\/content)?|auth\/(login|register|logout)|evidence\/intents|evidence\/[a-f0-9-]{36}\/content|privacy\/[a-f0-9-]{36}\/export)$/u.test(
       path,
     )
@@ -46,6 +48,8 @@ async function proxy(
     const body = write ? await req.arrayBuffer() : undefined;
     if (webhook && body && body.byteLength > 65536)
       return Response.json({ message: "Nội dung webhook quá lớn." }, { status: 413 });
+    if (guestApi && body && body.byteLength > 16384)
+      return Response.json({ message: "Nội dung yêu cầu quá lớn." }, { status: 413 });
     if (body && body.byteLength > 5 * 1024 * 1024 + 32768)
       return Response.json({ message: "Nội dung quá lớn." }, { status: 413 });
     const upstream = await fetch(

@@ -19,6 +19,8 @@ Truy cập http://localhost:3000. ADMIN lấy từ `.env` ở thư mục gốc; 
 
 ## Chức năng hiện có
 
+- Khách vãng lai: giỏ hàng theo trình duyệt, checkout COD hoặc VietQR demo, xác nhận và tra cứu tại `/tra-cuu-don-hang` bằng mã đơn và mã tra cứu riêng. Có thể gộp giỏ vào tài khoản sau khi đăng nhập. Admin xử lý đơn khách trong danh sách đơn chung.
+
 - CUSTOMER: đăng ký/đăng nhập, hồ sơ, lựa chọn tiếp thị, giỏ hàng lưu server; sửa số lượng/xóa/cập nhật giá, checkout COD theo phí giao cấu hình, tìm/lọc đơn, sửa người nhận trước đóng gói, hủy đơn khi đủ điều kiện, quyền dữ liệu và đổi trả từng dòng hàng.
 - ADMIN: CRUD sản phẩm và danh mục, upload/gỡ ảnh, ẩn/hiện, giá/tồn; cấu hình phí giao và ngưỡng miễn phí; tìm/lọc đơn, xác nhận/đóng gói/giao hàng, ghi nhận thu tiền với chứng từ, review quyền dữ liệu/đổi trả, kiểm hàng, ghi nhận kết quả đổi/hoàn bằng mã tham chiếu, chính sách có phiên bản và nhật ký.
 - Máy chủ kiểm tra quyền sở hữu, số lượng, giá, tồn; sử dụng transaction, khóa chống gửi lặp và revision. Một phiên đăng nhập dùng trên toàn website.
@@ -57,7 +59,7 @@ Nếu container web đang chiếm cổng 3000, chạy `docker compose stop web` 
 
 ## Trạng thái tích hợp
 
-Đây là chức năng của dự án chính, không còn module `/academic` hoặc Mockoon. Thanh toán hiện là COD, thu tiền/hoàn tiền và trạng thái giao vận do ADMIN cập nhật thủ công dựa trên chứng từ. Website không tự chuyển tiền, gửi email/SMS hoặc tạo vận đơn với carrier. Không đánh dấu giao/thu/hoàn thành công khi chưa có chứng cứ thực tế.
+Đây là chức năng của dự án chính, không còn module `/academic` hoặc Mockoon. Thanh toán gồm COD và VietQR demo. ADMIN cập nhật thu COD, hoàn tiền và giao vận thủ công dựa trên chứng từ. Website không tự chuyển tiền, gửi email/SMS hoặc tạo vận đơn với carrier. Không đánh dấu giao/thu/hoàn thành công khi chưa có chứng cứ thực tế.
 
 Chính sách giữ nhãn dự thảo đến khi được phê duyệt; chuyển vào dự án chính không đồng nghĩa đã có hiệu lực pháp lý. Retention, SLA cụ thể và nhà cung cấp chưa xác nhận. Ảnh catalog PNG/JPEG tối đa 5 MB được decode/re-encode PNG (tối đa 6000px mỗi chiều và 16 triệu pixel), lưu volume; ảnh chưa gắn catalog active chỉ ADMIN truy cập. Ảnh bằng chứng đổi trả được kiểm tra signature và tải theo quyền riêng. Chưa có antivirus/cleanup tự động. Danh sách quản trị phân trang trên client. Chưa có quên mật khẩu/email verification, đổi mật khẩu, đánh giá sản phẩm, voucher/loyalty, B2B hay nhiều kho. Không tự tạo giao dịch giả để lấp các tích hợp chưa có.
 

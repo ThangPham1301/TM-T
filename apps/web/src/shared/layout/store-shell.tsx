@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
+import { guestLookupPath } from "@/lib/guest-order";
 
 export type StoreHeaderProps = {
   user: { name: string; role: string } | null;
@@ -351,7 +352,7 @@ export function StoreHeader({
                 >
                   <div className="gh-account-menu__who">
                     <strong>Chào mừng đến Gói Huế</strong>
-                    <small>Đăng nhập để theo dõi đơn và nhận ưu đãi.</small>
+                    <small>Đăng nhập để dùng địa chỉ đã lưu và xem lịch sử đơn.</small>
                   </div>
                   <div className="gh-account-menu__actions">
                     <Link
@@ -366,9 +367,7 @@ export function StoreHeader({
                   </div>
                   <ul className="gh-account-menu">
                     <li>
-                      <Link href="/login?returnUrl=%2Faccount%2Forders">
-                        Xem đơn hàng
-                      </Link>
+                      <Link href={guestLookupPath}>Tra cứu đơn hàng</Link>
                     </li>
                   </ul>
                 </Dropdown>
@@ -490,6 +489,7 @@ export function StoreFooter(_props: StoreFooterProps) {
           <div>
             <h2>Chăm sóc &amp; hỗ trợ</h2>
             <ul>
+              <li><Link href={guestLookupPath}>Tra cứu đơn hàng</Link></li>
               <li>
                 <Link href="/return-policy">Chính sách đổi trả</Link>
               </li>

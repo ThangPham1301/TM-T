@@ -95,7 +95,7 @@ public class StoreLive extends TextWebSocketHandler implements WebSocketConfigur
                     synchronized (session) {
                         try {
                             var actor = app.sessionActor((String) session.getAttributes().get("session"));
-                            if (app.admin(actor) || owner.equals(actor.get("id"))) {
+                            if (app.admin(actor) || (owner != null && owner.equals(actor.get("id")))) {
                                 session.sendMessage(new TextMessage("state-changed"));
                             }
                         } catch (Exception failure) {

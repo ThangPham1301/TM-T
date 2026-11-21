@@ -66,8 +66,11 @@ public class PlatformApi {
     void cookie(HttpServletResponse res,String t,int age) {res.addHeader("Set-Cookie",ResponseCookie.from("goihue_session",t).httpOnly(true).secure(secureCookie).sameSite("Strict").path("/api/store").maxAge(age).build().toString());}
     void audit(Map<String,Object> a,String subject,String action) {db.update("INSERT INTO audit(actor_id,subject,action) VALUES(?,?,?)",a.get("id"),subject,action);}
     Map<String,Object> save(String kind,UUID owner,Map<String,Object> data) {
+        return save(kind, owner, null, data);
+    }
+    Map<String,Object> save(String kind,UUID owner,UUID guestOwner,Map<String,Object> data) {
         if(!data.containsKey("id")){data.put("id",UUID.randomUUID().toString());data.put("createdAt",Instant.now().toString());data.put("revision",1);}
-        db.update("INSERT INTO records(id,kind,owner_id,data) VALUES(?,?,?,?::jsonb) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data",uuid(str(data,"id")),kind,owner,encode(data));
+        db.update("INSERT INTO records(id,kind,owner_id,guest_owner_id,data) VALUES(?,?,?,?,?::jsonb) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data",uuid(str(data,"id")),kind,owner,guestOwner,encode(data));
         if(kind.equals("order") || kind.equals("return")) live.changed(owner);
         return data;
     }

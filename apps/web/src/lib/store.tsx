@@ -183,11 +183,13 @@ export async function api(
 }
 type StoreContext = {
   state: StoreState | null;
+  guestCart: { count: number; token: string } | null;
   loading: boolean;
   busy: boolean;
   error: string;
   notice: string;
   reload: () => Promise<void>;
+  refreshGuestCart: () => Promise<void>;
   run: (work: () => Promise<void>) => Promise<void>;
   mutate: (
     path: string,
@@ -205,6 +207,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
   const pending = useRef<{ body: string; key: string } | null>(null);
+  const [guestCart, setGuestCart] = useState<StoreContext["guestCart"]>(null);
+  const guestCartVersion = useRef(0);
   const reloadVersion = useRef(0);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
@@ -235,6 +239,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     };
   }, [reload]);
   const userId = state?.user?.id;
+  const refreshGuestCart = useCallback(async () => {
+    const version = ++guestCartVersion.current;
+    const cart = await api("guest/cart/summary") as { items: Row[]; cartToken: string };
+    if (version === guestCartVersion.current) {
+      setGuestCart({
+        count: cart.items.reduce((total, item) => total + Number(item.quantity), 0),
+        token: cart.cartToken,
+      });
+    }
+  }, []);
+  useEffect(() => {
+    const sync = () => { void refreshGuestCart().catch(() => {}); };
+    sync();
+    window.addEventListener("focus", sync);
+    return () => window.removeEventListener("focus", sync);
+  }, [userId, refreshGuestCart]);
   useEffect(() => {
     if (!userId) return;
     let disposed = false;
@@ -292,8 +312,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (pending.current?.body !== fingerprint)
       pending.current = { body: fingerprint, key: crypto.randomUUID() };
     const result = await api(path, "POST", body, pending.current.key);
-    pending.current = null;
-    await reload();
+    if (pending.current?.body === fingerprint) pending.current = null;
+    if (path === "guest/commerce") {
+      void refreshGuestCart().catch(() => {});
+      return result;
+    }
+    if (path === "guest/cart/merge")
+      await Promise.allSettled([reload(), refreshGuestCart()]);
+    else await reload();
     setNotice("Đã lưu thông tin.");
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
     noticeTimer.current = setTimeout(() => {
@@ -312,11 +338,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     <Context.Provider
       value={{
         state,
+        guestCart,
         loading,
         busy,
         error,
         notice,
         reload,
+        refreshGuestCart,
         run,
         mutate,
         logout,

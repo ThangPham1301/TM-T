@@ -1,33 +1,58 @@
 "use client";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CartView } from "./cart-view";
 import { CheckoutView } from "./checkout-view";
 import { CheckoutPayment } from "./checkout-payment";
 import { RecommendationRail } from "./recommendation-rail";
+import { Button } from "@/shared/ui";
 import { api, ApiError, fields, type Row, useStore } from "@/lib/store";
 import type { CartSummary } from "@/lib/discounts";
+import { guestOrderPath } from "@/lib/guest-order";
+import checkoutStyles from "./checkout-view.module.css";
+
 export function Cart({ checkout = false }: { checkout?: boolean }) {
-  const { state, loading, busy, run, mutate } = useStore(),
+  const { state, loading } = useStore();
+  if (loading) return <main className="store-page" role="status">Đang tải giỏ hàng…</main>;
+  if (state?.user.role === "ADMIN")
+    return (
+      <main className="store-page">
+        <h1>Giỏ hàng dành cho khách hàng</h1>
+        <Link href="/admin">Về quản trị cửa hàng</Link>
+      </main>
+    );
+  return <CartJourney key={state?.user.id ?? "guest"} checkout={checkout} />;
+}
+
+function reviewedQuote(summary: CartSummary) {
+  return { total: summary.total, token: summary.quoteToken, shipping: summary.shipping.revision };
+}
+
+function CartJourney({ checkout }: { checkout: boolean }) {
+  const { state, guestCart, refreshGuestCart, busy, run, mutate } = useStore(),
     router = useRouter();
+  const prefix = state ? "" : "guest/";
+  const summaryPath = `${prefix}cart/summary`;
+  const addressBook = state?.addresses ?? [];
+  const submitting = useRef(false);
   const [summary, setSummary] = useState<CartSummary | null>(null),
     [error, setError] = useState(""),
     [fetching, setFetching] = useState(false);
   const [addressChoice, setAddressChoice] = useState<string | null>(null);
   const [addingAddress, setAddingAddress] = useState(false);
   const [placedVietQrOrder, setPlacedVietQrOrder] = useState<Row | null>(null);
-  const [reviewedTotal, setReviewedTotal] = useState<number | null>(null);
+  const [reviewed, setReviewed] = useState<ReturnType<typeof reviewedQuote> | null>(null);
 
   const receiveSummary = useCallback((quote: CartSummary) => {
     setSummary(quote);
-    if (checkout) setReviewedTotal((reviewed) => reviewed ?? quote.total);
+    if (checkout) setReviewed((current) => quote.items.length ? current ?? reviewedQuote(quote) : null);
   }, [checkout]);
 
   async function refresh() {
     setFetching(true);
     try {
-      receiveSummary(await api("cart/summary"));
+      receiveSummary(await api(summaryPath));
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không tải được giỏ.");
@@ -39,9 +64,8 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
     let live = true;
     void Promise.resolve().then(() => {
     if (!live) return;
-    if (state?.user.role === "CUSTOMER") {
       setFetching(true);
-      void api("cart/summary")
+      void api(summaryPath)
         .then((s) => {
           if (live) {
             receiveSummary(s);
@@ -54,20 +78,15 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
         .finally(() => {
           if (live) setFetching(false);
         });
-    } else {
-      setSummary(null);
-      setReviewedTotal(null);
-    }
     });
     return () => {
       live = false;
     };
-  }, [state, receiveSummary]);
-  const isCustomer = state?.user.role === "CUSTOMER";
+  }, [state, summaryPath, receiveSummary]);
   const nextPriceChangeAt = summary?.nextPriceChangeAt;
   const pricedAt = summary?.pricedAt;
   useEffect(() => {
-    if (!isCustomer || busy || fetching || placedVietQrOrder) return;
+    if (busy || fetching || placedVietQrOrder) return;
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
     let request = 0;
@@ -75,7 +94,7 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
       clearTimeout(timer);
       const id = ++request;
       try {
-        const quote: CartSummary = await api("cart/summary");
+        const quote: CartSummary = await api(summaryPath);
         if (active && id === request) receiveSummary(quote);
       } catch {
         // The checkout command still verifies prices if the background refresh fails.
@@ -93,40 +112,28 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
       clearTimeout(timer);
       window.removeEventListener("focus", reprice);
     };
-  }, [isCustomer, busy, fetching, nextPriceChangeAt, pricedAt, placedVietQrOrder, receiveSummary]);
+  }, [summaryPath, busy, fetching, nextPriceChangeAt, pricedAt, placedVietQrOrder, receiveSummary]);
 
-  if (loading) return <main className="store-page">Đang tải tài khoản…</main>;
-  if (!state)
-    return (
-      <main className="store-page">
-        <h1>Giỏ hàng của bạn</h1>
-        <Link href="/login">Đăng nhập để mua hàng →</Link>
-      </main>
-    );
-  if (state.user.role !== "CUSTOMER")
-    return (
-      <main className="store-page">
-        <h1>Giỏ hàng dành cho khách hàng</h1>
-        <Link href="/admin">Về quản trị cửa hàng</Link>
-      </main>
-    );
-  const selectedAddress = state.addresses.find((entry) => entry.id === (addressChoice ?? (checkout && state.addresses.length === 1 ? state.addresses[0].id : "")));
+  const selectedAddress = addressBook.find((entry) => entry.id === (addressChoice ?? (checkout && addressBook.length === 1 ? addressBook[0].id : "")));
   const rows = summary?.items ?? [],
     blocked = rows.some(
       (l) =>
         !l.available || l.priceChanged || Number(l.quantity) > Number(l.stock),
     );
-  const totalChanged = checkout && summary !== null && reviewedTotal !== null && summary.total !== reviewedTotal;
+  const quoteChanged = Boolean(checkout && summary && reviewed && (
+    summary.total !== reviewed.total || summary.quoteToken !== reviewed.token ||
+    summary.shipping.revision !== reviewed.shipping
+  ));
   const disabled = busy || fetching;
   async function update(action: string, b: Record<string, unknown> = {}) {
     if (!summary) return;
     try {
-      await mutate("commerce", action, {
+      await mutate(`${prefix}commerce`, action, {
         ...b,
         cartToken: summary.cartToken,
         ...(action === "cart-refresh" ? { priceToken: summary.priceToken } : {}),
       });
-      if (checkout && action === "cart-refresh") setReviewedTotal(summary.total);
+      if (checkout && action === "cart-refresh") setReviewed(reviewedQuote(summary));
       await refresh();
     } catch (problem) {
       if (!(problem instanceof ApiError) || problem.status !== 409) throw problem;
@@ -134,22 +141,39 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
       setError(problem.message);
     }
   }
+  const mergeNotice = state && guestCart && guestCart.count > 0 ? (
+    <div className={checkoutStyles.guestNotice}>
+      <div><strong>Bạn có {guestCart.count} sản phẩm trong giỏ khách</strong>
+        <p>Gộp vào giỏ tài khoản để tiếp tục với giá và tồn kho hiện tại.</p></div>
+      <Button size="small" variant="secondary" disabled={disabled || !summary} onClick={() => void run(async () => {
+        if (!summary) return;
+        try {
+          await mutate("guest/cart/merge", "cart-merge", { cartToken: guestCart.token, customerCartToken: summary.cartToken });
+          await refresh();
+        } catch (problem) {
+          if (!(problem instanceof ApiError) || ![409, 422].includes(problem.status)) throw problem;
+          await Promise.allSettled([refresh(), refreshGuestCart()]);
+          setError(problem.message);
+        }
+      })}>Gộp giỏ hàng</Button>
+    </div>
+  ) : undefined;
   if (!checkout) {
-    return <CartView summary={summary} fetching={fetching} error={error} disabled={disabled} blocked={blocked}
+    return <CartView guest={!state} mergeNotice={mergeNotice} summary={summary} fetching={fetching} error={error} disabled={disabled} blocked={blocked}
       refresh={() => void refresh()} update={(action, data) => void run(() => update(action, data))}
-      checkout={() => router.push("/checkout")} recommendations={<RecommendationRail surface="cart" refreshKey={summary?.cartToken} />} />;
+      checkout={() => router.push("/checkout")} recommendations={<RecommendationRail surface={state ? "cart" : "home"} refreshKey={summary?.cartToken} />} />;
   }
   if (placedVietQrOrder) {
-    const order = state.orders.find(({ id }) => id === placedVietQrOrder.id) ?? placedVietQrOrder;
+    const order = state?.orders.find(({ id }) => id === placedVietQrOrder.id) ?? placedVietQrOrder;
     return <CheckoutPayment key={order.id} order={order} />;
   }
   return <CheckoutView
-    summary={summary} user={state.user} addresses={state.addresses} selectedAddress={selectedAddress}
-    fetching={fetching} error={error} busy={busy} disabled={disabled} blocked={blocked || totalChanged} addingAddress={addingAddress}
-    previousTotal={totalChanged ? reviewedTotal : null}
+    summary={summary} user={state?.user} addresses={addressBook} selectedAddress={selectedAddress} mergeNotice={mergeNotice}
+    fetching={fetching} error={error} busy={busy} disabled={disabled} blocked={blocked || quoteChanged} addingAddress={addingAddress}
+    quoteChanged={quoteChanged} previousTotal={quoteChanged && reviewed?.total !== summary?.total ? reviewed?.total ?? null : null}
     onRefresh={() => void refresh()}
     onAcceptPrices={() => void run(() => update("cart-refresh"))}
-    onAcceptTotal={() => { if (summary) setReviewedTotal(summary.total); }}
+    onAcceptTotal={() => { if (summary) setReviewed(reviewedQuote(summary)); }}
     onToggleAddress={() => setAddingAddress(value => !value)} onSelectAddress={setAddressChoice}
     onSaveAddress={(event) => {
       const details = fields(event);
@@ -161,16 +185,22 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
     }}
     onCheckout={(event) => {
       const data = fields(event);
+      if (submitting.current) return;
+      submitting.current = true;
       void run(async () => {
-        if (!summary || blocked || totalChanged || !summary.shipping.enabled) throw new Error("Giỏ chưa đủ điều kiện đặt hàng.");
         try {
-          const order = await mutate("commerce", "checkout", {
+          if (!summary || blocked || quoteChanged || !summary.shipping.enabled) throw new Error("Giỏ chưa đủ điều kiện đặt hàng.");
+          const order = await mutate(`${prefix}commerce`, "checkout", {
             ...data,
             ...(selectedAddress ? { addressId: selectedAddress.id } : {}),
             cartToken: summary.cartToken,
             quoteToken: summary.quoteToken,
             shippingRevision: summary.shipping.revision,
           });
+          if (!state) {
+            router.push(guestOrderPath(String(order.number), true));
+            return;
+          }
           if (order.paymentMethod === "VIETQR") {
             setPlacedVietQrOrder(order);
             return;
@@ -180,6 +210,8 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
           if (!(problem instanceof ApiError) || problem.status !== 409) throw problem;
           await refresh();
           setError(problem.message);
+        } finally {
+          submitting.current = false;
         }
       });
     }}

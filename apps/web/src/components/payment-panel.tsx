@@ -121,8 +121,8 @@ export function PaymentPanel({ order, showQr = true }: { order: Row; showQr?: bo
       {pStatus === "PENDING" && !pending && <p>{order.paymentStatus === "PAID" ? "Đơn hàng đã được ghi nhận thanh toán." : "Đơn hàng không còn chờ thanh toán."}</p>}
       {pStatus === "PAID" && (
         <p>
-          Đã thanh toán lúc {date(payment.paidAt)} · Mã giao dịch{" "}
-          {String(payment.transactionId)}
+          Đã thanh toán{payment.paidAt ? ` lúc ${date(payment.paidAt)}` : ""}
+          {payment.transactionId ? ` · Mã giao dịch ${String(payment.transactionId)}` : ""}
         </p>
       )}
       {pStatus === "REVIEW" && (
