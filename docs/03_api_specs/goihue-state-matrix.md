@@ -220,3 +220,9 @@ Trang nhật ký ADMIN hiển thị tối đa 200 sự kiện gần nhất. Có 
 - Contextual product cards and purchase plans refresh effective prices, including schedule, stock and demand rules. Plans apply the same eligible discount, product floors and shipping threshold on net merchandise as checkout.
 - Purchase-plan options expose subtotal, discountAmount and netSubtotal. Budget feasibility uses netSubtotal or total according to shipping inclusion. These are estimates for a standalone order with the proposed lines, excluding the current cart. Prices and offers are revalidated at confirmation and checkout.
 - Guest cart confirmation preserves guest commerce routing. Chat history and preference memory still require separate authenticated consent.
+
+### Public policy presentation
+
+- Privacy and returns pages share storefront paper, brown/gold colors, typography, policy navigation and responsive article layout. Contents anchors indicate the section currently being read. Draft status remains visible on both pages.
+- Privacy version metadata: loading displays a loading message; success displays the API version; a missing version is explicit; a failed request leaves the policy copy readable and provides a retry action. No placeholder version or update date is presented as API data.
+- Sidebar links retain authenticated account destinations. On mobile the contents appear above the document in an expandable menu, collapsed initially. Anchor offsets follow the responsive storefront header.
