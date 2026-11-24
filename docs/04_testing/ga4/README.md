@@ -1,6 +1,6 @@
 # GA4 validation and release notes
 
-Updated 24 November 2026. Scope: opt-in storefront measurement, identity-free commerce snapshots, automatic-offer analysis, content engagement and reviewed reorder integration. See the [design](../../03_api_specs/ga4-measurement-plan-v3.md), [acceptance cases](acceptance.md) and [deployment configuration](../../05_deployment/goihue-coolify.md).
+Updated 24 November 2026. Scope: default-enabled storefront measurement, identity-free commerce snapshots, automatic-offer analysis, content engagement and reviewed reorder integration. See the [design](../../03_api_specs/ga4-measurement-plan-v3.md), [acceptance cases](acceptance.md) and [deployment configuration](../../05_deployment/goihue-coolify.md).
 
 ## Accepted behavior
 
@@ -25,7 +25,7 @@ Manual signed-in Google QA on 24 November separately confirmed page_view/view_it
 - Funnel configuration and presence of data do not prove complete closed-funnel count reconciliation. Counts are users, not automatically order counts. Debug traffic excluded by an effective Active filter must not be expected to appear later in normal Explore reports.
 - Purchase requests can be lost if a tag never loads or a user leaves early. Pending data may retry on a public-route return within its expiry; callbacks are submission signals, not proof Google ingested a hit.
 - Integrating newer main changes the reorder flow. Its new measurement wiring has automated regression coverage; historical manual reorder evidence predates this integration.
-- Local/build/Google QA is not production deployment verification. GA defaults disabled; enabling requires the public build variables and rebuilding the web image. An existing API process/jar must also be rebuilt/restarted to serve new endpoints and snapshots.
+- Local/build/Google QA is not production deployment verification. GA defaults enabled for project stream G-06239FHPPM in direct Next builds, Docker and Compose. An explicit NEXT_PUBLIC_GA_ENABLED=false disables it; changing an existing build still requires rebuilding the web image. An existing API process/jar must also be rebuilt/restarted to serve new endpoints and snapshots.
 
 ## Reproducible checks
 
@@ -35,7 +35,7 @@ From the repo root run `python scripts/test-ga4-backend.py` after populating the
 
 ## Production verification checklist
 
-1. Build API and web from the same reviewed revision. In the hosting build environment set NEXT_PUBLIC_GA_ENABLED=true and the intended NEXT_PUBLIC_GA_MEASUREMENT_ID, then rebuild. Changing only runtime environment does not update bundled public variables.
+1. Build API and web from the same reviewed revision. Build defaults enable NEXT_PUBLIC_GA_ENABLED=true and NEXT_PUBLIC_GA_MEASUREMENT_ID=G-06239FHPPM. Remove or update any existing false/blank hosting override, then rebuild. Changing only runtime environment does not update bundled public variables.
 2. Preserve property settings and filters. Check debug pageview count, add-to-cart, checkout and a single permitted demo purchase at the production hostname; compare its safe snapshot with DebugView. Keep personal contacts/tokens out of analytics and test artifacts.
 3. Confirm private routes, duplicate submission/reload, disabled/blocked analytics and the reviewed reorder path behave correctly. Capture the exact deployed revision and test time.
 4. Record the actual start of the measurement period after deployment verification. Do not treat historical local QA or pre-fix data as campaign KPIs. Resolve supplementary price_source/funnel checks when valid data exists without polluting the campaign property with non-debug QA.

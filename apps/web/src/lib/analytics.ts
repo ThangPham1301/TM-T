@@ -31,8 +31,9 @@ export function consumeIgnoredPageView(key: string) {
 const documentId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 export function exposureKey(event: string, identity: string) { return `exposure:${documentId}:${navigationSerial}:${event}:${identity}`; }
 const local = () => ["localhost", "127.0.0.1"].includes(window.location.hostname);
+const measurementId = () => process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ?? "G-06239FHPPM";
 export function analyticsEnabled() {
-  return typeof window !== "undefined" && process.env.NEXT_PUBLIC_GA_ENABLED === "true" && /^G-[A-Z0-9]+$/.test(process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ?? "") &&
+  return typeof window !== "undefined" && (process.env.NEXT_PUBLIC_GA_ENABLED ?? "true") === "true" && /^G-[A-Z0-9]+$/.test(measurementId()) &&
     navigator.doNotTrack !== "1" && localStorageSafe("goihue:analytics-consent") !== "denied";
 }
 function localStorageSafe(key: string) { try { return localStorage.getItem(key); } catch { return null; } }
@@ -90,12 +91,12 @@ export function initializeAnalytics() {
     window.gtag("set", { send_page_view: false, allow_google_signals: false,
       allow_ad_personalization_signals: false, ...(qaDebug() ? { debug_mode: true } : {}) });
     window.gtag("js", new Date());
-    window.gtag("config", process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID, { send_page_view: false,
+    window.gtag("config", measurementId(), { send_page_view: false,
       page_location: cleanAnalyticsUrl(location.href), page_referrer: document.referrer ? cleanAnalyticsUrl(document.referrer) : "",
       allow_google_signals: false, allow_ad_personalization_signals: false, ...(qaDebug() ? { debug_mode: true } : {}) });
     if (!document.getElementById?.("goihue-ga4")) {
       const script = document.createElement("script");
-      script.src = `https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID}`;
+      script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId()}`;
       script.async = true; script.id = "goihue-ga4"; document.head.appendChild(script);
     }
   }

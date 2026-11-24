@@ -109,10 +109,10 @@ Biến đề xuất:
 
 | Biến | Ý nghĩa |
 |---|---|
-| `NEXT_PUBLIC_GA_MEASUREMENT_ID` | ID Web stream; đây là định danh công khai, không phải API secret |
-| `NEXT_PUBLIC_GA_ENABLED` | Bật/tắt integration tại build, mặc định false nếu chưa cấu hình |
+| `NEXT_PUBLIC_GA_MEASUREMENT_ID` | ID Web stream; mặc định G-06239FHPPM; đây là định danh công khai, không phải API secret |
+| `NEXT_PUBLIC_GA_ENABLED` | Bật/tắt integration tại build; mặc định true theo yêu cầu triển khai; đặt false để tắt rõ ràng |
 
-Local/staging mặc định tắt. QA tích hợp bật rõ ràng trên môi trường kiểm soát, dùng `debug_mode` cho thiết bị QA; không bật debug cho toàn bộ khách production. Sau kiểm chứng filter có thể dùng cùng property; môi trường test riêng là phương án thay thế nếu nhóm chưa thể bảo đảm tách dữ liệu, không phải yêu cầu bắt buộc.
+Integration mặc định bật cho stream của dự án, nhất quán giữa Next trực tiếp, Docker và Compose. QA dùng capture để không gửi Google hoặc `debug_mode` cho thiết bị QA; không bật debug cho toàn bộ khách production. Sau kiểm chứng filter có thể dùng cùng property; môi trường test riêng là phương án thay thế nếu nhóm chưa thể bảo đảm tách dữ liệu, không phải yêu cầu bắt buộc.
 
 **Các file deployment cần sửa khi triển khai:** Dockerfile web khai báo ARG/ENV trước `npm run build`; `compose.coolify.yml` truyền `build.args`; cập nhật `.env.example`, tài liệu deploy và compose khác nếu dùng chúng. Chỉ đổi Environment runtime không làm thay đổi public env đã đóng vào bundle. Xây dựng lại image và kiểm tra request thực tế sau deploy.
 

@@ -53,6 +53,23 @@ test('manual-pageview and privacy defaults are queued before tag initialization 
   assert.equal(calls.filter(x=>x[0]==='config').length,1);
   assert.equal(calls.filter(x=>x[0]==='event'&&x[1]==='page_view').length,2);
 });
+
+test('GA4 defaults on for the project stream and explicit opt-out or invalid ID still disables it',async()=>{
+  const calls=browserGlobals();
+  delete process.env.NEXT_PUBLIC_GA_ENABLED;delete process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+  const runtime=await runtimeModule();
+  assert.equal(runtime.trackEvent('page_view',{page_title:'Default configuration'}),true);
+  assert.equal(calls.find(x=>x[0]==='config')[1],'G-06239FHPPM');
+  assert.equal(calls.find(x=>x[0]==='set')[1].send_page_view,false);
+  const count=calls.length;
+  process.env.NEXT_PUBLIC_GA_ENABLED='false';
+  assert.equal(runtime.trackEvent('view_story',{story_id:'tea'}),false);
+  process.env.NEXT_PUBLIC_GA_ENABLED='true';process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID='';
+  assert.equal(runtime.trackEvent('view_story',{story_id:'tea'}),false);
+  process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID='invalid';
+  assert.equal(runtime.trackEvent('view_story',{story_id:'tea'}),false);
+  assert.equal(calls.length,count);
+});
 test('whole-VND split preserves quantities, merchandise and discount totals', () => {
   const items = measurementItems(snapshot());
   assert.equal(items.length,2);

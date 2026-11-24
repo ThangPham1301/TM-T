@@ -9,7 +9,7 @@ Baseline: main `6915993`, integrated with reviewed atomic reorder from `26e1418`
 - [x] Analytics: one loader, opt-in build flag, QA debug switch, clean URLs, private-route boundary. Google-side setup and post-fix purchase were manually verified.
 - [x] Commerce: record success before state reload; instrument product/cart/assistant/reorder mutations. Original flows have manual QA; the newer atomic reorder integration has the automated coverage recorded below.
 - [x] Content: visibility-based list/story/offer events; local UI checks cover polling, countdown and tab remount.
-- [x] Infrastructure: GA build args wired into Docker/Compose; default disabled.
+- [x] Infrastructure: GA build args wired into Docker/Compose; enabled by default for G-06239FHPPM, with an explicit false override.
 - [x] Checks: Java mapper tests, TypeScript mapping/privacy tests, lint/typecheck/build, API contract validation. See dated results for scope and warnings.
 - [x] Local integration: isolated database/demo data and guest/account + COD/VIETQR reviewed during manual QA; no real payments.
 - [x] Muse: actual UI, independent F3 matrix and Google DebugView purchase after the F3 fix.

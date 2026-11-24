@@ -106,7 +106,7 @@ Nếu domain chưa truy cập được, kiểm tra DNS và chứng chỉ HTTPS t
 
 ### GA4 build configuration
 
-`NEXT_PUBLIC_GA_ENABLED=false` by default. After the GA4 property and QA filters are verified, set `NEXT_PUBLIC_GA_ENABLED=true` and `NEXT_PUBLIC_GA_MEASUREMENT_ID=G-06239FHPPM` as build variables and rebuild the web image. Dockerfile, local Compose override and Coolify Compose pass these values to `next build`; runtime-only changes are insufficient.
+`NEXT_PUBLIC_GA_ENABLED=true` and `NEXT_PUBLIC_GA_MEASUREMENT_ID=G-06239FHPPM` are the project defaults in direct Next builds, Docker and Compose. Existing explicit hosting overrides take precedence: remove/update a stale false or blank value and rebuild the web image. Set `NEXT_PUBLIC_GA_ENABLED=false` explicitly only when tracking should be disabled. Dockerfile, local Compose override and Coolify Compose pass these values to `next build`; runtime-only changes are insufficient.
 
 Before enabling Google requests, disable Enhanced Measurement for the stream (including automatic history pageviews, site search and form interactions), register custom definitions from the measurement plan and verify the Developer traffic Exclude filter. `?ga_debug=1` enables per-browser debug for QA; it does not itself exclude events. Never enable debug for all production visitors. Google Signals and ad personalization are not used.
 
