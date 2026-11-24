@@ -264,7 +264,7 @@ function ChatSession({
         ...(p.priceSource
           ? { expectedUnitPrice: p.price, expectedPriceSource: p.priceSource }
           : {}),
-      });
+      }, "assistant");
       setProposal(null);
       noteLocal(`Đã thêm ${proposalQty} × ${p.name} vào giỏ hàng.`);
     } catch (error) {

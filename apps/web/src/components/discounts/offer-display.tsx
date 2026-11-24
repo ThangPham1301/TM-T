@@ -14,6 +14,9 @@ import {
 import { money } from "@/lib/store";
 import styles from "./offer-display.module.css";
 import { usePublicOfferFeed } from "./use-public-offers";
+import { trackEvent } from "@/lib/analytics";
+import { useExposure } from "@/lib/analytics-visibility";
+const offerParams = (offer: Pick<Offer, "id" | "name">, surface: string) => ({ offer_id: offer.id, offer_name: offer.name, offer_surface: surface });
 
 const animatedOffers = new Set<string>();
 
@@ -95,6 +98,7 @@ function FeaturedOffer({
     animate: boolean;
   } | null>(null);
   const collapsed = presentation?.collapsed;
+  const exposure = useExposure<HTMLDivElement>("view_offer", offerParams(offer, "floating_offer"), `${offer.id}:${offer.revision}`, Boolean(presentation && !collapsed));
   const toggle = useRef<HTMLButtonElement>(null);
   const moveFocus = useRef(false);
   const storageKey = `goihue:featured-offer:${offer.id}`;
@@ -178,6 +182,7 @@ function FeaturedOffer({
         </button>
       ) : (
         <div
+          ref={exposure}
           className={styles.flyout}
           data-intro={presentation.animate ? "true" : undefined}
         >
@@ -209,7 +214,7 @@ function FeaturedOffer({
           >
             {countdown}
           </div>
-          <Link className={styles.action} href={offerLink(offer)}>
+          <Link className={styles.action} href={offerLink(offer)} onClick={() => trackEvent("select_offer", offerParams(offer, "floating_offer"))}>
             {offer.scope === "PRODUCTS"
               ? "Xem nhóm sản phẩm"
               : offer.productSlug
@@ -234,9 +239,10 @@ function FeaturedOffer({
 }
 
 export function ProductOffer({ offer }: { offer?: Offer }) {
+  const exposure = useExposure<HTMLSpanElement>("view_offer", offer ? offerParams(offer, "product_badge") : {}, `${offer?.id}:${offer?.revision}`, Boolean(offer));
   if (!offer) return null;
   return (
-    <span className={styles.badge}>
+    <span ref={exposure} className={styles.badge}>
       {discountHeadline(offer)} ·{" "}
       {offer.condition === "QUANTITY"
         ? `Mua từ ${offer.minimum}`
@@ -246,10 +252,11 @@ export function ProductOffer({ offer }: { offer?: Offer }) {
   );
 }
 
-export function DiscountPriceRow({ summary }: { summary: CartSummary }) {
+export function DiscountPriceRow({ summary, surface = "checkout_summary" }: { summary: CartSummary; surface?: string }) {
+  const exposure = useExposure<HTMLDivElement>("view_offer", summary.discount ? offerParams(summary.discount, surface) : {}, `${summary.discount?.id}:${summary.discount?.revision}:${surface}`, Boolean(summary.discount && summary.discountAmount > 0));
   if (!summary.discount || summary.discountAmount <= 0) return null;
   return (
-    <div className={styles.discountPrice}>
+    <div ref={exposure} className={styles.discountPrice}>
       <dt>
         Ưu đãi <small>{summary.discount.name}</small>
       </dt>
@@ -259,6 +266,7 @@ export function DiscountPriceRow({ summary }: { summary: CartSummary }) {
 }
 
 export function CartOfferHint({ hint }: { hint: CartSummary["offerHint"] }) {
+  const exposure = useExposure<HTMLParagraphElement>("view_offer", hint ? offerParams(hint.offer, "cart_hint") : {}, `${hint?.offer.id}:${hint?.offer.revision}`, Boolean(hint));
   if (!hint) return null;
   const { offer, remainingQuantity, remainingAmount } = hint;
   const scope =
@@ -268,12 +276,12 @@ export function CartOfferHint({ hint }: { hint: CartSummary["offerHint"] }) {
         ? ` ${offer.productName}`
         : "";
   return (
-    <p className={styles.hint}>
+    <p ref={exposure} className={styles.hint}>
       {remainingQuantity
         ? `Thêm ${remainingQuantity} sản phẩm${scope}`
         : `Thêm ${money(remainingAmount)} tiền hàng${scope}`}{" "}
       để nhận ưu đãi {discountHeadline(offer).toLocaleLowerCase("vi")}.{" "}
-      <Link href={offerLink(offer)}>Mua thêm →</Link>
+      <Link href={offerLink(offer)} onClick={() => trackEvent("select_offer", offerParams(offer, "cart_hint"))}>Mua thêm →</Link>
     </p>
   );
 }

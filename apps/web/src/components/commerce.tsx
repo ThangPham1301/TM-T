@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, type Row } from "@/lib/store";
+import { ignoreFilterUrlChange } from "@/lib/analytics";
 import { offerForProduct } from "@/lib/discounts";
 import { applyPricing, priceSource } from "@/lib/pricing";
 import { usePricing } from "./pricing/use-pricing";
@@ -100,6 +101,7 @@ function Collection() {
     setPrice("");
     setStock(false);
     setPage(1);
+    ignoreFilterUrlChange("/products");
     window.history.replaceState(null, "", "/products");
   }
   return (
@@ -153,6 +155,7 @@ function Collection() {
               setPage(1);
               const url = new URL(window.location.href);
               url.searchParams.delete("discount");
+              ignoreFilterUrlChange(url);
               window.history.replaceState(null, "", url);
             }}
           >
@@ -164,6 +167,7 @@ function Collection() {
           setPage(1);
           const url = new URL(window.location.href);
           url.searchParams.delete("pricing");
+          ignoreFilterUrlChange(url);
           window.history.replaceState(null, "", url);
         }}>Giá giờ vàng ×</button>}
         {query && (
@@ -272,9 +276,10 @@ function Collection() {
             </button>
           )}
           <div className="lan-products">
-            {rows.map((p) => (
+            {rows.map((p, index) => (
               <ProductCard
                 key={p.id}
+                list={{ id: "catalog", name: "Danh mục sản phẩm", instance: JSON.stringify([current, category, query, price, stock, sort, discountId, scheduled]), index: (current - 1) * 9 + index }}
                 product={p}
                 offer={offerForProduct(offers, p.id)}
                 category={String(

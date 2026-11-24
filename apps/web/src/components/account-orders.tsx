@@ -152,7 +152,7 @@ export function AccountOrders({
         if (!window.confirm("Giỏ hàng đang có sản phẩm. Bạn muốn thay bằng các món từ đơn này?")) return;
         await mutate("commerce", "cart-clear", {
           cartToken: summary.cartToken,
-        });
+        }, "reorder");
         summary = await api("cart/summary");
       }
       for (const item of items) {
@@ -163,7 +163,7 @@ export function AccountOrders({
           productId: pId,
           quantity: qty,
           cartToken: summary.cartToken,
-        });
+        }, "reorder");
         summary = await api("cart/summary");
       }
       setToastMessage(

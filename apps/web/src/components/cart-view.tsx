@@ -80,7 +80,7 @@ export function CartView({ summary, fetching, error, disabled, blocked, refresh,
           <aside className={styles.packing}><span className={styles.packingIcon}><Icon name="verified" /></span><div><h2>Quy chuẩn đóng gói Cố Đô</h2><p>Đặc sản được chuẩn bị cẩn thận để gửi đến bạn và người thân.</p></div></aside>
         </div>
         <aside className={styles.summary}><header><h2>Tóm tắt đơn hàng</h2><Icon name="receipt_long" /></header>
-          <dl><div><dt>Tạm tính ({rows.length} món)</dt><dd>{money(summary.subtotal)}</dd></div><DiscountPriceRow summary={summary} /><div><dt>Phí vận chuyển ước tính</dt><dd>{money(summary.shippingFee)}</dd></div></dl>
+          <dl><div><dt>Tạm tính ({rows.length} món)</dt><dd>{money(summary.subtotal)}</dd></div><DiscountPriceRow summary={summary} surface="cart_summary" /><div><dt>Phí vận chuyển ước tính</dt><dd>{money(summary.shippingFee)}</dd></div></dl>
           <CartOfferHint hint={summary.offerHint} />
           {threshold > 0 && <div className={styles.shipping}>{summary.netSubtotal >= threshold ? "Đơn hàng đủ điều kiện miễn phí giao hàng." : `Còn ${money(threshold - summary.netSubtotal)} nữa để được miễn phí giao hàng.`}</div>}
           <div className={styles.divider} aria-hidden="true"><span>✥</span></div>

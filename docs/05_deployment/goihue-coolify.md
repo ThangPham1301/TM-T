@@ -104,6 +104,16 @@ Nếu domain chưa truy cập được, kiểm tra DNS và chứng chỉ HTTPS t
 
 ## 7. Chạy kiểm tra trước khi merge
 
+### GA4 build configuration
+
+`NEXT_PUBLIC_GA_ENABLED=false` by default. After the GA4 property and QA filters are verified, set `NEXT_PUBLIC_GA_ENABLED=true` and `NEXT_PUBLIC_GA_MEASUREMENT_ID=G-06239FHPPM` as build variables and rebuild the web image. Dockerfile, local Compose override and Coolify Compose pass these values to `next build`; runtime-only changes are insufficient.
+
+Before enabling Google requests, disable Enhanced Measurement for the stream (including automatic history pageviews, site search and form interactions), register custom definitions from the measurement plan and verify the Developer traffic Exclude filter. `?ga_debug=1` enables per-browser debug for QA; it does not itself exclude events. Never enable debug for all production visitors. Google Signals and ad personalization are not used.
+
+Local automated QA can use `?ga_capture=1` on localhost with GA enabled and a synthetic measurement ID. It records only allowlisted events in `window.__goiHueAnalytics`, does not load the Google script and persists capture mode for that tab. Clearing `goihue:ga4:capture` in sessionStorage ends capture after reload. This is local evidence, not DebugView verification. GA also honors Do Not Track and a denied `goihue:analytics-consent` preference; this does not claim a complete consent-management UI.
+
+Run `npm run test:analytics` and `npm run test:analytics:browser` in `apps/web`. The browser suite starts its own ephemeral localhost server, intercepts all API calls with synthetic fixtures and closes its owned processes. Install Playwright Chromium first if absent; `PLAYWRIGHT_CHROMIUM_EXECUTABLE` can select an existing local headless Chromium. Backend checks: `python scripts/test-ga4-backend.py` uses the existing Maven cache after the normal API package build. See `docs/04_testing/ga4/acceptance.md` for real-database and Google acceptance gates.
+
 ```powershell
 docker build -t goihue-api:system-review apps/api
 docker build -t goihue-web:system-review apps/web

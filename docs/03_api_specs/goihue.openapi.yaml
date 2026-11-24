@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Goi Hue Unified Store API
-  version: 1.7.0-draft
+  version: 1.8.0-draft
   description: Unified persistence API. VietQR/IPN operations are experimental demo flows; shipping and refunds are recorded manually. See goihue-state-matrix.md.
 servers:
   - url: /api/store
@@ -46,7 +46,11 @@ paths:
                 address: {type: string, maxLength: 400, description: Required for checkout}
                 paymentMethod: {type: string, enum: [COD, VIETQR], default: COD}
       responses:
-        '200': {description: Cart mutation result or guest receipt with number and lookupCode}
+        '200':
+          description: Cart mutation or guest receipt; safe measurement snapshot is present for new orders and measurementMutation for cart changes. Replay preserves the original operation/snapshot.
+          content:
+            application/json:
+              schema: {$ref: './ga4-measurement.schema.yaml#/components/schemas/MeasuredResponse'}
         '403': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
         '422': {$ref: '#/components/responses/Error'}
@@ -98,7 +102,11 @@ paths:
                 number: {type: string, pattern: '^GH-[A-Z0-9]{8}$'}
                 lookupCode: {type: string, minLength: 32, maxLength: 35}
       responses:
-        '200': {description: Guest order summary and a 30-minute order-scoped access cookie}
+        '200':
+          description: Guest order summary and a 30-minute order-scoped access cookie; new orders include the stored identity-free measurement snapshot.
+          content:
+            application/json:
+              schema: {$ref: './ga4-measurement.schema.yaml#/components/schemas/MeasuredResponse'}
         '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '429': {$ref: '#/components/responses/Error'}
@@ -110,7 +118,11 @@ paths:
       parameters:
         - {in: path, name: number, required: true, schema: {type: string, pattern: '^GH-[A-Z0-9]{8}$'}}
       responses:
-        '200': {description: 'Items, amounts, statuses, tracking and pending VietQR demo details. The original guest session also receives its lookup code. Delivery contacts and internal notes are excluded.'}
+        '200':
+          description: 'Items, amounts, statuses and pending VietQR demo details. New orders also return their stored measurement snapshot; legacy orders are not backfilled. The original guest session receives its lookup code outside measurement. Delivery contacts and internal notes are excluded.'
+          content:
+            application/json:
+              schema: {$ref: './ga4-measurement.schema.yaml#/components/schemas/MeasuredResponse'}
         '404': {$ref: '#/components/responses/Error'}
   /live:
     get:
@@ -236,6 +248,7 @@ paths:
                   pricedAt: {type: string, format: date-time}
                   quoteToken: {type: string}
                   subtotal: {type: integer, format: int64}
+                  measurement: {$ref: './ga4-measurement.schema.yaml#/components/schemas/Measurement'}
                   discountAmount: {type: integer, format: int64, description: Actual discount after applying the product floors.}
                   netSubtotal: {type: integer, format: int64}
                   discount:
@@ -559,7 +572,11 @@ paths:
                     collectedAmount: {type: integer, minimum: 0, description: Required to close an unpaid COD delivery or supplement a legacy delivery. Must equal the current COD amount due.}
                     action: {type: string, enum: [cart-set, cart-clear, cart-refresh, checkout, order-cancel, order-status, order-paid, order-recipient, payment-resolve, product-save, product-delete, category-save, category-delete, catalog-toggle, shipping-save, catalog-image-intent, discount-save, discount-toggle, pricing-save, pricing-toggle, pricing-floor]}
       responses:
-        '200': {description: 'Persisted record or acknowledgement. COD orders may include codDueAmount after adjustment and codCollectedAmount after collection.'}
+        '200':
+          description: Persisted record or acknowledgement. New checkout orders include immutable measurement; cart-set/cart-clear include measurementMutation. Replay retains the same data. Other actions keep their existing response.
+          content:
+            application/json:
+              schema: {$ref: './ga4-measurement.schema.yaml#/components/schemas/MeasuredResponse'}
         '401': {$ref: '#/components/responses/Error'}
         '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}

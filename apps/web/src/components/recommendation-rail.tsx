@@ -85,9 +85,10 @@ function Rail({ surface, refreshKey, categories = [] }: Props) {
       )}
       {status === "ready" && (
         <div className="lan-products">
-          {items.map((product) => (
+          {items.map((product, index) => (
             <ProductCard
               key={product.id}
+              list={{ id: "cart_recommendations", name: "Gợi ý cho giỏ hàng", instance: "cart", index }}
               product={product}
               category={String(
                 categories.find(

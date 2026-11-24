@@ -13,6 +13,9 @@ import { ProductOffer } from "../discounts/offer-display";
 import { usePublicOffers } from "../discounts/use-public-offers";
 import { LoadState, ProductCard } from "./lan-primitives";
 import storyStyles from "../heritage-stories.module.css";
+import { trackEvent } from "@/lib/analytics";
+import { productItem } from "@/lib/analytics-commerce";
+import { StoryRegion } from "../analytics-content";
 
 const tabs = [
   "Câu chuyện phong vị",
@@ -180,6 +183,11 @@ export function ProductDetail({ slug }: { slug: string }) {
     };
   }, [slug, attempt]);
   const product = storedProduct ? applyPricing(storedProduct, feed) : null;
+  const viewedProduct = useRef<string | null>(null);
+  useEffect(() => {
+    if (!product || loading || error || viewedProduct.current === String(product.id)) return;
+    if (trackEvent("view_item", { currency: "VND", value: Number(product.price), items: [productItem(product)] })) viewedProduct.current = String(product.id);
+  }, [product, loading, error]);
   async function purchase(buyNow = false) {
     if (!product) return;
     if (state && state.user.role !== "CUSTOMER") return;
@@ -202,7 +210,7 @@ export function ProductDetail({ slug }: { slug: string }) {
           cartToken: summary.cartToken,
           expectedUnitPrice: p.price,
           expectedPriceSource: priceSource(p)?.source ?? "BASE",
-        });
+        }, "product_detail");
       } catch (problem) {
         if (problem instanceof ApiError && problem.status === 409) reloadPrices();
         throw problem;
@@ -424,8 +432,10 @@ export function ProductDetail({ slug }: { slug: string }) {
               {tab === 0 ? (
                 heritageStory ? (
                   <article className={storyStyles.fullStory}>
+                    <StoryRegion id={heritageStory.category} surface="product_detail" mode="default">
                     <h2>{heritageStory.title}</h2>
                     <p className={storyStyles.storyLead}>{heritageStory.lead}</p>
+                    </StoryRegion>
                     {heritageStory.paragraphs.map((paragraph) => (
                       <p key={paragraph}>{paragraph}</p>
                     ))}
@@ -440,7 +450,7 @@ export function ProductDetail({ slug }: { slug: string }) {
                     )}
                   </article>
                 ) : (
-                  <>
+                  <StoryRegion id="product_fallback" surface="product_detail" mode="default">
                     <h2>Nếp quà tao nhã bên dòng Hương Giang</h2>
                     <p>
                       {String(
@@ -449,7 +459,7 @@ export function ProductDetail({ slug }: { slug: string }) {
                           "Thông tin đang được cập nhật.",
                       )}
                     </p>
-                  </>
+                  </StoryRegion>
                 )
               ) : tab === 1 ? (
                 <>
@@ -501,9 +511,10 @@ export function ProductDetail({ slug }: { slug: string }) {
               <Link href="/products">Xem tất cả →</Link>
             </header>
             <div className="lan-related">
-              {related.map((p) => (
+              {related.map((p, index) => (
                 <ProductCard
                   key={p.id}
+                  list={{ id: "product_related", name: "Sản phẩm liên quan", instance: slug, index }}
                   product={applyPricing(p, feed)}
                   offer={offerForProduct(offers, p.id)}
                   category={String(

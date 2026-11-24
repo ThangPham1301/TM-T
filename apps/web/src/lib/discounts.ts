@@ -1,4 +1,5 @@
 import { money, type Row } from "./store";
+import type { Measurement } from "./analytics-commerce";
 
 export type OfferRule = {
   scope: "PRODUCT" | "PRODUCTS" | "CART";
@@ -24,6 +25,7 @@ export type Offer = OfferRule & {
 };
 
 export type CartSummary = {
+  measurement?: Measurement;
   items: Row[];
   cartToken: string;
   quoteToken: string;

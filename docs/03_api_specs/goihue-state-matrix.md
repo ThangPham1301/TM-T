@@ -226,3 +226,8 @@ Trang nhật ký ADMIN hiển thị tối đa 200 sự kiện gần nhất. Có 
 - Privacy and returns pages share storefront paper, brown/gold colors, typography, policy navigation and responsive article layout. Contents anchors indicate the section currently being read. Draft status remains visible on both pages.
 - Privacy version metadata: loading displays a loading message; success displays the API version; a missing version is explicit; a failed request leaves the policy copy readable and provides a retry action. No placeholder version or update date is presented as API data.
 - Sidebar links retain authenticated account destinations. On mobile the contents appear above the document in an expandable menu, collapsed initially. Anchor offsets follow the responsive storefront header.
+
+
+## GA4 safe commerce snapshots (23 November 2026)
+
+Quotes expose identity-free `measurement` and new checkout orders persist the same versioned shape using the order number as transactionId. Both guest/account receipts return this allowlisted object; old orders without a snapshot stay unchanged. Successful cart-set/cart-clear return measurementMutation with stable operationId on replay and before/after quantities. Failed mutations return no success measurement. These fields do not change authorization, totals, payment or discount decisions. See [schema](ga4-measurement.schema.yaml) and [implementation checklist](ga4-implementation-checklist.md).

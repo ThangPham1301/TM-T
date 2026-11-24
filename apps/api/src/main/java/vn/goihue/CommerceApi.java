@@ -110,6 +110,7 @@ public class CommerceApi {
             line.put("available", catalog.visible(p));
             line.put("priceChanged", priceChanged(line, price));
             line.put("name", p.get("name"));
+            line.put("category", p.get("category"));
             line.put("image", p.get("image"));
         }
         return rows;
@@ -156,6 +157,7 @@ public class CommerceApi {
         result.put("shippingFee", fee);
         result.put("total", quote.netSubtotal() + fee);
         result.put("shipping", shipping);
+        result.put("measurement", CommerceMeasurement.snapshot(rows, quote, fee, null, null, "currentPricing"));
         if (quote.offerHint() != null) result.put("offerHint", quote.offerHint());
         return result;
     }
@@ -266,7 +268,9 @@ public class CommerceApi {
 
     Map<String,Object> mutateCart(CartOwner owner, String action, Map<String,Object> b) {
         checkCart(owner, b);
-        return switch (action) {
+        var before = action.equals("cart-refresh") ? List.<Map<String,Object>>of()
+                : cartView(owner, pricing.book(Instant.now()));
+        var result = new LinkedHashMap<String,Object>(switch (action) {
             case "cart-set" -> setCartLine(owner, b);
             case "cart-clear" -> {
                 clearCart(owner);
@@ -288,7 +292,10 @@ public class CommerceApi {
                 yield Map.of("ok", true);
             }
             default -> throw new IllegalArgumentException("Unsupported cart action");
-        };
+        });
+        if (!action.equals("cart-refresh")) result.put("measurementMutation",
+                CommerceMeasurement.mutation(before, result, action, app.str(b, "productId")));
+        return result;
     }
 
     private UUID cartLineId(CartOwner owner, String productId) {
@@ -320,11 +327,14 @@ public class CommerceApi {
         if (existing.isPresent() && !hasExpectedPrice) {
             var line = existing.get();
             line.put("quantity", quantity);
+            line.put("category", product.get("category"));
             touchCartLine(line);
             return saveOwned(owner, "cart", line);
         }
         int revision = existing.map(line -> app.number(line, "revision") + 1).orElse(1);
-        return saveOwned(owner, "cart", cartSnapshot(product, price, quantity, id, revision));
+        var snapshot = cartSnapshot(product, price, quantity, id, revision);
+        snapshot.put("category", product.get("category"));
+        return saveOwned(owner, "cart", snapshot);
     }
 
     Map<String,Object> checkout(CartOwner owner, Map<String,Object> b, Map<String,Object> destination) {
@@ -353,6 +363,7 @@ public class CommerceApi {
             var item = new LinkedHashMap<String, Object>();
             item.put("productId", productId);
             item.put("name", p.get("name"));
+            item.put("category", p.get("category"));
             item.put("slug", p.get("slug"));
             item.put("image", p.get("image"));
             item.put("quantity", quantity);
@@ -394,6 +405,7 @@ public class CommerceApi {
         if (method.isEmpty()) method = "COD";
         app.require(Set.of("COD", "VIETQR").contains(method), "Phương thức thanh toán không được hỗ trợ.");
         order.put("paymentMethod", method);
+        order.put("measurement", CommerceMeasurement.snapshot(items, quote, fee, number, method, "pricing"));
         order.put("paymentStatus", "UNPAID");
         recipient(order, destination);
         String firstNote = "Đã tiếp nhận đơn hàng, thanh toán khi nhận hàng";

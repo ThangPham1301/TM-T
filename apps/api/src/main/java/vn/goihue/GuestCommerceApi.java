@@ -314,7 +314,7 @@ public class GuestCommerceApi {
 
     private Map<String,Object> publicOrder(Map<String,Object> order) {
         var result = selectFields(order, "number", "createdAt", "status", "paymentMethod", "paymentStatus",
-                "subtotal", "discountAmount", "shippingFee", "total", "codDueAmount", "trackingReference");
+                "subtotal", "discountAmount", "shippingFee", "total", "codDueAmount", "trackingReference", "measurement");
         if (order.get("items") instanceof List<?> items)
             result.put("items", items.stream().filter(Map.class::isInstance).map(Map.class::cast)
                     .map(item -> selectFields(item, "productId", "name", "image", "slug", "quantity", "price", "netTotal")).toList());

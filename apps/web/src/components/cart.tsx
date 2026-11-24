@@ -11,6 +11,8 @@ import { api, ApiError, fields, type Row, useStore } from "@/lib/store";
 import type { CartSummary } from "@/lib/discounts";
 import { guestOrderPath } from "@/lib/guest-order";
 import checkoutStyles from "./checkout-view.module.css";
+import { trackEvent } from "@/lib/analytics";
+import { quoteParams } from "@/lib/analytics-commerce";
 
 export function Cart({ checkout = false }: { checkout?: boolean }) {
   const { state, loading } = useStore();
@@ -85,6 +87,13 @@ function CartJourney({ checkout }: { checkout: boolean }) {
   }, [state, summaryPath, receiveSummary]);
   const nextPriceChangeAt = summary?.nextPriceChangeAt;
   const pricedAt = summary?.pricedAt;
+  const journeyRecorded = useRef(false);
+  useEffect(() => {
+    if (journeyRecorded.current || !summary?.measurement || !summary.items.length || placedVietQrOrder || fetching) return;
+    try {
+      if (trackEvent(checkout ? "begin_checkout" : "view_cart", { ...quoteParams(summary.measurement), checkout_type: state ? "account" : "guest" })) journeyRecorded.current = true;
+    } catch { /* Missing/invalid analytics data must not affect the cart. */ }
+  }, [summary, checkout, fetching, placedVietQrOrder, state]);
   useEffect(() => {
     if (busy || fetching || placedVietQrOrder) return;
     let active = true;
@@ -196,7 +205,7 @@ function CartJourney({ checkout }: { checkout: boolean }) {
             cartToken: summary.cartToken,
             quoteToken: summary.quoteToken,
             shippingRevision: summary.shipping.revision,
-          });
+          }, "checkout");
           if (!state) {
             router.push(guestOrderPath(String(order.number), true));
             return;

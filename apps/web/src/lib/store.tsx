@@ -1,4 +1,5 @@
 "use client";
+import { dispatchCommerce } from "./analytics";
 
 import {
   createContext,
@@ -195,6 +196,7 @@ type StoreContext = {
     path: string,
     action: string,
     data: Record<string, unknown>,
+    measurementSource?: string,
   ) => Promise<Row>;
   logout: () => Promise<void>;
 };
@@ -306,12 +308,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     path: string,
     action: string,
     data: Record<string, unknown>,
+    measurementSource = "cart",
   ) {
     const body = { action, ...data },
       fingerprint = JSON.stringify({ path, body });
     if (pending.current?.body !== fingerprint)
       pending.current = { body: fingerprint, key: crypto.randomUUID() };
     const result = await api(path, "POST", body, pending.current.key);
+    if (path === "commerce" || path === "guest/commerce")
+      dispatchCommerce(action, result, path === "guest/commerce" ? "guest" : "account", measurementSource);
     if (pending.current?.body === fingerprint) pending.current = null;
     if (path === "guest/commerce") {
       void refreshGuestCart().catch(() => {});

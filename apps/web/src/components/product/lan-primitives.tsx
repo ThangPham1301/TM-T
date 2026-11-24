@@ -1,4 +1,8 @@
+"use client";
 import Link from "next/link";
+import { productItem } from "@/lib/analytics-commerce";
+import { trackEvent } from "@/lib/analytics";
+import { useExposure } from "@/lib/analytics-visibility";
 import type { Row } from "@/lib/store";
 import { priceSource } from "@/lib/pricing";
 import { ProductPrice } from "../pricing/price-display";
@@ -10,13 +14,20 @@ export function ProductCard({
   product: p,
   category,
   offer,
+  list = { id: "catalog", name: "Danh mục sản phẩm", instance: "catalog", index: 0 },
 }: {
   product: Row;
   category?: string;
   offer?: Offer;
+  list?: { id: string; name: string; instance: string; index: number };
 }) {
+  const item = { ...productItem(p), item_list_id: list.id, item_list_name: list.name, index: list.index };
+  const params = { item_list_id: list.id, item_list_name: list.name, items: [item] };
+  const exposure = useExposure<HTMLElement>("view_item_list", params, `${list.id}:${list.instance}:${p.id}`);
   return (
-    <article className="lan-product lan-frame">
+    <article ref={exposure} className="lan-product lan-frame" onClickCapture={event => {
+      if ((event.target as Element).closest("a[href]")) trackEvent("select_item", params);
+    }}>
       <Link href={`/products/${p.slug}`} className="lan-product-photo">
         <ProductImage
           fill

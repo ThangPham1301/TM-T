@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
+import { StoryRegion, StoryCta } from "@/components/analytics-content";
 import styles from "./story.module.css";
 
 export const metadata: Metadata = {
@@ -16,6 +16,7 @@ export default function HueStoryPage() {
         <header className={styles.hero}>
           <div className={styles.intro}>
             <p className="gh-kicker">Câu chuyện Huế</p>
+            <StoryRegion id="hue_general" surface="story_page" mode="page">
             <h1>Chút Huế nằm trong một nếp gấp</h1>
             <div className="gh-story__rule" aria-hidden="true" />
             <p className={styles.lead}>
@@ -25,6 +26,7 @@ export default function HueStoryPage() {
               ngói liệt trầm mặc, mùi thảo mộc thanh tao thoảng qua hiên nhà
               rường sau một cơn mưa rào chợt đến rồi chợt tan.
             </p>
+            </StoryRegion>
             <p>
               Người ta thường nghĩ di sản là những bức tường thành rêu phong
               nằm yên sau cánh cổng Ngọ Môn, là thứ gì đó trang nghiêm và xa
@@ -102,12 +104,12 @@ export default function HueStoryPage() {
             “Từ Huế vươn xa, mang di sản đến mọi nơi, lan tỏa món quà Huế,
             tâm hồn Huế.”
           </blockquote>
-          <Link
+          <StoryCta id="hue_general" surface="story_page"
             className="gh-btn gh-btn--brown gh-btn--fold"
             href="/products?category=qua-bieu"
           >
             Khám phá quà biếu Huế <span aria-hidden="true">→</span>
-          </Link>
+          </StoryCta>
         </div>
       </article>
     </main>

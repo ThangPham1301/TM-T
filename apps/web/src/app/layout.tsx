@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
+import { Analytics } from "@/components/analytics";
 import localFont from "next/font/local";
 import { StoreProvider } from "@/lib/store";
 import {
@@ -52,6 +54,7 @@ export default function RootLayout({
     <html lang="vi" data-scroll-behavior="smooth" className={`${bodyFont.variable} ${displayFont.variable}`}>
       <body>
         <StoreProvider>
+          <Suspense fallback={null}><Analytics /></Suspense>
           <SiteHeader />
           <StorePauseBanner />
           <StatusMessages />
