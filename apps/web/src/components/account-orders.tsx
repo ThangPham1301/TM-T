@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { type Row, api, cleanText, date, money, useStore } from "@/lib/store";
+import { useSearchParams } from "next/navigation";
+import { type Row, cleanText, date, money, useStore } from "@/lib/store";
+import { ReorderDialog } from "./reorder-dialog";
 import { PaymentPanel } from "./payment-panel";
 import { VietQrDialog } from "./checkout-payment";
 import { codDisplayAmount, codHasNoCollection, codNeedsReceipt, isCodOrder, matchesPaymentFilter, orderPaymentLabel, orderPaymentStatus, paymentDetails } from "@/lib/order-payment";
@@ -14,7 +15,6 @@ export function AccountOrders({
 }: {
   initialOrderId?: string;
 }) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const linkedOrderId = initialOrderId ?? searchParams.get("order");
   const { state, busy, run, mutate } = useStore();
@@ -27,6 +27,7 @@ export function AccountOrders({
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   const [currentPage, setCurrentPage] = useState(1);
   const openedOrder = useRef<string | null>(null);
+  const [reorderOrder, setReorderOrder] = useState<Row | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const orders = state?.orders ?? EMPTY_ORDERS;
@@ -142,39 +143,10 @@ export function AccountOrders({
     });
   };
 
-  const handleReorder = async (order: Row) => {
-    const items = (order.items as Row[] | undefined) || [];
-    if (!items.length) return;
-
-    void run(async () => {
-      let summary = await api("cart/summary");
-      if (summary.items && summary.items.length > 0) {
-        if (!window.confirm("Giỏ hàng đang có sản phẩm. Bạn muốn thay bằng các món từ đơn này?")) return;
-        await mutate("commerce", "cart-clear", {
-          cartToken: summary.cartToken,
-        });
-        summary = await api("cart/summary");
-      }
-      for (const item of items) {
-        const pId = String(item.productId || item.id || "");
-        if (!pId) continue;
-        const qty = Number(item.quantity) || 1;
-        await mutate("commerce", "cart-set", {
-          productId: pId,
-          quantity: qty,
-          cartToken: summary.cartToken,
-        });
-        summary = await api("cart/summary");
-      }
-      setToastMessage(
-        `Đã tạo phiên đặt hàng mới từ đơn #${order.number}. Đang chuyển đến trang đặt hàng...`,
-      );
-      router.push("/checkout");
-    });
-  };
 
   return (
     <div style={{ maxWidth: "1120px", width: "100%", margin: "0 auto" }}>
+      {reorderOrder && <ReorderDialog key={reorderOrder.id} order={reorderOrder} onClose={() => setReorderOrder(null)} />}
       {/* Top Heritage Breadcrumb & Heading Block */}
       <div
         style={{
@@ -678,13 +650,13 @@ export function AccountOrders({
                       )}
 
                       {/* Re-order button if order has items */}
-                      {items.length > 0 && (
+                      {items.length > 0 && ["DELIVERED", "CANCELLED", "DELIVERY_FAILED", "RETURNED"].includes(String(order.status)) && (
                         <button
                           type="button"
-                          className="orders-btn-action orders-btn-reorder"
+                          className={`orders-btn-action ${String(order.status) === "RETURNED" ? "orders-btn-detail" : "orders-btn-reorder"}`}
                           disabled={busy}
-                          onClick={() => void handleReorder(order)}
-                          title="Tạo checkout mới từ các món trong đơn này"
+                          onClick={() => setReorderOrder(order)}
+                          title="Kiểm tra sản phẩm, số lượng và giá trước khi mua lại"
                         >
                           <span
                             className="material-symbols-outlined"
@@ -692,7 +664,7 @@ export function AccountOrders({
                           >
                             repeat
                           </span>
-                          <span>{payStatus === "EXPIRED" ? "Đặt lại đơn" : "Đặt lại món này"}</span>
+                          <span>{["CANCELLED", "DELIVERY_FAILED"].includes(String(order.status)) ? "Đặt lại đơn" : "Mua lại"}</span>
                         </button>
                       )}
 

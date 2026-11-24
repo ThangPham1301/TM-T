@@ -11,6 +11,7 @@ import { ProductImage } from "./product/product-image";
 import styles from "./checkout-view.module.css";
 
 type CheckoutViewProps = {
+  reorderSource?: Row; cartHref?: string;
   summary: CartSummary | null; user?: Row; addresses: Row[]; selectedAddress?: Row;
   mergeNotice?: React.ReactNode;
   quoteChanged: boolean;
@@ -23,7 +24,7 @@ type CheckoutViewProps = {
 };
 function Icon({ name }: { name: string }) { return <span className={`material-symbols-outlined ${styles.icon}`} aria-hidden="true">{name}</span>; }
 
-export function CheckoutView({ summary, user, addresses, selectedAddress, mergeNotice, quoteChanged, fetching, error, busy, disabled, blocked, addingAddress, previousTotal, onRefresh, onAcceptPrices, onAcceptTotal, onToggleAddress, onSelectAddress, onSaveAddress, onCheckout }: CheckoutViewProps) {
+export function CheckoutView({ summary, reorderSource, cartHref = "/cart", user, addresses, selectedAddress, mergeNotice, quoteChanged, fetching, error, busy, disabled, blocked, addingAddress, previousTotal, onRefresh, onAcceptPrices, onAcceptTotal, onToggleAddress, onSelectAddress, onSaveAddress, onCheckout }: CheckoutViewProps) {
   const [paymentMethod, setPaymentMethod] = useState<"COD" | "VIETQR">("COD");
   const rows = summary?.items ?? [];
   const pricesChanged = rows.some((line) => line.priceChanged);
@@ -31,18 +32,20 @@ export function CheckoutView({ summary, user, addresses, selectedAddress, mergeN
   const threshold = Number(summary?.shipping.freeShippingThreshold ?? 0);
   return <main className={styles.page}>
     <div className={styles.breadcrumbBand}><div className={styles.breadcrumb}>
-      <nav aria-label="Các bước đặt hàng"><Link href="/cart"><Icon name="shopping_bag" />Giỏ hàng</Link><span aria-hidden="true">›</span><strong><Icon name="local_shipping" />Thanh toán đơn hàng</strong></nav>
+      <nav aria-label="Các bước đặt hàng"><Link href={cartHref}><Icon name="shopping_bag" />Giỏ hàng</Link><span aria-hidden="true">›</span><strong><Icon name="local_shipping" />Thanh toán đơn hàng</strong></nav>
       <span className={styles.motto}>● &nbsp; Gói trọn hương vị Cố Đô</span>
     </div></div>
     <div className={styles.container}>
       {mergeNotice}
+      {reorderSource && <div className={styles.guestNotice} role="status"><div><strong>Mua lại từ đơn #{String(reorderSource.number)}</strong>
+        <p>Thông tin người nhận từ đơn trước đã được điền sẵn. Hãy kiểm tra hoặc chọn địa chỉ khác; thay đổi ở đây không cập nhật hồ sơ của bạn.</p></div></div>}
       {fetching && <p role="status">Đang tải giỏ hàng…</p>}
       {error && <div className={styles.warning} role="alert">{error} <button type="button" onClick={onRefresh} disabled={disabled}>Thử lại</button></div>}
       {!fetching && summary && !rows.length && <section className={styles.empty}><h1>Giỏ hàng đang trống</h1><p>Hãy chọn thức quà trước khi đặt hàng.</p><Link href="/products">Khám phá bộ sưu tập →</Link></section>}
       {summary && rows.length > 0 && <div className={styles.grid}>
         <section className={styles.details}>
           <header className={styles.intro}><span className={styles.kicker}>Tiến trình xác nhận quà</span><h1>Địa chỉ gửi gắm &amp; Thông tin người nhận</h1><p>Vui lòng kiểm tra thông tin nhận hàng để Gói Huế chuẩn bị đơn chu đáo.</p></header>
-          {unavailable && <p className={styles.warning} role="alert">Số lượng hoặc tình trạng hàng đã thay đổi. <Link href="/cart">Về giỏ hàng để điều chỉnh.</Link></p>}
+          {unavailable && <p className={styles.warning} role="alert">Số lượng hoặc tình trạng hàng đã thay đổi. <Link href={cartHref}>Về giỏ hàng để điều chỉnh.</Link></p>}
           {!summary.shipping.enabled && <p className={styles.warning} role="status">{shippingPauseMessage(summary.shipping)}</p>}
           {user ? <section className={styles.card}>
             <div className={styles.cardHeading}><span className={styles.number}>1</span><h2>Địa chỉ giao nhận đặc sản</h2><button type="button" className={styles.textButton} disabled={busy} onClick={onToggleAddress}>{addingAddress ? "Đóng" : "+ Thêm địa chỉ"}</button></div>
@@ -59,9 +62,9 @@ export function CheckoutView({ summary, user, addresses, selectedAddress, mergeN
           {!addingAddress && <form id="goihue-checkout" className={styles.checkoutForm} onSubmit={onCheckout}>
             {!selectedAddress && <section className={styles.card}><div className={styles.cardHeading}><span className={styles.number}>{user ? "2" : "1"}</span><h2>Thông tin người nhận</h2><span className={styles.required}>* Bắt buộc nhập</span></div>
               <div className={styles.fields}>
-                <label>Họ và tên người nhận <span>*</span><input name="recipient" autoComplete="name" defaultValue={String(user?.name ?? "")} required maxLength={100} /></label>
-                <label>Số điện thoại nhận hàng <span>*</span><input name="phone" type="tel" autoComplete="tel" defaultValue={String(user?.phone ?? "")} required minLength={8} maxLength={30} /></label>
-                <label>Địa chỉ giao hàng <span>*</span><textarea name="address" autoComplete="street-address" defaultValue={String(user?.address ?? "")} required maxLength={400} rows={3} placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố" /></label>
+                <label>Họ và tên người nhận <span>*</span><input name="recipient" autoComplete="name" defaultValue={String(reorderSource?.recipient ?? user?.name ?? "")} required maxLength={100} /></label>
+                <label>Số điện thoại nhận hàng <span>*</span><input name="phone" type="tel" autoComplete="tel" defaultValue={String(reorderSource?.phone ?? user?.phone ?? "")} required minLength={8} maxLength={30} /></label>
+                <label>Địa chỉ giao hàng <span>*</span><textarea name="address" autoComplete="street-address" defaultValue={String(reorderSource?.address ?? user?.address ?? "")} required maxLength={400} rows={3} placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố" /></label>
               </div>
             </section>}
             <fieldset className={styles.card}><legend className={styles.visuallyHidden}>Phương thức thanh toán</legend><div className={styles.cardHeading}><span className={styles.number}>{!user || selectedAddress ? "2" : "3"}</span><h2>Phương thức thanh toán</h2></div>
@@ -73,7 +76,7 @@ export function CheckoutView({ summary, user, addresses, selectedAddress, mergeN
           </form>}
         </section>
         <aside className={styles.summary}>
-          <header className={styles.summaryHeading}><div><span className={styles.kicker}>Tóm lược kiện quà</span><h2>Đơn hàng của bạn ({rows.length} món)</h2></div><Link href="/cart">Sửa ✎</Link></header>
+          <header className={styles.summaryHeading}><div><span className={styles.kicker}>Tóm lược kiện quà</span><h2>Đơn hàng của bạn ({rows.length} món)</h2></div><Link href={cartHref}>Sửa ✎</Link></header>
           {(pricesChanged || quoteChanged) && <div className={styles.warning}>
             <p role="status">{previousTotal !== null
               ? <>Tổng tiền đã đổi từ <del>{money(previousTotal)}</del> thành <strong>{money(summary.total)}</strong>. Vui lòng xác nhận trước khi đặt hàng.</>

@@ -1,13 +1,98 @@
 openapi: 3.0.3
 info:
   title: Goi Hue Unified Store API
-  version: 1.7.0-draft
+  version: 1.8.0-draft
   description: Unified persistence API. VietQR/IPN operations are experimental demo flows; shipping and refunds are recorded manually. See goihue-state-matrix.md.
 servers:
   - url: /api/store
 security:
   - Session: []
 paths:
+  /orders/{id}/reorder/preview:
+    post:
+      operationId: previewOrderReorder
+      summary: Review current availability and prices before buying an owned past order again
+      description: >-
+        CUSTOMER with cart.manage; owned authenticated orders only. Allowed source states are DELIVERED,
+        CANCELLED, DELIVERY_FAILED and RETURNED. Other source states return 409, including active unpaid orders.
+        This is a read-only preview; no cart writes, reservations, orders or payment creation.
+        Omit items to select the original quantities. An explicit empty list deselects all lines.
+        Only products from the original order may be selected, without duplicates. Unavailable lines remain
+        visible using the historical name and are never silently skipped or reduced. Current hidden product
+        details are not exposed. The quote uses current effective prices, the best eligible discount and
+        post-discount shipping. ready is false until selected quantities are available, order limits are met
+        and the store accepts orders. previewToken fingerprints the selection, source revision, current
+        product state, shipping and quote. cartToken separately guards replacement of the existing cart.
+      parameters:
+        - {$ref: '#/components/parameters/Id'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                items: {$ref: '#/components/schemas/ReorderSelection'}
+      responses:
+        '200':
+          description: Review of all original lines; ready/issue messages, current quote when valid, source recipient, previewToken and current cartToken/count
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReorderPreview'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+  /orders/{id}/reorder:
+    post:
+      operationId: confirmOrderReorder
+      summary: Atomically replace the customer cart with reviewed reorder items
+      description: >-
+        CUSTOMER with cart.manage; same source eligibility and ownership as the preview operation.
+        Requires a current previewToken for the exact selected items and the expected cartToken.
+        Revalidates all products, quantities, pricing, discounts, shipping and source state while holding
+        the commerce mutation lock. Changed preview or cart returns 409 without modifying the cart.
+        Invalid selection returns 422 without modifying the cart. All cart changes and idempotency records
+        commit together; a failure rolls back every change. A retry with the same key and body replays
+        the same result, and another body with that key returns 409. Never creates an order or copies
+        payment state. Checkout must still revalidate the current quote and create a fresh order/payment.
+        The checkout UI can prefill recipient/phone/address from the owned source order, labeled as old
+        recipient details, without saving them as an address or changing the customer profile.
+      parameters:
+        - {$ref: '#/components/parameters/Id'}
+        - {$ref: '#/components/parameters/Idempotency'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [items, previewToken, cartToken]
+              properties:
+                action: {type: string, enum: [reorder]}
+                items: {$ref: '#/components/schemas/ReorderSelection'}
+                previewToken: {type: string, pattern: '^[a-f0-9]{64}$'}
+                cartToken: {type: string, pattern: '^[a-f0-9]{64}$'}
+      responses:
+        '200':
+          description: Cart replaced or idempotent result replayed; no order has been placed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, sourceOrderId, sourceOrderNumber]
+                properties:
+                  ok: {type: boolean}
+                  sourceOrderId: {type: string, format: uuid}
+                  sourceOrderNumber: {type: string}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
   /guest/cart/summary:
     get:
       operationId: guestCartQuote
@@ -717,6 +802,61 @@ components:
     Id: {in: path, name: id, required: true, schema: {type: string, format: uuid}}
     Idempotency: {in: header, name: Idempotency-Key, required: true, schema: {type: string, pattern: '^[a-zA-Z0-9-]{16,80}$'}}
   schemas:
+    ReorderSelection:
+      type: array
+      maxItems: 50
+      items:
+        type: object
+        additionalProperties: false
+        required: [productId, quantity]
+        properties:
+          productId: {type: string, format: uuid}
+          quantity: {type: integer, minimum: 1, maximum: 100}
+    ReorderPreview:
+      type: object
+      required: [sourceOrderId, sourceOrderNumber, recipient, lines, ready, issues, previewToken, cartToken, cartCount]
+      properties:
+        sourceOrderId: {type: string, format: uuid}
+        sourceOrderNumber: {type: string}
+        recipient:
+          type: object
+          properties:
+            recipient: {type: string}
+            phone: {type: string}
+            address: {type: string}
+        lines:
+          type: array
+          items:
+            type: object
+            required: [productId, name, originalQuantity, quantity, previousPrice, available, stock, code]
+            properties:
+              productId: {type: string, format: uuid}
+              name: {type: string}
+              image: {type: string}
+              originalQuantity: {type: integer}
+              quantity: {type: integer, minimum: 0, description: Zero when explicitly not selected}
+              previousPrice: {type: integer, description: Historical unit price before line discounts}
+              currentPrice: {type: integer, nullable: true}
+              priceSource: {type: string, nullable: true}
+              priceChanged: {type: boolean}
+              available: {type: boolean}
+              stock: {type: integer, minimum: 0}
+              code: {type: string, enum: [AVAILABLE, INSUFFICIENT_STOCK, OUT_OF_STOCK, UNAVAILABLE]}
+        ready: {type: boolean}
+        issues: {type: array, items: {type: string}}
+        quote:
+          type: object
+          nullable: true
+          description: Available only when every selected line is purchasable; uses current checkout pricing and discounts
+          properties:
+            subtotal: {type: integer, format: int64}
+            discountAmount: {type: integer, format: int64}
+            netSubtotal: {type: integer, format: int64}
+            shippingFee: {type: integer}
+            total: {type: integer, format: int64}
+        previewToken: {type: string}
+        cartToken: {type: string}
+        cartCount: {type: integer, description: Number of existing cart lines that confirmation will replace}
     EffectivePrice:
       type: object
       required: [amount, basePrice, source]

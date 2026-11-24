@@ -226,3 +226,21 @@ Trang nhật ký ADMIN hiển thị tối đa 200 sự kiện gần nhất. Có 
 - Privacy and returns pages share storefront paper, brown/gold colors, typography, policy navigation and responsive article layout. Contents anchors indicate the section currently being read. Draft status remains visible on both pages.
 - Privacy version metadata: loading displays a loading message; success displays the API version; a missing version is explicit; a failed request leaves the policy copy readable and provides a retry action. No placeholder version or update date is presented as API data.
 - Sidebar links retain authenticated account destinations. On mobile the contents appear above the document in an expandable menu, collapsed initially. Anchor offsets follow the responsive storefront header.
+
+### Reviewed reorder / buy again
+
+| State | Behavior |
+| --- | --- |
+| DELIVERED | Show Mua lại. |
+| CANCELLED / DELIVERY_FAILED | Show Đặt lại đơn; recipient details must be reviewed. |
+| RETURNED | Offer Mua lại as a secondary action. |
+| PLACED / CONFIRMED / PACKED / SHIPPED | No prominent reorder action; use existing payment/tracking actions. Server rejects reorder with 409 regardless of payment display status. |
+| Loading preview | Read-only request; disable confirmation and show progress. Existing cart stays intact. |
+| Preview success | Original quantities selected initially, current prices/discounts/shipping, old recipient labeled explicitly. Every original line remains visible. |
+| Unavailable / insufficient quantity | Explain per line; customer explicitly removes or adjusts items. Never silently substitute, drop or reduce a line. |
+| Empty selection / store paused | Explain why confirmation is unavailable. |
+| Existing cart | Explicit consent to replace it, checked against the preview cartToken; preview/cancel never writes it. |
+| Preview error / stale quote | Safe error and retry; 409 refreshes preview and requires review again. No partial cart replacement. |
+| 401 / 403 / 404 | Login required / insufficient customer capability or invalid origin / nonexistent or unowned source order. |
+| Confirm success | One atomic cart replacement, then checkout with labeled original recipient. Profile and address book stay unchanged. Checkout and cart editing keep the source reference; final checkout creates a new order and fresh payment state only on explicit submission. |
+| Idempotent retry | Same key/body replays success without resetting an edited cart; changed body returns 409. |
