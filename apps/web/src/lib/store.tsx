@@ -315,7 +315,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (pending.current?.body !== fingerprint)
       pending.current = { body: fingerprint, key: crypto.randomUUID() };
     const result = await api(path, "POST", body, pending.current.key);
-    if (path === "commerce" || path === "guest/commerce")
+    if (path === "commerce" || path === "guest/commerce" || /^orders\/[^/]+\/reorder$/.test(path))
       dispatchCommerce(action, result, path === "guest/commerce" ? "guest" : "account", measurementSource);
     if (pending.current?.body === fingerprint) pending.current = null;
     if (path === "guest/commerce") {

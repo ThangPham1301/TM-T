@@ -66,10 +66,25 @@ final class CommerceMeasurement {
         return Map.of("schemaVersion", 1, "operationId", UUID.randomUUID().toString(), "changes", changes);
     }
 
+    static Map<String, Object> replacement(List<Map<String, Object>> before, List<Map<String, Object>> after) {
+        var changes = new ArrayList<Map<String, Object>>();
+        var previous = new LinkedHashMap<String, Map<String, Object>>();
+        before.forEach(row -> previous.put(text(row, "productId"), row));
+        var remaining = new LinkedHashMap<>(previous);
+        for (var row : after) {
+            String id = text(row, "productId");
+            var old = remaining.remove(id);
+            long from = old == null ? 0 : amount(old, "quantity"), to = amount(row, "quantity");
+            if (from != to) changes.add(change(row, from, to));
+        }
+        remaining.values().forEach(row -> changes.add(change(row, amount(row, "quantity"), 0)));
+        return Map.of("schemaVersion", 1, "operationId", UUID.randomUUID().toString(), "changes", changes);
+    }
+
     private static Map<String, Object> change(Map<String, Object> row, long previous, long next) {
         return Map.of("productId", text(row, "productId"), "name", text(row, "name"),
                 "categoryCode", text(row, "category"), "previousQuantity", previous,
-                "newQuantity", next, "effectiveUnitPrice", amount(row, "price"),
-                "priceSource", source(row.get("pricing")));
+                "newQuantity", next, "effectiveUnitPrice", amount(row, row.containsKey("currentPrice") ? "currentPrice" : "price"),
+                "priceSource", source(row.get(row.containsKey("currentPricing") ? "currentPricing" : "pricing")));
     }
 }

@@ -37,6 +37,23 @@ public class CommerceMeasurementTest {
         var noop = CommerceMeasurement.mutation(List.of(row),row,"cart-set",(String)row.get("productId"));
         assert ((List<?>)noop.get("changes")).isEmpty();
 
+        var removed = new LinkedHashMap<String,Object>(row); removed.put("productId", "removed");
+        var added = new LinkedHashMap<String,Object>(row); added.put("productId", "added"); added.put("quantity", 1);
+        var repriced = new LinkedHashMap<String,Object>(next); repriced.put("currentPrice", 60000);
+        repriced.put("currentPricing", Map.of("source", "SCHEDULE"));
+        var replaced = CommerceMeasurement.replacement(List.of(row, removed), List.of(repriced, added));
+        var deltas = (List<?>)replaced.get("changes");
+        assert deltas.size() == 3;
+        var increased = (Map<?,?>)deltas.get(0);
+        assert ((Number)increased.get("previousQuantity")).longValue() == 3;
+        assert ((Number)increased.get("newQuantity")).longValue() == 5;
+        assert ((Number)increased.get("effectiveUnitPrice")).longValue() == 60000;
+        assert increased.get("priceSource").equals("SCHEDULE");
+        assert ((Number)((Map<?,?>)deltas.get(1)).get("previousQuantity")).longValue() == 0;
+        assert ((Number)((Map<?,?>)deltas.get(2)).get("newQuantity")).longValue() == 0;
+        assert !replaced.toString().contains("DO_NOT_COPY");
+        assert ((List<?>)CommerceMeasurement.replacement(List.of(row), List.of(row)).get("changes")).isEmpty();
+
         var floorQuote = DiscountService.calculate(List.of(new DiscountService.Line("a",50000,3,true,50000)),List.of(offer));
         assert floorQuote.discountAmount() == 0;
         var nonBase = DiscountService.calculate(List.of(new DiscountService.Line("a",45000,3,false,40000)),List.of(offer));

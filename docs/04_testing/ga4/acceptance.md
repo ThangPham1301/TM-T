@@ -26,4 +26,4 @@ For each case record date/time UTC+7, build/commit, URL, outcome PASS/FAIL/NOT R
 
 ## Review clarification
 
-The earlier shorthand “no refresh duplicates” meant a data refresh/rerender within a page instance, not a hard document reload. Exposure counts measure occurrences, not unique products per user/session. See [independent review](codex-review.md) and `apps/web/tests/ga4-review.mjs`. Do not merge the historical Muse row totals with these split cases into a new blanket pass percentage.
+The earlier shorthand “no refresh duplicates” meant a data refresh/rerender within a page instance, not a hard document reload. Exposure counts measure occurrences, not unique products per user/session. See the [published validation summary](README.md). Do not merge historical manual QA row totals with these split cases into a new blanket pass percentage.

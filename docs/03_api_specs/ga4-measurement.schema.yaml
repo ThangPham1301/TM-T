@@ -49,7 +49,7 @@ components:
     MeasurementMutation:
       type: object
       additionalProperties: false
-      description: Created only for successful cart-set/cart-clear. Stable operationId on idempotency replay. Quantities are absolute; analytics sends only their delta.
+      description: Created for successful cart-set/cart-clear or atomic reorder confirmation. Stable operationId on idempotency replay. Quantities are absolute; analytics sends only their net delta.
       required: [schemaVersion, operationId, changes]
       properties:
         schemaVersion: {type: integer, enum: [1]}

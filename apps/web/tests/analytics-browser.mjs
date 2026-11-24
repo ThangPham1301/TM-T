@@ -12,12 +12,12 @@ const output=fileURLToPath(new URL('../../../docs/04_testing/ga4/evidence/',impo
 mkdirSync(output,{recursive:true});
 const probe=createServer(); await new Promise(r=>probe.listen(0,'127.0.0.1',r));
 const port=probe.address().port; await new Promise(r=>probe.close(r));
-const origin=`http://127.0.0.1:${port}`;
-const server=spawn(process.execPath,['node_modules/next/dist/bin/next','dev','--hostname','127.0.0.1','--port',String(port)],{
+const origin=process.env.ANALYTICS_TEST_ORIGIN ?? `http://127.0.0.1:${port}`;
+const server=process.env.ANALYTICS_TEST_ORIGIN ? null : spawn(process.execPath,['node_modules/next/dist/bin/next','dev','--hostname','127.0.0.1','--port',String(port)],{
   cwd, windowsHide:true, env:{...process.env,NEXT_PUBLIC_GA_ENABLED:'true',NEXT_PUBLIC_GA_MEASUREMENT_ID:'G-QATEST',
     NEXT_PUBLIC_AI_CHAT_ENABLED:'false',NEXT_PUBLIC_RECOMMENDATIONS_ENABLED:'false',API_UPSTREAM_URL:'http://127.0.0.1:9/api/v1'}
 });
-let logs=''; server.stdout.on('data',s=>logs+=s); server.stderr.on('data',s=>logs+=s);
+let logs=''; server?.stdout.on('data',s=>logs+=s); server?.stderr.on('data',s=>logs+=s);
 const checks=[]; let browser;
 const pass=name=>{checks.push(name);console.log('PASS '+name);};
 const product={id:'11111111-1111-4111-8111-111111111111',slug:'ga4-test-tea',name:'Trà kiểm thử GA4',category:'tra-cung-dinh',price:50000,basePrice:50000,
@@ -27,7 +27,7 @@ const offer={id:'22222222-2222-4222-8222-222222222222',revision:1,name:'Ưu đã
   condition:'QUANTITY',minimum:2,method:'FIXED',value:10000,startsAt:'2020-01-01T00:00:00Z',endsAt:'2099-01-01T00:00:00Z',featured:true,priority:1,message:'Fixture, không phải chiến dịch thật'};
 const shipping={id:'shipping',revision:1,enabled:true,baseFee:20000,freeShippingThreshold:0};
 
-async function fixture(type='guest',reloadFailure=false) {
+async function fixture(type='guest',reloadFailure=false,reorder=false) {
   const context=await browser.newContext({viewport:{width:1280,height:900}});
   const events=[],google=[],errors=[];
   await context.exposeBinding('__qaCapture',(_source,event)=>{events.push(event);});
@@ -37,7 +37,11 @@ async function fixture(type='guest',reloadFailure=false) {
       ring=value;const push=value.push.bind(value);value.push=(...items)=>{for(const item of items) void window.__qaCapture(item);return push(...items);};
     }});
   });
-  let quantity=0,operation=0,order=null,posted=false;
+  if(reorder)await context.addInitScript(()=>sessionStorage.setItem('goihue:ga4:capture','1'));
+  let quantity=reorder?1:0,operation=0,order=null,posted=false;
+  if(reorder)order={id:'33333333-3333-4333-8333-333333333333',number:'GH-OLDTEST1',status:'DELIVERED',paymentMethod:'COD',paymentStatus:'PAID',
+    createdAt:new Date().toISOString(),total:160000,recipient:'PRIVATE_SYNTHETIC_RECIPIENT',phone:'0900000000',address:'PRIVATE_SYNTHETIC_ADDRESS',
+    items:[{productId:product.id,name:product.name,quantity:3,price:50000,image:product.image}],history:[],revision:1};
   function measurement(method) {
     const discount=quantity>=2?10000:0,subtotal=quantity*50000;
     return {schemaVersion:1,currency:'VND',subtotal,discountAmount:discount,netSubtotal:subtotal-discount,shippingFee:20000,total:subtotal-discount+20000,
@@ -64,6 +68,16 @@ async function fixture(type='guest',reloadFailure=false) {
     else if(path==='discounts') body={offers:[offer],asOf:new Date().toISOString()};
     else if(path==='shipping') body=shipping;
     else if(path.endsWith('cart/summary')) body=summary();
+    else if(reorder&&path===`orders/${order.id}/reorder/preview`){
+      body={sourceOrderId:order.id,sourceOrderNumber:order.number,recipient:{recipient:order.recipient,phone:order.phone,address:order.address},
+        lines:[{productId:product.id,name:product.name,image:product.image,originalQuantity:3,quantity:3,previousPrice:50000,currentPrice:50000,stock:100,available:true,code:'AVAILABLE'}],
+        ready:true,issues:[],previewToken:'d'.repeat(64),cartToken:'a'.repeat(64),cartCount:1,
+        quote:{subtotal:150000,discountAmount:10000,netSubtotal:140000,shippingFee:20000,total:160000}};
+    } else if(reorder&&path===`orders/${order.id}/reorder`){
+      const previous=quantity;quantity=3;
+      body={ok:true,sourceOrderId:order.id,sourceOrderNumber:order.number,measurementMutation:{schemaVersion:1,operationId:'atomic-reorder',changes:[{
+        productId:product.id,name:product.name,categoryCode:product.category,previousQuantity:previous,newQuantity:quantity,effectiveUnitPrice:50000,priceSource:'BASE'}]}};
+    }
     else if(path==='guest/commerce'||path==='commerce') {
       const input=route.request().postDataJSON();
       if(input.action==='cart-set'||input.action==='cart-clear') {
@@ -92,7 +106,7 @@ async function fixture(type='guest',reloadFailure=false) {
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 async function until(fn,label,timeout=10000) {const end=Date.now()+timeout;while(Date.now()<end){if(await fn())return;await wait(100);}throw Error('Timeout '+label);}
 try {
-  await until(()=>logs.includes('Ready')&&server.exitCode===null,'Next fixture server',60000);
+  if(server)await until(()=>logs.includes('Ready')&&server.exitCode===null,'Next fixture server',60000);
   browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? {executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE} : {})});
   {
     const f=await fixture();const {page,events}=f;
@@ -181,13 +195,47 @@ try {
     pass('real content UI: offer countdown does not duplicate; hidden gift story waits for expand and visibility');
     await page.screenshot({path:output+'story-ui.png'});await f.context.close();
   }
+  {
+    const f=await fixture('account',false,true);const {page,events}=f;
+    await page.goto(`${origin}/account/orders`);
+    await page.getByRole('button',{name:/Mua lại/}).click();
+    const dialog=page.getByRole('dialog');await dialog.waitFor();
+    assert.equal(events.filter(e=>e.name==='add_to_cart').length,0,'preview sends no cart event');
+    await dialog.getByRole('checkbox',{name:/Tôi đồng ý/}).check();
+    await dialog.getByRole('button',{name:'Tiếp tục thanh toán',exact:true}).click();
+    await page.waitForURL('**/checkout?reorder=**');
+    await until(()=>events.some(e=>e.name==='add_to_cart'&&e.params.source_surface==='reorder'),'atomic reorder delta');
+    const adds=events.filter(e=>e.name==='add_to_cart');assert.equal(adds.length,1);assert.equal(adds[0].params.items[0].quantity,2);
+    assert.ok(!/PRIVATE_|GH-OLDTEST1|33333333-3333-4333-8333-333333333333|0900000000/.test(JSON.stringify(events)));
+    assert.equal(events.filter(e=>e.name==='purchase').length,0);
+    assert.equal(f.google.length,0);assert.deepEqual(f.errors,[]);
+    pass('atomic reorder UI: private preview emits nothing; one safe net delta reaches checkout without recipient/source-order data');
+    await f.context.close();
+  }
   writeFileSync(output+'browser-results.json',JSON.stringify({scope:'frontend with intercepted synthetic API, no Google requests, not live backend/GA4',origin,serverRunning:false,checks,status:'PASS'},null,2));
 } catch(error) {
+  {
+    const f=await fixture('account',false,true);const {page,events}=f;
+    await page.goto(`${origin}/account/orders`);
+    await page.getByRole('button',{name:/Mua lại/}).click();
+    const dialog=page.getByRole('dialog');await dialog.waitFor();
+    assert.equal(events.filter(e=>e.name==='add_to_cart').length,0,'preview sends no cart event');
+    await dialog.getByRole('checkbox',{name:/Tôi đồng ý/}).check();
+    await dialog.getByRole('button',{name:'Tiếp tục thanh toán',exact:true}).click();
+    await page.waitForURL('**/checkout?reorder=**');
+    await until(()=>events.some(e=>e.name==='add_to_cart'&&e.params.source_surface==='reorder'),'atomic reorder delta');
+    const adds=events.filter(e=>e.name==='add_to_cart');assert.equal(adds.length,1);assert.equal(adds[0].params.items[0].quantity,2);
+    assert.ok(!/PRIVATE_|GH-OLDTEST1|33333333-3333-4333-8333-333333333333|0900000000/.test(JSON.stringify(events)));
+    assert.equal(events.filter(e=>e.name==='purchase').length,0);
+    assert.equal(f.google.length,0);assert.deepEqual(f.errors,[]);
+    pass('atomic reorder UI: private preview emits nothing; one safe net delta reaches checkout without recipient/source-order data');
+    await f.context.close();
+  }
   writeFileSync(output+'browser-results.json',JSON.stringify({scope:'synthetic frontend fixtures',checks,status:'FAIL',error:String(error),serverLog:logs.slice(-3000)},null,2));
   throw error;
 } finally {
   if(browser)await browser.close();
-  if(server.pid&&server.exitCode===null) {
+  if(server?.pid&&server.exitCode===null) {
     if(process.platform==='win32') {try{execFileSync('taskkill',['/PID',String(server.pid),'/T','/F'],{stdio:'ignore'});}catch{server.kill();}}
     else server.kill();
   }

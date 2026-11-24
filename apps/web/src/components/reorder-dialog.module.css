@@ -1,0 +1,28 @@
+.dialog { width: min(760px, calc(100% - 32px)); background: var(--paper-face); border: 1px solid var(--vien); color: var(--muc); border-radius: 4px; }
+.intro, .footnote { color: var(--phu); line-height: 1.8; font-size: .875rem; }
+.lines { border-top: 1px solid var(--vien); margin-top: 20px; }
+.line { display: grid; grid-template-columns: 86px minmax(0, 1fr) 88px; gap: 16px; padding: 20px 0; border-bottom: 1px solid var(--vien); }
+.choice { display: flex; align-items: center; gap: 12px; }
+.choice img { object-fit: cover; }
+.choice input, .replace input { width: 18px; height: 18px; accent-color: var(--nau-dam); flex-shrink: 0; }
+.info { display: grid; align-content: start; gap: 6px; min-width: 0; overflow-wrap: anywhere; font-size: .875rem; }
+.info strong { color: var(--nau-dam); }
+.info small { color: var(--phu); line-height: 1.7; font-size: .75rem; }
+.lineIssue { color: var(--loi); font-size: .75rem; line-height: 1.7; margin: 0; }
+.quantity { color: var(--phu); font-size: .75rem; display: grid; align-content: start; gap: 6px; }
+.quantity input { min-height: 44px; min-width: 0; width: 100%; border: 1px solid var(--vien); background: var(--kem); padding: 8px; color: var(--muc); }
+.recipient { padding: 18px; margin-top: 20px; border: 1px solid var(--vien); background: var(--kem-am); font-size: .875rem; overflow-wrap: anywhere; }
+.recipient strong { color: var(--nau-dam); }
+.recipient p { margin: 8px 0; line-height: 1.7; }
+.recipient small { color: var(--phu); }
+.warning { background: var(--kem-am); border-left: 3px solid var(--mat); padding: 14px 20px; color: var(--nau-dam); font-size: .8125rem; line-height: 1.8; }
+ul.warning { padding-left: 36px; }
+.quote { padding: 16px 0; margin: 0; }
+.quote > div { display: flex; justify-content: space-between; gap: 16px; padding: 7px 0; font-size: .875rem; }
+.quote dd { margin: 0; }
+.quote > div:last-child { border-top: 1px solid var(--vien); margin-top: 8px; padding-top: 14px; color: var(--nau-dam); font-weight: 600; }
+.replace { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border: 1px solid var(--vien); font-size: .8125rem; line-height: 1.8; }
+.replace input { margin-top: 3px; }
+.actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.footnote { font-size: .75rem; margin-bottom: 0; }
+@media (max-width: 600px) { .line { grid-template-columns: 72px minmax(0, 1fr); gap: 12px; } .choice { gap: 8px; } .choice img { width: 44px; height: 44px; } .quantity { grid-column: 2; grid-template-columns: auto 80px; align-items: center; justify-content: space-between; } .actions > button { width: 100%; } }

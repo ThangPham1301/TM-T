@@ -22,6 +22,7 @@ Truy cập http://localhost:3000. ADMIN lấy từ `.env` ở thư mục gốc; 
 - Khách vãng lai: giỏ hàng theo trình duyệt, checkout COD hoặc VietQR demo, xác nhận và tra cứu tại `/tra-cuu-don-hang` bằng mã đơn và mã tra cứu riêng. Có thể gộp giỏ vào tài khoản sau khi đăng nhập. Admin xử lý đơn khách trong danh sách đơn chung.
 
 - CUSTOMER: đăng ký/đăng nhập, hồ sơ, lựa chọn tiếp thị, giỏ hàng lưu server; sửa số lượng/xóa/cập nhật giá, checkout COD theo phí giao cấu hình, tìm/lọc đơn, sửa người nhận trước đóng gói, hủy đơn khi đủ điều kiện, quyền dữ liệu và đổi trả từng dòng hàng.
+- Mua lại: đơn đã giao, đã hủy, giao thất bại hoặc đã trả hàng có thể mở bước kiểm tra sản phẩm, số lượng và giá hiện tại. Món hết hàng/ngừng bán cần được bỏ chọn hoặc điều chỉnh rõ ràng. Xác nhận thay giỏ diễn ra trong một transaction; checkout điền sẵn người nhận cũ để khách chỉnh, không sửa hồ sơ hay sao chép thanh toán của đơn cũ. Đơn đang xử lý tiếp tục dùng nút thanh toán/theo dõi hiện có.
 - ADMIN: CRUD sản phẩm và danh mục, upload/gỡ ảnh, ẩn/hiện, giá/tồn; cấu hình phí giao và ngưỡng miễn phí; tìm/lọc đơn, xác nhận/đóng gói/giao hàng, ghi nhận thu tiền với chứng từ, review quyền dữ liệu/đổi trả, kiểm hàng, ghi nhận kết quả đổi/hoàn bằng mã tham chiếu, chính sách có phiên bản và nhật ký.
 - Máy chủ kiểm tra quyền sở hữu, số lượng, giá, tồn; sử dụng transaction, khóa chống gửi lặp và revision. Một phiên đăng nhập dùng trên toàn website.
 
@@ -68,3 +69,19 @@ Cookie hiện dành cho localhost HTTP. Trước triển khai public cần HTTPS
 ## Phục hồi bản cũ
 
 Các thư mục cũ được chuyển vào `archive/legacy`, không xóa vĩnh viễn. Database/ảnh của Compose cũ `goi-hue-academic` giữ nguyên trong Docker volumes và đang dừng, tách khỏi volume `goihue` mới. Không tự nhập tài khoản/đơn giả lập cũ vào database mới. File cấu hình chứa secret được giữ local trong archive, vẫn bị `.gitignore` loại trừ.
+
+## Kiểm tra luồng mua lại
+
+Bộ kiểm tra dùng cơ sở dữ liệu Docker tách biệt, không sửa dữ liệu local/VPS. Không cần migration mới cho tính năng này; cần rebuild cả API và web.
+
+```powershell
+docker build -t goihue-api:reorder-review apps/api
+docker build -t goihue-web:reorder-review apps/web
+python scripts/test-reorder-demo.py --keep
+npx @playwright/cli -s=reorder-qa open http://127.0.0.1:13098
+npx @playwright/cli -s=reorder-qa run-code --filename=scripts/test-reorder-browser.js
+```
+
+Lệnh Python in tài khoản thử nghiệm và lệnh dọn stack khi chạy thành công. Chạy không có `--keep` để tự dọn dữ liệu sau kiểm tra API. Bộ kiểm tra bao gồm rollback khi lỗi giữa chừng, quyền sở hữu, trạng thái đơn, giá/tồn/ưu đãi/phí thay đổi, giỏ sửa từ tab khác, idempotency, xác nhận đồng thời và checkout tạo đơn mới với thanh toán riêng.
+
+Kiểm chứng ngày 24/11/2026: build API/web và typecheck đạt; 36 kiểm tra API mua lại, 39 kiểm tra trình duyệt và 136 kiểm tra hồi quy agent đạt. Contract `goihue.openapi.yaml` hợp lệ với 11 cảnh báo. Lint frontend có 4 cảnh báo cũ, không có lỗi. Hai contract `customer-stable`/`admin-stable` không thay đổi trong tính năng này và vẫn còn 11/21 lỗi lint có sẵn; hai contract `draft-planned` hợp lệ.

@@ -37,7 +37,7 @@ Không bịa số, không dùng bot để tạo KPI. QA chạy kịch bản là 
 | Collection tải products/categories, lọc ở client, phân trang 9 món; pricing cập nhật riêng | Đo các card thực sự hiển thị; render lại hoặc polling giá không nhân lượt hiển thị |
 | ProductCard chỉ dẫn tới chi tiết, không tự thêm giỏ | `select_item` khi click card; không gửi `add_to_cart` ở nút “Chọn mua” này |
 | ProductDetail.purchase(buyNow) thêm vào giỏ rồi mới chuyển `/checkout` | “Mua ngay” hiện vẫn có `add_to_cart`; chưa cần tạo nhánh phễu bỏ qua bước thêm giỏ |
-| Cart-set nhận **số lượng cuối cùng**, dùng ở detail, giỏ, trợ lý AI và mua lại | Đo phần tăng/giảm so với trạng thái trước; không gửi toàn bộ số lượng mới như lượng vừa thêm |
+| Cart-set nhận **số lượng cuối cùng**, dùng ở detail, giỏ và trợ lý AI; mua lại dùng endpoint xác nhận thay giỏ atomic | Đo phần tăng/giảm so với trạng thái trước; không gửi toàn bộ số lượng mới như lượng vừa thêm |
 | Tab câu chuyện ở chi tiết mặc định là tab 0 | Hiển thị câu chuyện không đồng nghĩa chủ động click mở; cần đo visibility và phân biệt ngữ cảnh |
 | Ưu đãi tự động và quy tắc giá là hai hệ thống riêng | Không gọi tất cả là coupon; không dùng banner đang xem để suy ra ưu đãi được áp dụng |
 | Guest checkout dùng cùng CommerceApi.checkout nhưng receipt được lọc trường | Cần một snapshot an toàn thống nhất cho cả guest/account; không gửi nguyên order sang GA4 |
@@ -220,7 +220,7 @@ Gia giữ bảng link: ngày đăng, nền tảng, vị trí CTA, URL, campaign/
 
 ### 6.2 Một cơ chế pageview
 
-- Nạp một gtag; đặt `send_page_view: false` bằng global `gtag('set', ...)` **trước** `gtag('js', ...)`, đồng thời giữ trong initial config; tắt Enhanced Measurement pageview theo history. Privacy defaults và QA debug cũng phải có trước khởi tạo. Kiểm tra F3 ngày 24/11/2026 cho thấy chỉ đặt ở config vẫn có pageview tự động thừa trên app thật; xem `docs/04_testing/ga4/f3-fix-results.md`.
+- Nạp một gtag; đặt `send_page_view: false` bằng global `gtag('set', ...)` **trước** `gtag('js', ...)`, đồng thời giữ trong initial config; tắt Enhanced Measurement pageview theo history. Privacy defaults và QA debug cũng phải có trước khởi tạo. Kiểm tra F3 ngày 24/11/2026 cho thấy chỉ đặt ở config vẫn có pageview tự động thừa trên app thật; xem `docs/04_testing/ga4/README.md`.
 - Router tracker gửi trang đầu và navigation hợp lệ, Back/Forward; không dùng render hoặc mọi thay đổi searchParams làm một pageview.
 - Page key: pathname + category/discount/pricing có trong URL khi chúng tạo trang đích khác; loại `q`, `don`, `order`, `xac-nhan`, UTM và hash khỏi khóa chống lặp. UTM vẫn được giữ trong **initial sanitized page_location** để attribution, không bị bỏ trước config.
 - Filter/search/pagination tại Collection đổi state client: phát list/search, không tự tạo pageview. `replaceState` để reset bộ lọc không tự phát thêm pageview trên cùng pathname. Nếu sau này chuyển filter sang điều hướng route thực, phải chốt lại quy tắc.
@@ -233,7 +233,7 @@ Chỉ đo storefront `/`, `/products`, `/products/[slug]`, `/cart`, `/checkout`,
 
 Mặc định không đo `/admin/**`, account/orders, login/register, tra cứu đơn, trace/evidence/privacy export hoặc trang chứa thông tin người nhận. Purchase phát tại checkout success trước chuyển trang nên không phụ thuộc trang xác nhận.
 
-**Ngoại lệ mua lại trong account:** không nạp GA4 hoặc gửi pageview tại trang lịch sử. Các cart-set thành công do người dùng bấm Mua lại chỉ tạo payload thương mại an toàn trong hàng đợi cục bộ; gửi khi điều hướng về `/checkout` hoặc storefront được phép đo. Giữ source_surface=reorder, TTL 30 phút và dedup operationId; không kèm đường dẫn đơn cũ hay thông tin tài khoản. Nếu người dùng ở lại vùng riêng tư và không quay về trước TTL, bỏ payload và ghi nhận giới hạn thiếu hit; không mở tracking trang lịch sử để bù. Thời điểm GA4 nhận event là lúc quay về storefront, không giả định hỗ trợ backdate tùy ý qua gtag.
+**Ngoại lệ mua lại trong account:** không nạp GA4 hoặc gửi pageview tại trang lịch sử. Xác nhận Mua lại thành công qua `POST /orders/{id}/reorder` trả measurementMutation với chênh lệch ròng trước/sau thay giỏ và operationId lưu cùng kết quả idempotent; preview và xác nhận thất bại không tạo event. Payload thương mại an toàn được lưu trong hàng đợi cục bộ; gửi khi điều hướng về `/checkout` hoặc storefront được phép đo. Giữ source_surface=reorder, TTL 30 phút và dedup operationId; không kèm đường dẫn đơn cũ hay thông tin tài khoản. Nếu người dùng ở lại vùng riêng tư và không quay về trước TTL, bỏ payload và ghi nhận giới hạn thiếu hit; không mở tracking trang lịch sử để bù. Thời điểm GA4 nhận event là lúc quay về storefront, không giả định hỗ trợ backdate tùy ý qua gtag.
 
 Làm sạch `page_location`/`page_referrer` trong initial config và mọi event: bỏ hash và query ngoài allowlist; bỏ `q`, `don`, `order`, mã tra cứu và các tham số nhạy cảm. UTM chỉ nhận giá trị campaign/source/content do nhóm quy định, không chép arbitrary query vào analytics. Referrer giữ origin/path an toàn, bỏ query nhạy cảm.
 
@@ -478,7 +478,7 @@ Nguồn: [Google — Developer traffic](https://support.google.com/analytics/ans
 | `components/cart.tsx`/`checkout-view.tsx` | begin_checkout ở form view; purchase qua dispatcher; không đo lại khi summary poll | P0 |
 | `components/cart-view.tsx` | View_cart/remove qua dispatcher; không ghi mutation ở click trước success | P1 |
 | `components/assistant-widget.tsx` | Chuyển source_surface=assistant cho confirmProposal; không gửi chat | P0 |
-| `components/account-orders.tsx` | Mua lại cung cấp surface=reorder, chỉ đo các lần thêm thành công; không tự purchase khi xem đơn cũ | P0 |
+| `components/reorder-dialog.tsx` + `ReorderApi.java` | Xác nhận atomic trả net delta, cung cấp surface=reorder, chỉ đo thay đổi thành công; không tự purchase khi xem đơn cũ | P0 |
 | `components/home-heritage-stories.tsx` | Visibility vùng tóm tắt, disclosure, story CTA | P0 |
 | `app/cau-chuyen-hue/page.tsx` | Client boundary nhỏ đo view_story/CTA | P0 |
 | `components/discounts/offer-display.tsx` | View/select offer theo visibility và CTA; không theo countdown | P0 |
@@ -609,7 +609,7 @@ Các mốc line để tra tại commit khảo sát, có thể dịch chuyển sa
 - `apps/web/src/components/cart.tsx`: quote polling, form/Payment switch và checkout POST (khoảng 170–220).
 - `apps/web/src/lib/store.tsx`: api (157 trở đi), run (290), mutate (305–330).
 - `apps/web/src/components/assistant-widget.tsx`: confirmProposal/cart-set (236–282).
-- `apps/web/src/components/account-orders.tsx`: reorder (khoảng 144–177).
+- `apps/web/src/components/reorder-dialog.tsx` và `apps/api/src/main/java/vn/goihue/ReorderApi.java`: preview/confirm mua lại atomic trên main `26e1418`; dữ liệu đo chỉ phát sau confirm thành công.
 - `apps/web/src/components/home.tsx`, `home-heritage-stories.tsx`, `lib/heritage-stories.ts`, `app/cau-chuyen-hue/page.tsx`: cấu trúc nội dung và CTA.
 - `apps/web/src/components/discounts/offer-display.tsx`: floating offer, badge, summary và hint.
 - `apps/api/src/main/java/vn/goihue/CommerceApi.java`: cartSummary (140), cart-set (303), checkout (329 trở đi).

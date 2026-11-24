@@ -62,7 +62,7 @@ export function mutationEvents(action: string, result: { measurement?: Measureme
     return [{ name: "purchase", params: { ...quoteParams(s), transaction_id: s.transactionId!, shipping: s.shippingFee,
       payment_method: s.paymentMethod!, checkout_type: checkoutType, source_surface: source }, dedup: `purchase:${s.transactionId}` }];
   }
-  if (!["cart-set", "cart-clear"].includes(action)) return [];
+  if (!["cart-set", "cart-clear", "reorder"].includes(action)) return [];
   const mutation = result.measurementMutation;
   if (!mutation || mutation.schemaVersion !== 1 || !identifier(mutation.operationId) || !Array.isArray(mutation.changes)) throw Error("missing cart measurement");
   return mutation.changes.flatMap((c, index) => {

@@ -14,7 +14,7 @@ import checkoutStyles from "./checkout-view.module.css";
 import { trackEvent } from "@/lib/analytics";
 import { quoteParams } from "@/lib/analytics-commerce";
 
-export function Cart({ checkout = false }: { checkout?: boolean }) {
+export function Cart({ checkout = false, reorderOrderId }: { checkout?: boolean; reorderOrderId?: string }) {
   const { state, loading } = useStore();
   if (loading) return <main className="store-page" role="status">Đang tải giỏ hàng…</main>;
   if (state?.user.role === "ADMIN")
@@ -24,19 +24,21 @@ export function Cart({ checkout = false }: { checkout?: boolean }) {
         <Link href="/admin">Về quản trị cửa hàng</Link>
       </main>
     );
-  return <CartJourney key={state?.user.id ?? "guest"} checkout={checkout} />;
+  return <CartJourney key={`${state?.user.id ?? "guest"}:${reorderOrderId ?? ""}`} checkout={checkout} reorderOrderId={reorderOrderId} />;
 }
 
 function reviewedQuote(summary: CartSummary) {
   return { total: summary.total, token: summary.quoteToken, shipping: summary.shipping.revision };
 }
 
-function CartJourney({ checkout }: { checkout: boolean }) {
+function CartJourney({ checkout, reorderOrderId }: { checkout: boolean; reorderOrderId?: string }) {
   const { state, guestCart, refreshGuestCart, busy, run, mutate } = useStore(),
     router = useRouter();
   const prefix = state ? "" : "guest/";
   const summaryPath = `${prefix}cart/summary`;
   const addressBook = state?.addresses ?? [];
+  const reorderSource = reorderOrderId ? state?.orders.find(order => order.id === reorderOrderId) : undefined;
+  const sourceQuery = reorderSource ? `?reorder=${encodeURIComponent(reorderSource.id)}` : "";
   const submitting = useRef(false);
   const [summary, setSummary] = useState<CartSummary | null>(null),
     [error, setError] = useState(""),
@@ -123,7 +125,7 @@ function CartJourney({ checkout }: { checkout: boolean }) {
     };
   }, [summaryPath, busy, fetching, nextPriceChangeAt, pricedAt, placedVietQrOrder, receiveSummary]);
 
-  const selectedAddress = addressBook.find((entry) => entry.id === (addressChoice ?? (checkout && addressBook.length === 1 ? addressBook[0].id : "")));
+  const selectedAddress = addressBook.find((entry) => entry.id === (addressChoice ?? (checkout && !reorderSource && addressBook.length === 1 ? addressBook[0].id : "")));
   const rows = summary?.items ?? [],
     blocked = rows.some(
       (l) =>
@@ -170,14 +172,14 @@ function CartJourney({ checkout }: { checkout: boolean }) {
   if (!checkout) {
     return <CartView guest={!state} mergeNotice={mergeNotice} summary={summary} fetching={fetching} error={error} disabled={disabled} blocked={blocked}
       refresh={() => void refresh()} update={(action, data) => void run(() => update(action, data))}
-      checkout={() => router.push("/checkout")} recommendations={<RecommendationRail surface={state ? "cart" : "home"} refreshKey={summary?.cartToken} />} />;
+      checkout={() => router.push(`/checkout${sourceQuery}`)} recommendations={<RecommendationRail surface={state ? "cart" : "home"} refreshKey={summary?.cartToken} />} />;
   }
   if (placedVietQrOrder) {
     const order = state?.orders.find(({ id }) => id === placedVietQrOrder.id) ?? placedVietQrOrder;
     return <CheckoutPayment key={order.id} order={order} />;
   }
   return <CheckoutView
-    summary={summary} user={state?.user} addresses={addressBook} selectedAddress={selectedAddress} mergeNotice={mergeNotice}
+    summary={summary} reorderSource={reorderSource} cartHref={`/cart${sourceQuery}`} user={state?.user} addresses={addressBook} selectedAddress={selectedAddress} mergeNotice={mergeNotice}
     fetching={fetching} error={error} busy={busy} disabled={disabled} blocked={blocked || quoteChanged} addingAddress={addingAddress}
     quoteChanged={quoteChanged} previousTotal={quoteChanged && reviewed?.total !== summary?.total ? reviewed?.total ?? null : null}
     onRefresh={() => void refresh()}

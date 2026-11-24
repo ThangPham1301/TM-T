@@ -83,6 +83,27 @@ test('invalid or historical snapshots never fabricate a purchase', () => {
   const s2=snapshot(); delete s2.discount; assert.throws(()=>quoteParams(s2));
   const s3=snapshot(); s3.items[0].quantity=0; assert.throws(()=>measurementItems(s3));
 });
+
+test('atomic reorder queues only safe net deltas and replay does not duplicate them',async()=>{
+  const calls=browserGlobals();
+  globalThis.location=new URL('http://localhost/account/orders');window.location=location;
+  const runtime=await runtimeModule();
+  const result={measurementMutation:{schemaVersion:1,operationId:'reorder-op',changes:[
+    {productId:'tea',name:'Tea',categoryCode:'tra',previousQuantity:1,newQuantity:3,effectiveUnitPrice:60000,priceSource:'SCHEDULE'},
+    {productId:'old',name:'Old tea',categoryCode:'tra',previousQuantity:2,newQuantity:0,effectiveUnitPrice:50000,priceSource:'BASE'}
+  ]},sourceOrderId:'DO_NOT_COPY',recipient:{phone:'DO_NOT_COPY'}};
+  runtime.dispatchCommerce('reorder',result,'account','reorder');
+  assert.equal(calls.length,0,'private route sends no tag/event');
+  globalThis.location=new URL('http://localhost/checkout?reorder=DO_NOT_COPY');window.location=location;
+  runtime.flushPendingCommerce();runtime.flushPendingCommerce();
+  runtime.dispatchCommerce('reorder',result,'account','reorder');
+  const events=calls.filter(x=>x[0]==='event');
+  assert.deepEqual(events.map(x=>x[1]),['add_to_cart','remove_from_cart']);
+  assert.equal(events[0][2].items[0].quantity,2);
+  assert.equal(events[0][2].items[0].price_source,'SCHEDULE');
+  assert.ok(events.every(x=>x[2].source_surface==='reorder'));
+  assert.ok(!JSON.stringify(events).includes('DO_NOT_COPY'));
+});
 test('effective non-BASE price does not get another offer reduction', () => {
   const s=snapshot(); s.discountAmount=0;s.subtotal=135000;s.netSubtotal=135000;s.total=155000;delete s.discount;
   Object.assign(s.items[0],{unitPrice:45000,priceSource:'SCHEDULE',lineDiscountAmount:0,lineNetTotal:135000});
