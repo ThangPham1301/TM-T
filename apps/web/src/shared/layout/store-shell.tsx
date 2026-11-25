@@ -294,9 +294,10 @@ export function StoreHeader({
                   </div>
                   <ul className="gh-account-menu">
                     {user.role === "ADMIN" ? (
-                      <li>
-                        <Link href="/admin">Kênh quản trị</Link>
-                      </li>
+                      <>
+                        <li><Link href="/admin">Kênh quản trị</Link></li>
+                        <li><Link href="/account/profile">Hồ sơ cá nhân</Link></li>
+                      </>
                     ) : (
                       <>
                         <li>

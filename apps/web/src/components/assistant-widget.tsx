@@ -121,7 +121,7 @@ function SocialLinks() {
 export function AssistantWidget() {
   const pathname = usePathname();
   const { state, loading } = useStore();
-  if (pathname === "/admin" || pathname.startsWith("/admin/") || state?.user?.role === "ADMIN" && pathname === "/account/security") return null;
+  if (pathname === "/account/profile" || pathname === "/admin" || pathname.startsWith("/admin/") || state?.user?.role === "ADMIN" && pathname === "/account/security") return null;
   const onCart = pathname === "/cart";
   if (
     loading ||

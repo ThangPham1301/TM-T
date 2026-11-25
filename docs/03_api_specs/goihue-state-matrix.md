@@ -276,3 +276,11 @@ GA4 integration: successful atomic reorder returns identity-free `measurementMut
 - Admin policies and privacy requests: use shared surfaces, typography and borders, retaining version selection, read/editor views, loading, empty, errors and existing actions. Public policies continue to display the published document without content changes.
 - Account security: administrators use the existing admin navigation at `/account/security`; customers retain account navigation. Keep password reveal/hide, strength hint, reset, required/minimum-length validation, mismatch feedback, loading and server error states. Successful password changes retain the current session and end other sessions. No password is changed during visual verification.
 - Related account and checkout views inherit the same storefront palette through shared theme aliases. No endpoint, authorization rule or request/response schema changes.
+
+
+### Profile navigation and shared account styling
+
+- Signed-in administrators can open their personal profile through the store account dropdown and the admin system navigation. `/account/profile` uses the admin shell for administrators, with the profile entry selected; customer accounts keep their own navigation. Authentication and `self.manage` checks remain unchanged.
+- Profile content uses shared paper, cream, brown, gold and typography tokens with a single-column layout on narrow screens. Customer profile navigation and document scrolling fit mobile without the former fixed-width cards. Email remains read-only. The floating social dock is hidden on the profile page so it does not cover form fields or save actions.
+- Keep profile save, busy/disabled, reset, required-name validation, length limits, global API errors and success feedback. Phone/address are optional, matching the existing profile command contract. Marketing remains an explicit independent opt-in; saving a profile never grants AI history/memory consent.
+- Saving unchanged marketing does not create an additional consent action. Changing marketing uses the existing consent action only after profile save succeeds. No REST endpoint, request/response schema or permission change.

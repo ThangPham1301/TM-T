@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { PasswordSettings } from "./account-settings";
 import { useCurrentTime } from "@/lib/use-current-time";
 import { AccountProfile } from "./account-profile";
+import profileStyles from "./account-profile.module.css";
 import { AccountAddresses } from "./account-addresses";
 import { LanAdminShell } from "./lan-admin-shell";
 import { AccountSecurity } from "./account-security";
@@ -830,15 +831,15 @@ export function Account({
     return <AdminPrivacy rows={state.privacy} selected={current} detail={detailPanel} onSelect={setSelected} />;
   }
 
-  if (!admin && state.user.role === "ADMIN" && section === "security") {
-    return <LanAdminShell section="security"><main className="store-page lan-page lan-admin"><AccountSecurity /></main></LanAdminShell>;
+  if (!admin && state.user.role === "ADMIN" && ["profile", "security"].includes(section)) {
+    return <LanAdminShell section={section}><main className="store-page lan-page lan-admin">{section === "profile" ? <AccountProfile /> : <AccountSecurity />}</main></LanAdminShell>;
   }
 
   if (!admin) {
     const customerOnlySections = ["addresses", "orders", "returns"];
     const unavailableToAdmin = state.user.role === "ADMIN" && customerOnlySections.includes(section);
     return (
-      <div className={section === "returns" ? "account-screen-wrapper b07-account" : "account-screen-wrapper"}>
+      <div className={section === "returns" ? "account-screen-wrapper b07-account" : `account-screen-wrapper ${section === "profile" ? profileStyles.accountShell : ""}`}>
         <div className="account-main-layout">
           <aside className="account-sidebar-aside">
             <div>
@@ -854,7 +855,7 @@ export function Account({
                     className={`account-sidebar-link ${section === item.key ? "active" : ""}`}
                     aria-current={section === item.key ? "page" : undefined}
                   >
-                    <span className="material-symbols-outlined">{item.icon || "circle"}</span>
+                    <span className="material-symbols-outlined" aria-hidden="true">{item.icon || "circle"}</span>
                     <span>{item.label}</span>
                   </Link>
                 ))}
