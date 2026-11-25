@@ -514,19 +514,18 @@ export function AccountPrivacy() {
             <p style={{ margin: 0, fontSize: "13px", color: "var(--af-on-surface-variant)", lineHeight: 1.55 }}>
               {selectedType === "DELETE" ? (
                 <>
-                  <strong style={{ color: "var(--af-primary)" }}>Lưu ý về dữ liệu:</strong> Một số dữ liệu liên quan đến
-                  lịch sử giao dịch và nghĩa vụ kế toán - thuế sẽ được lưu trữ theo quy định pháp luật Việt Nam trước khi
-                  hoàn tất thủ tục hủy bỏ. Tài khoản của bạn sẽ bị đóng sau khi hoàn tất.
+                  <strong style={{ color: "var(--af-primary)" }}>Đóng tài khoản.</strong> Quản trị viên kiểm tra đơn hàng
+                  và hồ sơ đổi trả đang mở trước khi xử lý. Một số dữ liệu giao dịch có thể được giữ lại để đối soát.
                 </>
               ) : selectedType === "EXPORT" ? (
                 <>
-                  <strong style={{ color: "var(--af-primary)" }}>Xuất dữ liệu:</strong> Hồ sơ cá nhân và lịch sử bưu kiện sẽ
-                  được đóng gói an toàn. Khi hoàn tất, bạn có thể tải về tệp tin sao lưu trực tiếp tại mục Lịch sử yêu cầu.
+                  <strong style={{ color: "var(--af-primary)" }}>Xuất dữ liệu.</strong> Khi yêu cầu hoàn tất, bạn có thể
+                  tải bản sao dữ liệu tài khoản tại mục Lịch sử yêu cầu.
                 </>
               ) : (
                 <>
-                  <strong style={{ color: "var(--af-primary)" }}>Bảo vệ quyền riêng tư:</strong> Gói Huế cam kết xử lý yêu
-                  cầu theo Nghị định 13/2023/NĐ-CP và thông báo tiến độ trực tiếp trên hệ thống.
+                  <strong style={{ color: "var(--af-primary)" }}>Theo dõi yêu cầu.</strong> Quản trị viên phản hồi và
+                  có thể yêu cầu bổ sung thông tin tại mục Lịch sử yêu cầu.
                 </>
               )}
             </p>

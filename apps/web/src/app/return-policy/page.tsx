@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
-import { Policies } from "@/components/policies";
-export const metadata: Metadata = { title: "Chính sách đổi trả" };
+import { PolicyPage } from "@/components/policy-page";
+export const metadata: Metadata = {
+  title: "Chính sách đổi trả và hoàn tiền",
+  description: "Thời hạn tiếp nhận, cách gửi yêu cầu đổi trả và cách tính tiền hoàn tại Gói Huế.",
+};
 
 export default function Page() {
-  return <Policies returns />;
+  return <PolicyPage kind="returns" />;
 }

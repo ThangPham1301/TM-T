@@ -56,7 +56,7 @@ export function CheckoutView({ summary, reorderSource, cartHref = "/cart", user,
             {addingAddress && <form className={styles.addressForm} onSubmit={onSaveAddress}><h3>Thêm địa chỉ mới</h3><AddressFields /><button type="submit" className={styles.secondary} disabled={busy}>Lưu và chọn địa chỉ</button></form>}
             {!addresses.length && !addingAddress && <p className={styles.hint}>Nhập thông tin người nhận bên dưới, hoặc thêm địa chỉ để sử dụng cho những lần sau.</p>}
           </section> : <div className={styles.guestNotice}>
-            <div><strong>Mua không cần tài khoản</strong><p>Gói Huế sẽ cấp mã riêng để bạn theo dõi đơn sau khi đặt.</p></div>
+            <div><strong>Mua không cần tài khoản</strong><p>Sau khi đặt, hãy lưu mã đơn và mã tra cứu để theo dõi đơn trên thiết bị khác.</p></div>
             <Link href="/login?returnUrl=%2Fcheckout">Đăng nhập để dùng địa chỉ đã lưu</Link>
           </div>}
           {!addingAddress && <form id="goihue-checkout" className={styles.checkoutForm} onSubmit={onCheckout}>
@@ -70,7 +70,7 @@ export function CheckoutView({ summary, reorderSource, cartHref = "/cart", user,
             <fieldset className={styles.card}><legend className={styles.visuallyHidden}>Phương thức thanh toán</legend><div className={styles.cardHeading}><span className={styles.number}>{!user || selectedAddress ? "2" : "3"}</span><h2>Phương thức thanh toán</h2></div>
               <div className={styles.payments}>
                 <label className={styles.payment}><input type="radio" name="paymentMethod" value="COD" checked={paymentMethod === "COD"} onChange={() => setPaymentMethod("COD")} /><span><strong>Tiền mặt khi nhận hàng (COD)</strong><small>Thanh toán cho người giao khi nhận đơn.</small></span><Icon name="payments" /></label>
-                <label className={styles.payment}><input type="radio" name="paymentMethod" value="VIETQR" checked={paymentMethod === "VIETQR"} onChange={() => setPaymentMethod("VIETQR")} /><span><strong>VietQR (demo)</strong><small>Mã QR xuất hiện sau khi đặt hàng. Không chuyển tiền thật.</small></span><Icon name="qr_code_2" /></label>
+                <label className={styles.payment}><input type="radio" name="paymentMethod" value="VIETQR" checked={paymentMethod === "VIETQR"} onChange={() => setPaymentMethod("VIETQR")} /><span><strong>VietQR (xem trước)</strong><small>Xem mã sau khi đặt. Không chuyển tiền vào mã này.</small></span><Icon name="qr_code_2" /></label>
               </div>
             </fieldset>
           </form>}
@@ -105,8 +105,12 @@ export function CheckoutView({ summary, reorderSource, cartHref = "/cart", user,
             <strong aria-live="polite">{money(summary.total)}</strong>
           </div>
           <button type="submit" form="goihue-checkout" className={styles.primary} disabled={disabled || blocked || !summary.shipping.enabled || addingAddress}><Icon name={paymentMethod === "VIETQR" ? "qr_code_2" : "verified"} />{paymentMethod === "VIETQR" ? "Đặt hàng & mở VietQR" : "Xác nhận đặt hàng"}</button>
-          <p className={styles.policy}>Xem <Link href="/privacy-policy">Chính sách bảo mật</Link> và <Link href="/return-policy">Chính sách đổi trả</Link> trước khi đặt hàng.</p>
-          <div className={styles.assurances}><span><Icon name="local_shipping" /> Giao hàng theo thông tin đã chọn</span><Link href="/return-policy">Chính sách đổi trả</Link></div>
+          <p className={styles.policy}>
+            Chính sách mở trong thẻ mới:{" "}
+            <Link href="/shipping-payment-policy" target="_blank" rel="noopener">Đặt hàng, thanh toán và giao hàng</Link>
+            {" · "}<Link href="/return-policy" target="_blank" rel="noopener">Đổi trả và hoàn tiền</Link>
+            {" · "}<Link href="/privacy-policy" target="_blank" rel="noopener">Quyền riêng tư</Link>.
+          </p>
           <button type="button" className={styles.refresh} disabled={disabled} onClick={onRefresh}><Icon name="refresh" /> Tải lại giỏ &amp; phí giao</button>
         </aside>
       </div>}

@@ -1,7 +1,10 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 function inlineFormatting(text: string) {
-  return text.split(/(\*\*[^*\n]+\*\*|\*[^*\n]+\*)/g).map((part, index) => {
+  return text.split(/(\*\*[^*\n]+\*\*|\*[^*\n]+\*|\[[^\]\n]+\]\(\/[^)\n]*\))/g).map((part, index) => {
+    const link = /^\[([^\]\n]+)\]\((\/[a-z0-9/-]*(?:#[a-z0-9-]+)?)\)$/u.exec(part);
+    if (link && !link[2].startsWith("//")) return <Link key={index} href={link[2]}>{link[1]}</Link>;
     if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
       return <strong key={index}>{part.slice(2, -2)}</strong>;
     }
@@ -12,7 +15,7 @@ function inlineFormatting(text: string) {
   });
 }
 
-export function PolicyPreview({ content }: { content: string }) {
+export function PolicyPreview({ content, className = "operations-policy-copy" }: { content: string; className?: string }) {
   const blocks: ReactNode[] = [];
   let list: string[] = [];
   function finishList() {
@@ -33,5 +36,5 @@ export function PolicyPreview({ content }: { content: string }) {
     }
   }
   finishList();
-  return <div className="operations-policy-copy">{blocks}</div>;
+  return <div className={className}>{blocks}</div>;
 }

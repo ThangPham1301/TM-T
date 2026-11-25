@@ -1,4 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap");
 /* mon-02 decoration scoped to Lan's five screens. */
 .lan-page {
   --lan-paper: #fcf9f4;
@@ -8,7 +7,7 @@
   --lan-line: #dfd1be;
   --lan-red: #8b261d;
   color: #2f241c;
-  font-family: "Be Vietnam Pro", "Segoe UI", sans-serif;
+  font-family: var(--gh-font-body);
   background: var(--paper) repeat;
   padding: 32px max(20px, calc((100% - 1280px) / 2));
 }
@@ -20,7 +19,7 @@
 .lan-page h1,
 .lan-page h2,
 .lan-page h3 {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--gh-font-display);
   color: var(--lan-brown);
   line-height: 1.25;
   margin: 0 0 16px;
@@ -866,26 +865,83 @@ body:has(.lan-page) .brand-seal {
 .lan-admin-sidebar > p {
   font-size: 11px;
   letter-spacing: 0.08em;
-  margin: 8px 10px 18px;
+  margin: 8px 10px 12px;
 }
 .lan-admin-sidebar nav {
   display: grid;
-  gap: 8px;
+  gap: 5px;
 }
-.lan-admin-sidebar nav a {
-  padding: 14px;
-  text-decoration: none;
-  color: #563a26;
+.lan-admin-menu-toggle {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 12px;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
   border: 1px solid transparent;
-  min-height: 48px;
+  border-radius: var(--gh-radius-sm);
+  background: transparent;
+  color: var(--gh-primary);
+  font: 600 .81rem/1.45 var(--gh-font-body);
+  text-align: left;
+  cursor: pointer;
 }
-.lan-admin-sidebar nav a[aria-current="page"] {
-  background: #563a26;
-  color: #fcf9f4;
-  border-color: #d4a24c;
+.lan-admin-menu-toggle .material-symbols-outlined { font-size: 18px; }
+.lan-admin-menu-group[data-current="true"] > .lan-admin-menu-toggle,
+.lan-admin-menu-toggle:hover {
+  border-color: var(--gh-border);
+  background: var(--gh-surface);
 }
-.lan-admin-sidebar nav a:hover {
-  border-color: #d4a24c;
+.lan-admin-menu-caret {
+  width: 7px;
+  height: 7px;
+  justify-self: center;
+  border-inline-end: 1.5px solid currentColor;
+  border-block-end: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 150ms ease;
+}
+.lan-admin-menu-toggle[aria-expanded="true"] .lan-admin-menu-caret { transform: rotate(45deg); }
+.lan-admin-menu-items {
+  margin: 4px 0 5px 18px;
+  padding: 0 0 0 10px;
+  border-inline-start: 1px solid var(--gh-border);
+  list-style: none;
+}
+.lan-admin-menu-items:not([hidden]) {
+  display: grid;
+  gap: 2px;
+  animation: lan-admin-menu-reveal 150ms ease-out;
+}
+@keyframes lan-admin-menu-reveal {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.lan-admin-menu-items a {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 6px 9px;
+  text-decoration: none;
+  color: var(--gh-primary);
+  border: 1px solid transparent;
+  border-radius: var(--gh-radius-sm);
+  font: 500 .79rem/1.45 var(--gh-font-body);
+}
+.lan-admin-menu-items a:hover { background: var(--gh-surface); }
+.lan-admin-menu-items a[aria-current="page"] {
+  background: var(--gh-primary);
+  color: var(--gh-on-primary);
+  border-color: var(--gh-accent);
+}
+.lan-admin-sidebar nav :is(a, button):focus-visible {
+  outline: 2px solid var(--gh-focus);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lan-admin-menu-caret { transition: none; }
+  .lan-admin-menu-items:not([hidden]) { animation: none; }
 }
 .lan-admin-user {
   margin-top: auto;
@@ -1151,13 +1207,6 @@ body:has(.lan-page) .brand-seal {
     position: static;
     height: auto;
     padding: 16px;
-  }
-  .lan-admin-sidebar nav {
-    display: flex;
-    overflow: auto;
-  }
-  .lan-admin-sidebar nav a {
-    white-space: nowrap;
   }
   .lan-admin-sidebar > p,
   .lan-admin-user {

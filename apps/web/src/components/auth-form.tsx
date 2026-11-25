@@ -77,7 +77,7 @@ export function AuthForm({ register = false, returnToCheckout = false }: { regis
             </form>
             <div className={styles.links}>
               <p>{register ? "Đã có tài khoản? " : "Mới đến Gói Huế? "}<Link href={register ? "/login" : "/register"}>{register ? "Đăng nhập" : "Tạo tài khoản"}</Link></p>
-              <Link href="/privacy-policy">Chính sách bảo mật</Link>
+              <Link href="/privacy-policy">Chính sách quyền riêng tư</Link>
             </div>
           </section>
         </div>

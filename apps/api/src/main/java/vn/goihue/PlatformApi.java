@@ -89,35 +89,78 @@ public class PlatformApi {
             UUID id=UUID.nameUUIDFromBytes(email.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             db.update("INSERT INTO customers(id,email,password_hash,role,name) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING",id,email,passwords.encode(adminPassword),"ADMIN","Quản trị Gói Huế");
         }
-        if(db.queryForObject("SELECT count(*) FROM records WHERE kind='policy'",Integer.class)==0) {
-            var p=new LinkedHashMap<String,Object>();p.put("title","Chính sách bảo mật Gói Huế");p.put("version","1.0-draft");p.put("content",POLICY);p.put("status","DRAFT");save("policy",null,p);
-        }
     }
-    static final String POLICY="""
-        CHÍNH SÁCH BẢO MẬT GÓI HUẾ – DỰ THẢO CHỜ PHÊ DUYỆT
 
-        1. Thông tin thu thập
-        Họ tên, email, điện thoại, địa chỉ; thông tin tài khoản, đơn hàng, sản phẩm, số lượng, giá trị và trạng thái thanh toán; nội dung hỗ trợ và ảnh chứng cứ cần thiết.
+    static String policyTitle(String topic) {
+        return switch (topic) {
+            case "privacy" -> "Chính sách quyền riêng tư";
+            case "shipping" -> "Chính sách đặt hàng, thanh toán và giao hàng";
+            case "returns" -> "Chính sách đổi trả và hoàn tiền";
+            default -> throw new Problem(404, "Không tìm thấy chính sách.");
+        };
+    }
 
-        2. Mục đích sử dụng
-        Quản lý tài khoản, xác nhận đơn mè xửng, thanh toán và giao hàng, giải quyết khiếu nại và đổi trả. Chỉ gửi ưu đãi khi có lựa chọn đồng ý phù hợp.
+    @GetMapping("/policy") public Map<String,Object> policy() {
+        return publishedPolicy("privacy");
+    }
 
-        3. Chia sẻ dữ liệu
-        Chỉ chia sẻ thông tin cần thiết cho vận chuyển, thanh toán và nhân viên được phân quyền. Các đối tác cụ thể đang chờ xác nhận. Không dùng thông tin đơn để quảng cáo khi chưa có căn cứ phù hợp.
+    @GetMapping("/policy/{topic}") public Map<String,Object> publishedPolicy(@PathVariable String topic) {
+        policyTitle(topic);
+        return db.query("""
+                SELECT data::text FROM records
+                WHERE kind='policy' AND data->>'topic'=? AND data->>'status'='PUBLISHED'
+                """, (row, index) -> decode(row.getString(1)), topic).stream().findFirst()
+                .orElseThrow(() -> new Problem(404, "Chưa có chính sách được công bố."));
+    }
 
-        4. Bảo vệ thông tin
-        Hệ thống dùng mật khẩu BCrypt, phiên server và cookie HttpOnly, kiểm tra quyền và sở hữu, ảnh lưu riêng tư và nhật ký. Chưa được kiểm thử bảo mật production; không cam kết an toàn tuyệt đối.
+    private Map<String,Object> savePolicyDraft(Map<String,Object> body, Map<String,Object> actor) {
+        permission(actor, "policy.manage");
+        String topic = str(body, "topic");
+        if (topic.isEmpty()) topic = "privacy";
+        String title = policyTitle(topic);
+        String version = text(body, "version", 40);
+        String content = text(body, "content", 16000);
+        String id = str(body, "id");
+        if (!id.isEmpty()) {
+            var draft = record(text(body, "id", 36), "policy", actor);
+            require("DRAFT".equals(str(draft, "status")) && topic.equals(str(draft, "topic"))
+                    && version.equals(str(draft, "version")), "Bản nháp không còn khả dụng để chỉnh sửa.");
+            if (number(draft, "revision") != number(body, "revision"))
+                throw new Problem(409, "Bản nháp đã thay đổi. Vui lòng tải lại.");
+            draft.put("content", content);
+            draft.put("revision", number(draft, "revision") + 1);
+            return save("policy", null, draft);
+        }
+        if (Boolean.TRUE.equals(db.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM records
+                WHERE kind='policy' AND data->>'topic'=? AND data->>'version'=?)
+                """, Boolean.class, topic, version)))
+            throw new Problem(409, "Mã phiên bản đã được dùng cho chính sách này.");
+        return save("policy", null, new LinkedHashMap<>(Map.of(
+                "topic", topic, "title", title, "version", version, "content", content, "status", "DRAFT")));
+    }
 
-        5. Quyền khách hàng
-        Khách có thể yêu cầu xem, xuất, chỉnh sửa, xóa hoặc hạn chế xử lý theo điều kiện áp dụng; rút đồng ý tiếp thị và gửi khiếu nại. Dữ liệu cần giữ cho đối soát hoặc tranh chấp được ghi rõ khi phản hồi.
+    private Map<String,Object> publishPolicy(Map<String,Object> body, Map<String,Object> actor) {
+        permission(actor, "policy.manage");
+        var candidate = record(text(body, "id", 36), "policy", actor);
+        String topic = str(candidate, "topic");
+        require(!topic.isEmpty(), "Hãy sao chép nội dung bản cũ sang một phiên bản mới trước khi công bố.");
+        if (number(candidate, "revision") != number(body, "revision"))
+            throw new Problem(409, "Phiên bản đã thay đổi. Vui lòng tải lại.");
+        var current = publishedPolicy(topic);
+        if (!str(current, "id").equals(str(body, "publishedId")))
+            throw new Problem(409, "Bản đang công bố đã thay đổi. Vui lòng tải lại trước khi tiếp tục.");
+        require(Set.of("DRAFT", "SUPERSEDED").contains(str(candidate, "status")),
+                "Phiên bản này đang được hiển thị.");
+        current.put("status", "SUPERSEDED");
+        current.put("revision", number(current, "revision") + 1);
+        save("policy", null, current);
+        candidate.put("status", "PUBLISHED");
+        candidate.put("publishedAt", Instant.now().toString());
+        candidate.put("revision", number(candidate, "revision") + 1);
+        return save("policy", null, candidate);
+    }
 
-        6. Lưu trữ
-        Chỉ lưu trong thời gian cần thiết cho mục đích và nghĩa vụ áp dụng. Thời hạn từng nhóm dữ liệu chờ phê duyệt; tác vụ xóa tự động chưa bật.
-
-        7. Liên hệ
-        Đơn vị dự kiến: Gói Huế. Email và đầu mối: Đang cập nhật. Dùng mục Quyền dữ liệu trong tài khoản để gửi yêu cầu và nhận mã theo dõi.
-        """;
-    @GetMapping("/policy") public Object policy() {return db.query("SELECT data::text FROM records WHERE kind='policy' ORDER BY created_at DESC LIMIT 1",(r,i)->decode(r.getString(1))).getFirst();}
     @PostMapping("/auth/{action}") @Transactional public Object auth(@PathVariable String action,@RequestBody Map<String,Object> body,HttpServletRequest req,HttpServletResponse res) {
         origin(req); lock();
         if(action.equals("logout")){actor(req);if(req.getCookies()!=null)for(var c:req.getCookies())if(c.getName().equals("goihue_session"))db.update("DELETE FROM sessions WHERE token_hash=?",hash(c.getValue()));cookie(res,"",0);return Map.of("ok",true);}
@@ -291,11 +334,12 @@ public class PlatformApi {
     }
     @SuppressWarnings("unchecked") Map<String,Object> execute(Map<String,Object> a,Map<String,Object> b) {
         String action=text(b,"action",60);UUID uid=(UUID)a.get("id");
-        require(Set.of("profile","address-save","address-delete","consent","policy","privacy-create","return-create","privacy-supplement","return-supplement","privacy-update","return-update","return-submit","return-confirm","return-withdraw").contains(action),"Thao tác không được hỗ trợ.");
+        require(Set.of("profile","address-save","address-delete","consent","policy","policy-publish","privacy-create","return-create","privacy-supplement","return-supplement","privacy-update","return-update","return-submit","return-confirm","return-withdraw").contains(action),"Thao tác không được hỗ trợ.");
         if(action.equals("profile")){permission(a,"self.manage");db.update("UPDATE customers SET name=?,phone=?,address=? WHERE id=?",text(b,"name",100),bounded(b,"phone",30),bounded(b,"address",400),uid);return Map.of("ok",true);}
         if(action.equals("address-save") || action.equals("address-delete")) return address(a,b,action);
         if(action.equals("consent")){permission(a,"self.manage");boolean granted=Boolean.TRUE.equals(b.get("granted"));db.update("UPDATE customers SET marketing=? WHERE id=?",granted,uid);var c=new LinkedHashMap<String,Object>();c.put("granted",granted);c.put("policyVersion",str((Map<String,Object>)policy(),"version"));return save("consent",uid,c);}
-        if(action.equals("policy")){permission(a,"policy.manage");var p=new LinkedHashMap<String,Object>();p.put("version",text(b,"version",40));p.put("title","Chính sách bảo mật Gói Huế");p.put("content",text(b,"content",16000));p.put("status","DRAFT");return save("policy",null,p);}
+        if(action.equals("policy")) return savePolicyDraft(b,a);
+        if(action.equals("policy-publish")) return publishPolicy(b,a);
         if(action.equals("privacy-create")){permission(a,"privacy.create");String type=text(b,"type",30);require(Set.of("ACCESS","EXPORT","DELETE","RESTRICT","COMPLAINT").contains(type),"Loại yêu cầu không hợp lệ.");var p=new LinkedHashMap<String,Object>();p.put("type",type);p.put("description",text(b,"description",2000));p.put("status","SUBMITTED");p.put("history",new ArrayList<>(List.of(Map.of("at",Instant.now().toString(),"status","SUBMITTED","note","Đã tiếp nhận yêu cầu"))));return save("privacy",uid,p);}
         if(action.equals("return-submit")) {
             permission(a,"return.create");
@@ -320,7 +364,7 @@ public class PlatformApi {
         if(action.equals("return-create")) {
             permission(a,"return.create");var o=record(text(b,"orderId",50),"order",a);String reason=text(b,"reason",40);require(Set.of("WRONG_ITEM","MISSING_ITEM","DAMAGED","UNSAFE","QUALITY","NOT_RECEIVED","CHANGE_OF_MIND").contains(reason),"Lý do không hợp lệ.");
             require(str(o,"status").equals("DELIVERED"),"Chỉ tạo yêu cầu sau khi đơn đã giao.");
-            boolean late=Instant.parse(str(o,"deliveredAt")).plus(Duration.ofDays(7)).isBefore(Instant.now());require(!late||Set.of("UNSAFE","QUALITY").contains(reason),"Đã quá cửa sổ dự thảo 7 ngày; lỗi chất lượng/an toàn vẫn được tiếp nhận.");
+            boolean late=Instant.parse(str(o,"deliveredAt")).plus(Duration.ofDays(7)).isBefore(Instant.now());require(!late||Set.of("UNSAFE","QUALITY").contains(reason),"Đã quá thời hạn 7 ngày kể từ khi đơn được ghi nhận đã giao. Vấn đề về chất lượng hoặc an toàn thực phẩm vẫn được tiếp nhận.");
             String lineId=text(b,"lineId",50);var line=((List<Map<String,Object>>)o.getOrDefault("items",List.of())).stream().filter(l->str(l,"productId").equals(lineId)).findFirst().orElseThrow(()->new Problem(422,"Dòng hàng không thuộc đơn."));
             int qty = number(b, "quantity"), lineQuantity = number(line, "quantity");
             require(qty > 0 && qty <= lineQuantity, "Số lượng yêu cầu không hợp lệ.");
@@ -349,7 +393,7 @@ public class PlatformApi {
                 r.put("lineNetTotal", line.get("netTotal"));
                 r.put("lineQuantity", lineQuantity);
             }
-            r.put("quantity",qty);r.put("reason",reason);if(b.containsKey("caseId") && "return-submit".equals(str(b,"internalAction")))r.put("caseId",str(b,"caseId"));r.put("description",text(b,"description",2000));r.put("evidenceIds",evidence);r.put("status","REQUESTED");r.put("goods","NOT_REQUIRED");r.put("fulfillment","NOT_STARTED");r.put("resolution",text(b,"resolution",30));validateReturnResolution(reason,str(r,"resolution"),false);r.put("policyVersion","return-1.0-draft");r.put("amount",0);r.put("history",new ArrayList<>(List.of(Map.of("at",Instant.now().toString(),"status","REQUESTED","note","Đã tiếp nhận yêu cầu"))));return save("return",uid,r);
+            r.put("quantity",qty);r.put("reason",reason);if(b.containsKey("caseId") && "return-submit".equals(str(b,"internalAction")))r.put("caseId",str(b,"caseId"));r.put("description",text(b,"description",2000));r.put("evidenceIds",evidence);r.put("status","REQUESTED");r.put("goods","NOT_REQUIRED");r.put("fulfillment","NOT_STARTED");r.put("resolution",text(b,"resolution",30));validateReturnResolution(reason,str(r,"resolution"),false);r.put("policyVersion",str(publishedPolicy("returns"),"version"));r.put("amount",0);r.put("history",new ArrayList<>(List.of(Map.of("at",Instant.now().toString(),"status","REQUESTED","note","Đã tiếp nhận yêu cầu"))));return save("return",uid,r);
         }
         boolean privacy=action.startsWith("privacy-");String kind=privacy?"privacy":"return";var r=record(text(b,"id",50),kind,a);UUID owner=owner(str(r,"id"));
         if(number(b,"revision")!=number(r,"revision"))throw new Problem(409,"Hồ sơ vừa thay đổi. Hãy tải lại.");

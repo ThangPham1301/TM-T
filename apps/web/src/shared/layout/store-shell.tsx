@@ -490,11 +490,12 @@ export function StoreFooter(_props: StoreFooterProps) {
             <h2>Chăm sóc &amp; hỗ trợ</h2>
             <ul>
               <li><Link href={guestLookupPath}>Tra cứu đơn hàng</Link></li>
+              <li><Link href="/shipping-payment-policy">Đặt hàng, thanh toán và giao hàng</Link></li>
               <li>
                 <Link href="/return-policy">Chính sách đổi trả</Link>
               </li>
               <li>
-                <Link href="/privacy-policy">Chính sách bảo mật</Link>
+                <Link href="/privacy-policy">Chính sách quyền riêng tư</Link>
               </li>
             </ul>
           </div>

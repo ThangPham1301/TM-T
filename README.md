@@ -19,7 +19,7 @@ Truy cập http://localhost:3000. ADMIN lấy từ `.env` ở thư mục gốc; 
 
 ## Chức năng hiện có
 
-- Khách vãng lai: giỏ hàng theo trình duyệt, checkout COD hoặc VietQR demo, xác nhận và tra cứu tại `/tra-cuu-don-hang` bằng mã đơn và mã tra cứu riêng. Có thể gộp giỏ vào tài khoản sau khi đăng nhập. Admin xử lý đơn khách trong danh sách đơn chung.
+- Khách vãng lai: giỏ hàng theo trình duyệt, checkout COD hoặc VietQR demo, xác nhận và tra cứu tại `/tra-cuu-don-hang` bằng mã đơn và mã tra cứu riêng. Có thể gộp giỏ vào tài khoản sau khi đăng nhập. Khách gửi yêu cầu và đọc phản hồi tại chi tiết đơn đã xác minh. Admin xử lý yêu cầu trong hộp tiếp nhận `/admin/support`.
 
 - CUSTOMER: đăng ký/đăng nhập, hồ sơ, lựa chọn tiếp thị, giỏ hàng lưu server; sửa số lượng/xóa/cập nhật giá, checkout COD theo phí giao cấu hình, tìm/lọc đơn, sửa người nhận trước đóng gói, hủy đơn khi đủ điều kiện, quyền dữ liệu và đổi trả từng dòng hàng.
 - Mua lại: đơn đã giao, đã hủy, giao thất bại hoặc đã trả hàng có thể mở bước kiểm tra sản phẩm, số lượng và giá hiện tại. Món hết hàng/ngừng bán cần được bỏ chọn hoặc điều chỉnh rõ ràng. Xác nhận thay giỏ diễn ra trong một transaction; checkout điền sẵn người nhận cũ để khách chỉnh, không sửa hồ sơ hay sao chép thanh toán của đơn cũ. Đơn đang xử lý tiếp tục dùng nút thanh toán/theo dõi hiện có.
@@ -62,7 +62,9 @@ Nếu container web đang chiếm cổng 3000, chạy `docker compose stop web` 
 
 Đây là chức năng của dự án chính, không còn module `/academic` hoặc Mockoon. Thanh toán gồm COD và VietQR demo. ADMIN cập nhật thu COD, hoàn tiền và giao vận thủ công dựa trên chứng từ. Website không tự chuyển tiền, gửi email/SMS hoặc tạo vận đơn với carrier. Không đánh dấu giao/thu/hoàn thành công khi chưa có chứng cứ thực tế.
 
-Chính sách giữ nhãn dự thảo đến khi được phê duyệt; chuyển vào dự án chính không đồng nghĩa đã có hiệu lực pháp lý. Retention, SLA cụ thể và nhà cung cấp chưa xác nhận. Ảnh catalog PNG/JPEG tối đa 5 MB được decode/re-encode PNG (tối đa 6000px mỗi chiều và 16 triệu pixel), lưu volume; ảnh chưa gắn catalog active chỉ ADMIN truy cập. Ảnh bằng chứng đổi trả được kiểm tra signature và tải theo quyền riêng. Chưa có antivirus/cleanup tự động. Danh sách quản trị phân trang trên client. Chưa có quên mật khẩu/email verification, đổi mật khẩu, đánh giá sản phẩm, voucher/loyalty, B2B hay nhiều kho. Không tự tạo giao dịch giả để lấp các tích hợp chưa có.
+Admin soạn, xem trước và công bố chính sách tại `/admin/policies`. Website và trợ lý mua sắm đọc cùng phiên bản đang công bố. Flyway V5 tạo hộp hỗ trợ khách vãng lai và nạp phiên bản 1.0 cho ba chính sách hiện có. Bản nháp quyền riêng tư cũ được giữ trong lịch sử Admin. Thời hạn lưu dữ liệu, SLA vận hành và nhà cung cấp chưa được xác nhận.
+
+Ảnh catalog PNG/JPEG tối đa 5 MB được decode/re-encode PNG (tối đa 6000px mỗi chiều và 16 triệu pixel), lưu volume; ảnh chưa gắn catalog active chỉ ADMIN truy cập. Ảnh bằng chứng đổi trả được kiểm tra signature và tải theo quyền riêng. Chưa có antivirus/cleanup tự động. Chưa có quên mật khẩu/email verification, đánh giá sản phẩm, voucher/loyalty, B2B hay nhiều kho.
 
 Cookie hiện dành cho localhost HTTP. Trước triển khai public cần HTTPS/Secure cookie, secret manager, backup, kiểm thử bảo mật và duyệt chính sách. Không chạy test nghiệp vụ trong lần xây dựng này theo yêu cầu người dùng; kết quả build được ghi trong bàn giao.
 

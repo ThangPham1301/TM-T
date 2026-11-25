@@ -71,3 +71,15 @@
   .items li { grid-template-columns: 44px minmax(0, 1fr) auto; gap: 8px; }
   .items img { width: 44px; height: 44px; }
 }
+.support { margin-block: 24px; scroll-margin-top: 120px; }
+.support .form { max-width: 640px; }
+.support .form label { display: grid; gap: 6px; }
+.support .form :is(select, textarea) { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--vien); background: var(--paper-face); color: inherit; font: inherit; }
+.support .form :is(select, textarea):focus-visible { outline: 2px solid var(--mat); outline-offset: 2px; }
+.support .form textarea { resize: vertical; }
+.supportHeading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-block: 20px 12px; }
+.supportHeading h3 { margin: 0; }
+.supportTickets { display: grid; gap: 12px; padding: 0; list-style: none; }
+.supportTickets li { display: grid; gap: 6px; padding: 16px; border: 1px solid var(--vien); background: var(--kem-am); }
+.supportTickets li p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.supportTickets li > div { padding-top: 10px; border-top: 1px solid var(--vien); }

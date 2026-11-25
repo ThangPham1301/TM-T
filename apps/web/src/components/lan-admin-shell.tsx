@@ -1,19 +1,40 @@
 "use client";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { useStore } from "@/lib/store";
-const links = [
-  ["orders", "Quản lý đơn hàng"],
-  ["products", "Quản lý sản phẩm"],
-  ["categories", "Quản lý danh mục"],
-  ["discounts", "Quản lý ưu đãi"],
-  ["pricing", "Quản lý giá bán"],
-  ["settings", "Cấu hình bán hàng"],
-  ["returns", "Xử lý đổi trả"],
-  ["privacy", "Quyền riêng tư"],
-  ["policies", "Quản lý chính sách"],
-  ["audit", "Nhật ký hoạt động"],
-];
+import { adminNavigationGroups } from "@/shared/layout/navigation";
+
+function AdminMenu({ section }: { section: string }) {
+  const id = useId();
+  const currentGroup = adminNavigationGroups.find(({ items }) => items.some((item) => item.key === section))?.key;
+  const [openGroup, setOpenGroup] = useState(currentGroup);
+
+  return (
+    <nav aria-label="Chức năng quản trị">
+      {adminNavigationGroups.map((group) => {
+        const open = openGroup === group.key;
+        const itemsId = `${id}-${group.key}`;
+        return (
+          <div className="lan-admin-menu-group" key={group.key} data-current={currentGroup === group.key}>
+            <button type="button" className="lan-admin-menu-toggle" aria-expanded={open} aria-controls={itemsId}
+              onClick={() => setOpenGroup(open ? undefined : group.key)}>
+              <span className="material-symbols-outlined" aria-hidden="true">{group.icon}</span>
+              <span>{group.label}</span>
+              <span className="lan-admin-menu-caret" aria-hidden="true" />
+            </button>
+            <ul id={itemsId} className="lan-admin-menu-items" hidden={!open}>
+              {group.items.map((item) => (
+                <li key={item.key}>
+                  <Link href={item.href} aria-current={item.key === section ? "page" : undefined}>{item.label}</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
 export function LanAdminShell({
   section,
   children,
@@ -33,17 +54,7 @@ export function LanAdminShell({
           </div>
         </Link>
         <p>KHU VỰC ĐIỀU HÀNH</p>
-        <nav aria-label="Chức năng quản trị">
-          {links.map(([key, name]) => (
-            <Link
-              key={key}
-              aria-current={key === section ? "page" : undefined}
-              href={`/admin/${key}`}
-            >
-              {name}
-            </Link>
-          ))}
-        </nav>
+        <AdminMenu key={section} section={section} />
         <div className="lan-admin-user">
           <Link href="/">Xem cửa hàng →</Link>
           <strong>{String(state?.user.name ?? "")}</strong>

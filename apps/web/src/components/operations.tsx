@@ -1,13 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
-import { useRef, useState, type ReactNode } from "react";
-import { date, fields, label, type Row } from "@/lib/store";
-import { PolicyPreview } from "./policy-preview";
+import { useState, type ReactNode } from "react";
+import { date, label, type Row } from "@/lib/store";
+import { StatusBadge } from "@/shared/ui";
 import { Pagination } from "./workspace-nav";
 import { LanAdminShell } from "./lan-admin-shell";
 import styles from "./admin-operations.module.css";
+import workbench from "./admin-workbench.module.css";
+import returnsStyles from "./admin-returns.module.css";
 
 export function OperationsWorkspace({
   section,
@@ -65,11 +66,13 @@ export function ReturnQueue({
   onSelect,
   orders = [],
   admin = false,
+  selected,
 }: {
   rows: Row[];
   onSelect: (row: Row) => void;
   orders?: Row[];
   admin?: boolean;
+  selected?: Row | null;
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
@@ -124,21 +127,53 @@ export function ReturnQueue({
     });
 
 
-  return (
-    <div className={admin ? "returns-queue-admin" : "operations-list"}>
-      {admin && (
-        <div className="returns-summary" aria-label="Tổng quan yêu cầu đổi trả">
-          {filters.slice(0, 3).map((filter) => (
-            <button type="button" key={filter.id} onClick={() => {
-              setStatus(filter.id);
-              setPage(1);
-            }}>
-              <small>{filter.label}</small>
-              <strong>{filter.count}</strong>
-            </button>
-          ))}
+  if (admin) return (
+    <section className={workbench.pane} aria-labelledby="return-queue-title">
+      <header className={workbench.paneHead}>
+        <div>
+          <h2 id="return-queue-title">Hồ sơ đổi trả</h2>
+          <p className={workbench.quiet}>{cases.length} hồ sơ</p>
         </div>
+      </header>
+      <div className={returnsStyles.filters}>
+        <label>Tìm hồ sơ
+          <input type="search" placeholder="Mã đơn, sản phẩm, người nhận" value={query}
+            onChange={(event) => { setQuery(event.target.value); setPage(1); }} />
+        </label>
+        <label>Trạng thái
+          <select aria-label="Lọc trạng thái đổi trả" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}>
+            <option value="">Tất cả ({allCases.length})</option>
+            {filters.map((filter) => <option key={filter.id} value={filter.id}>{filter.label} ({filter.count})</option>)}
+          </select>
+        </label>
+      </div>
+      {cases.length === 0 ? (
+        <p className={workbench.empty}>{rows.length ? "Không tìm thấy hồ sơ phù hợp." : "Chưa có yêu cầu đổi trả."}</p>
+      ) : (
+        <ul className={`${workbench.itemList} ${returnsStyles.queue}`}>
+          {visibleCases.map(({ row, products, reasons, quantity, evidenceIds, caseStatus }) => (
+            <li key={row.id}>
+              <button type="button" className={workbench.item}
+                aria-pressed={Boolean(selected && (selected.caseId || selected.id) === (row.caseId || row.id))}
+                onClick={() => onSelect(row)}>
+                <span className={workbench.row}>
+                  <strong>{String(row.orderNumber)}</strong>
+                  <StatusBadge tone={row.status === "RESOLVED" ? "success" : "neutral"} className={workbench.badge}>{caseStatus}</StatusBadge>
+                </span>
+                <span className={returnsStyles.excerpt}>{products} · {quantity} sản phẩm</span>
+                <span className={returnsStyles.excerpt}>{reasons}</span>
+                <small className={workbench.quiet}>#{String(row.caseId || row.id).slice(0, 8)} · {date(row.createdAt)}{evidenceIds.length > 0 && ` · ${evidenceIds.length} ảnh`}</small>
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
+      {cases.length > pageSize && <Pagination page={currentPage} total={cases.length} pageSize={pageSize} onChange={setPage} allowJump />}
+    </section>
+  );
+
+  return (
+    <div className="operations-list">
       {rows.length > 0 && (
         <div className="returns-filters">
           <label>
@@ -148,75 +183,12 @@ export function ReturnQueue({
               setPage(1);
             }} />
           </label>
-          {admin && (
-            <div className="returns-filter-buttons" role="group" aria-label="Trạng thái yêu cầu">
-              {[{ id: "", label: "Tất cả", count: allCases.length }, ...filters].map((filter) => (
-                <button
-                  type="button"
-                  key={filter.id}
-                  aria-pressed={status === filter.id}
-                  onClick={() => {
-                    setStatus(filter.id);
-                    setPage(1);
-                  }}
-                >
-                  {filter.label} ({filter.count})
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       )}
       {!cases.length && (
         <p className="store-empty">{rows.length ? "Không tìm thấy yêu cầu phù hợp." : "Chưa có yêu cầu đổi trả."}</p>
       )}
-      {admin && visibleCases.length > 0 && (
-        <div className="operations-table">
-          <div className={styles.tableHeading}><h2>Danh sách yêu cầu đổi trả</h2><span>{cases.length} hồ sơ</span></div>
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Mã yêu cầu / đơn gốc</th>
-                <th scope="col">Người nhận</th>
-                <th scope="col">Sản phẩm và lý do</th>
-                <th scope="col">Bằng chứng</th>
-                <th scope="col">Trạng thái</th>
-                <th scope="col">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleCases.map(({ row, products, reasons, quantity, evidenceIds, caseStatus }) => (
-                <tr key={row.id}>
-                  <td>
-                    <strong>#{String(row.caseId || row.id).slice(0, 8)}</strong><br />
-                    {String(row.orderNumber)}<br /><small>{date(row.createdAt)}</small>
-                  </td>
-                  <td>{String(orderById.get(String(row.orderId))?.recipient ?? "—")}</td>
-                  <td>{products} · {quantity} sản phẩm<br /><small>{reasons}</small></td>
-                  <td>
-                    <div className="returns-evidence-cell">
-                      {evidenceIds.slice(0, 2).map((id) => <EvidencePreview key={id} id={id} compact />)}
-                    </div>
-                    <small>{evidenceIds.length} ảnh</small>
-                  </td>
-                  <td><span className="store-status-chip">{caseStatus}</span></td>
-                  <td>
-                    <button
-                      type="button"
-                      className="store-btn-text"
-                      aria-label={`Xem yêu cầu của đơn ${String(row.orderNumber)}`}
-                      onClick={() => onSelect(row)}
-                    >
-                      Xem chi tiết
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {!admin && visibleCases.map(({ row, products, reasons, quantity, caseStatus }) => (
+      {visibleCases.map(({ row, products, reasons, quantity, caseStatus }) => (
         <button type="button" className="store-row returns-customer-row" key={row.id} onClick={() => onSelect(row)}>
           <strong>{String(row.orderNumber)} · {products}</strong>
           <span>{reasons} · {quantity} sản phẩm</span>
@@ -229,110 +201,6 @@ export function ReturnQueue({
   );
 }
 
-export function PolicyEditor({
-  policy,
-  versions,
-  busy,
-  onSave,
-}: {
-  policy: Row;
-  versions: Row[];
-  busy: boolean;
-  onSave: (draft: Record<string, FormDataEntryValue>) => void;
-}) {
-  const [version, setVersion] = useState("");
-  const [content, setContent] = useState(String(policy.content ?? ""));
-  const [viewedId, setViewedId] = useState("");
-  const viewed = versions.find((entry) => entry.id === viewedId);
-  const editor = useRef<HTMLTextAreaElement>(null);
-
-  function format(prefix: string, suffix = "", linePrefix = false) {
-    const input = editor.current;
-    if (!input) return;
-    const selectionStart = linePrefix ? content.lastIndexOf("\n", input.selectionStart - 1) + 1 : input.selectionStart;
-    const selectionEnd = input.selectionEnd;
-    const selection = content.slice(selectionStart, selectionEnd);
-    const replacement = linePrefix
-      ? selection.split("\n").map((line) => prefix + line).join("\n")
-      : prefix + selection + suffix;
-    const next = content.slice(0, selectionStart) + replacement + content.slice(selectionEnd);
-    if (next.length > input.maxLength) return;
-    setViewedId("");
-    setContent(next);
-    requestAnimationFrame(() => {
-      input.focus();
-      input.setSelectionRange(selectionStart + prefix.length, selectionStart + replacement.length - suffix.length);
-    });
-  }
-
-  return (
-    <>
-      <aside className="operations-notice">
-        <span className="operations-notice-mark" aria-hidden="true">!</span>
-        <div><h2>Phạm vi áp dụng chính sách</h2><p>Trình biên tập lưu bản thảo chính sách bảo mật. Xem trước nội dung trước khi lưu phiên bản mới.</p></div>
-        <span className="store-status-chip">Phiên bản {String(policy.version ?? "—")}</span>
-      </aside>
-      <div className="operations-policy-grid">
-        <section className="store-card operations-history">
-          <div className="store-list-heading">
-            <h2>Lịch sử phiên bản chính sách</h2>
-            <span className="store-status-chip">{versions.length} bản ghi</span>
-          </div>
-          {!versions.length && <p className="store-empty">Chưa có phiên bản đã lưu.</p>}
-          {versions.map((entry) => (
-            <div className="operations-history-item" key={entry.id}>
-              <strong>{String(entry.version)}</strong>
-              <span className="store-status-chip">Dự thảo</span>
-              <small>{date(entry.createdAt)}</small>
-              <button type="button" aria-pressed={viewedId === entry.id} onClick={() => setViewedId(entry.id)}>Xem nội dung</button>
-            </div>
-          ))}
-        </section>
-        <section className="store-card operations-editor">
-          <h2>Trình biên tập nội dung</h2>
-          <form className="store-form" id="policy-editor" onSubmit={(event) => onSave(fields(event))}>
-            <label>
-              Mã phiên bản
-              <input name="version" placeholder="1.1-draft" required maxLength={40} value={version} onChange={(event) => setVersion(event.target.value)} />
-            </label>
-            <label>
-              Tiêu đề chính sách
-              <input value={String(policy.title ?? "Chính sách bảo mật Gói Huế")} readOnly />
-            </label>
-            <div className="operations-markdown-toolbar" role="group" aria-label="Định dạng Markdown">
-              <button type="button" aria-label="In đậm" onClick={() => format("**", "**")}><strong>B</strong></button>
-              <button type="button" aria-label="In nghiêng" onClick={() => format("*", "*")}><em>I</em></button>
-              <button type="button" aria-label="Tiêu đề cấp 3" onClick={() => format("### ", "", true)}>H3</button>
-              <button type="button" aria-label="Danh sách" onClick={() => format("- ", "", true)}>List</button>
-            </div>
-            <label>
-              Nội dung Markdown
-              <textarea ref={editor} name="content" rows={16} required maxLength={16000} value={content} onChange={(event) => {
-                setContent(event.target.value);
-                setViewedId("");
-              }} />
-            </label>
-            <small>{content.length}/16.000 ký tự</small>
-            <button disabled={busy}>Lưu bản thảo mới</button>
-          </form>
-        </section>
-        <section className="store-card operations-preview">
-          <div className="store-list-heading">
-            <h2>Khung xem trước chính sách</h2>
-            <Link href="/privacy-policy">Xem trang cửa hàng ↗</Link>
-          </div>
-          <article>
-            <small className="eyebrow">Storefront preview</small>
-            <p className="store-status-chip">Dự thảo{(viewed?.version || version.trim()) && ` · ${String(viewed?.version || version.trim())}`}</p>
-            <h3>{String(viewed?.title ?? policy.title)}</h3>
-            <PolicyPreview content={String(viewed?.content ?? content) || "Nhập nội dung để xem trước."} />
-          </article>
-          {viewed && <button type="button" className="store-btn-secondary" onClick={() => setViewedId("")}>Quay lại bản đang soạn</button>}
-        </section>
-      </div>
-    </>
-  );
-}
 
 const auditActions: Record<string, [string, string]> = {
   LOGIN: ["Tài khoản", "Đăng nhập"],
@@ -345,6 +213,9 @@ const auditActions: Record<string, [string, string]> = {
   "privacy-update": ["Quyền riêng tư", "Xử lý yêu cầu về dữ liệu"],
   "privacy-supplement": ["Quyền riêng tư", "Bổ sung yêu cầu về dữ liệu"],
   policy: ["Chính sách", "Lưu bản thảo"],
+  "policy-publish": ["Chính sách", "Công bố phiên bản"],
+  "guest-support-in_review": ["Hỗ trợ", "Phản hồi yêu cầu vãng lai"],
+  "guest-support-resolved": ["Hỗ trợ", "Đóng yêu cầu vãng lai"],
   "shipping-save": ["Cấu hình", "Lưu cấu hình bán hàng"],
   "pricing-save": ["Định giá", "Lưu quy tắc giá"],
   "pricing-toggle": ["Định giá", "Cập nhật trạng thái quy tắc giá"],
@@ -390,7 +261,6 @@ export function AuditLog({ rows }: { rows: Row[] }) {
   const [actor, setActor] = useState("");
   const [module, setModule] = useState("");
   const [period, setPeriod] = useState("");
-  const [jump, setJump] = useState("");
   const modules = [...new Set(rows.map((row) => auditAction(row.action)[0]))].sort();
   const periodStart = new Date();
   periodStart.setHours(0, 0, 0, 0);
@@ -419,7 +289,7 @@ export function AuditLog({ rows }: { rows: Row[] }) {
         <div className="store-list-heading">
           <h2>Bộ lọc truy vết sự kiện</h2>
           <button type="button" onClick={() => {
-            setQuery(""); setActor(""); setAction(""); setModule(""); setPeriod(""); setFrom(""); setJump(""); setPage(1);
+            setQuery(""); setActor(""); setAction(""); setModule(""); setPeriod(""); setFrom(""); setPage(1);
           }}>Đặt lại tiêu chí</button>
         </div>
         <div className="store-filters">
@@ -503,18 +373,7 @@ export function AuditLog({ rows }: { rows: Row[] }) {
           </div>
         ) : <p className="store-empty">{rows.length ? "Không tìm thấy sự kiện phù hợp." : "Chưa có hoạt động."}</p>}
         {pages > 1 && (
-          <div className="operations-pagination">
-            <Pagination page={currentPage} total={filtered.length} pageSize={pageSize} onChange={setPage} />
-            <form onSubmit={(event) => {
-              event.preventDefault();
-              const targetPage = Number(jump);
-              if (targetPage >= 1 && targetPage <= pages) setPage(targetPage);
-            }}>
-              <label>Đến trang <input type="number" min={1} max={pages} required value={jump}
-                onChange={(event) => setJump(event.target.value)} /></label>
-              <button>Đi</button>
-            </form>
-          </div>
+          <Pagination page={currentPage} total={filtered.length} pageSize={pageSize} onChange={setPage} allowJump />
         )}
       </section>
     </div>

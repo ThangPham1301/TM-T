@@ -12,6 +12,8 @@ import { AdminOrders } from "./admin-orders";
 import { AdminCodPayment, AdminOrderPayment } from "./admin-order-payment";
 import { codAmountDue, codNeedsReceipt, isCodOrder, matchesPaymentFilter, orderPaymentStatus } from "@/lib/order-payment";
 import { AdminPrivacy } from "./admin-privacy";
+import { AdminReturnDetail } from "./admin-return-detail";
+import workbench from "./admin-workbench.module.css";
 import { accountNavigation } from "@/shared/layout/navigation";
 import { PaymentPanel } from "./payment-panel";
 import { OrderBadges, OrderTimeline } from "./order-presentation";
@@ -19,7 +21,8 @@ import { ReturnRequestForm, getReturnableProducts } from "./return-request-form"
 import { ProductImage } from "./product/product-image";
 import styles from "./journey.module.css";
 import { WorkspaceNav, Pagination } from "./workspace-nav";
-import { ReturnQueue, PolicyEditor, AuditLog, OperationsWorkspace, EvidencePreview } from "./operations";
+import { ReturnQueue, AuditLog, OperationsWorkspace, EvidencePreview } from "./operations";
+import { PolicyEditor } from "./policy-editor";
 import {
   api,
   fields,
@@ -99,6 +102,38 @@ export function Account({
   const linkedReturnOrder = section === "returns" && current
     ? state.orders.find((order) => order.id === current.orderId)
     : undefined;
+  if (admin && section === "returns") {
+    const caseKey = current?.caseId || current?.id;
+    const lines = current ? state.returns.filter((row) => (row.caseId || row.id) === caseKey) : [];
+    return (
+      <OperationsWorkspace section="returns" title="Xử lý yêu cầu đổi trả" description="Tra cứu hồ sơ, xem ảnh bằng chứng và xử lý từng dòng hàng.">
+        <div className={workbench.workspace}>
+          <div className={workbench.split}>
+            <ReturnQueue rows={state.returns} orders={state.orders} selected={current} admin onSelect={(row) => {
+              setSelected(row);
+              if (window.matchMedia("(max-width: 740px)").matches) {
+                requestAnimationFrame(() => document.getElementById("admin-return-detail")?.scrollIntoView({ block: "start" }));
+              }
+            }} />
+            {current ? <AdminReturnDetail key={String(caseKey)} row={current} order={linkedReturnOrder} lines={lines}
+              busy={busy} onSelect={setSelected} onClose={() => setSelected(null)}
+              action={<CaseAction key={`${current.id}:${current.revision}`} row={current} busy={busy}
+                paymentStatus={linkedReturnOrder?.paymentStatus}
+                allowCodAdjustment={Boolean(linkedReturnOrder && codNeedsReceipt(linkedReturnOrder))}
+                onSave={(data) => void run(async () => {
+                  await mutate("command", "return-update", { ...data, id: current.id, revision: current.revision });
+                })} />}
+            /> : (
+              <section className={workbench.pane}>
+                <header className={workbench.paneHead}><h2>Chi tiết yêu cầu</h2></header>
+                <p className={workbench.empty}>Chọn hồ sơ để xem thông tin và cập nhật tiến độ.</p>
+              </section>
+            )}
+          </div>
+        </div>
+      </OperationsWorkspace>
+    );
+  }
   const linkedReturnItem = (linkedReturnOrder?.items as Row[] | undefined)?.find(
     (item) => item.productId === current?.lineId,
   );
@@ -203,7 +238,7 @@ export function Account({
           {section !== "returns" && <h3>Yêu cầu đổi hoặc trả hàng</h3>}
           {section !== "returns" && (
             <p className="store-subtle">
-              Chính sách dự thảo: tiếp nhận trong 7 ngày từ khi giao thành công. Sau 7 ngày, hệ thống vẫn tiếp nhận nếu là lỗi chất lượng hoặc an toàn thực phẩm.
+              Gửi yêu cầu trong 7 ngày kể từ khi đơn được ghi nhận đã giao. Vấn đề về chất lượng hoặc an toàn thực phẩm vẫn được tiếp nhận sau thời hạn này.
             </p>
           )}
           {returnLines.map((line, idx) => {
@@ -932,30 +967,15 @@ export function Account({
     );
   }
 
-  if (["returns", "policies", "audit"].includes(section)) {
+  if (section === "policies" || section === "audit") {
     const operationsSections = {
-      returns: ["Xử lý yêu cầu đổi trả", "Xem bằng chứng, thẩm định và cập nhật tiến độ từng yêu cầu."],
-      policies: ["Quản lý chính sách bảo mật", "Soạn thảo, xem trước và tra cứu các phiên bản đã lưu."],
+      policies: ["Quản lý chính sách", "Soạn, xem trước và công bố phiên bản cho website và trợ lý mua sắm."],
       audit: ["Nhật ký hoạt động quản trị", "Theo dõi lịch sử thao tác và đối tượng được cập nhật."],
     } as const;
-    const [title, description] = operationsSections[section as keyof typeof operationsSections];
+    const [title, description] = operationsSections[section];
     return (
       <OperationsWorkspace section={section} title={title} description={description}>
-        {section === "returns" && (
-          <div className="returns-layout returns-admin-layout">
-            <ReturnQueue rows={state.returns} orders={state.orders} onSelect={setSelected} admin />
-            <aside className="returns-admin-detail" aria-label="Chi tiết yêu cầu">
-              {detailPanel ?? <p className="store-empty">Chọn một yêu cầu để xem chi tiết và xử lý.</p>}
-            </aside>
-          </div>
-        )}
-        {section === "policies" && (
-          <PolicyEditor policy={state.policy} versions={state.policyVersions ?? []} busy={busy}
-            onSave={(draft) => {
-              void run(async () => { await mutate("command", "policy", draft); });
-            }}
-          />
-        )}
+        {section === "policies" && <PolicyEditor />}
         {section === "audit" && <AuditLog rows={state.audit ?? []} />}
       </OperationsWorkspace>
     );

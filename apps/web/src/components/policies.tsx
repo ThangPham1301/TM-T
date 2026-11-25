@@ -1,41 +1,50 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { api, type Row } from "@/lib/store";
-import { privacyArticles, returnArticles } from "./policy-content";
+import { policyInfo, policySections, type PolicyTopic, type PolicyVersion } from "@/lib/policies";
+import { PolicyPreview } from "./policy-preview";
 import styles from "./policies.module.css";
 
-const policyPages = [
-  { href: "/privacy-policy", label: "Bảo mật thông tin" },
-  { href: "/return-policy", label: "Đổi trả & hoàn tiền" },
-];
+const policyPages = {
+  privacy: {
+    ...policyInfo.privacy,
+    label: "Quyền riêng tư",
+    lead: "Tìm hiểu thông tin Gói Huế xử lý và cách quản lý dữ liệu của bạn.",
+    actions: [
+      { href: "/account/privacy", label: "Trung tâm quyền riêng tư" },
+      { href: "/tra-cuu-don-hang#ho-tro-don-hang", label: "Gửi yêu cầu cho đơn vãng lai" },
+    ],
+  },
+  shipping: {
+    ...policyInfo.shipping,
+    label: "Đặt hàng & giao hàng",
+    lead: "Xem cách đặt đơn, phí giao hàng, phương thức thanh toán và cách theo dõi đơn.",
+    actions: [
+      { href: "/tra-cuu-don-hang#ho-tro-don-hang", label: "Hỗ trợ đơn vãng lai" },
+      { href: "/account/orders", label: "Đơn hàng của tôi" },
+    ],
+  },
+  returns: {
+    ...policyInfo.returns,
+    label: "Đổi trả & hoàn tiền",
+    lead: "Xem thời hạn, cách gửi yêu cầu và phương án xử lý khi sản phẩm có vấn đề.",
+    actions: [
+      { href: "/account/orders", label: "Mở đơn hàng" },
+      { href: "/tra-cuu-don-hang#ho-tro-don-hang", label: "Hỗ trợ đổi trả đơn vãng lai" },
+    ],
+  },
+} as const;
 
-export function Policies({ returns = false }: { returns?: boolean }) {
-  const articles = returns ? returnArticles : privacyArticles;
-  const title = returns ? "Chính sách đổi trả" : "Chính sách bảo mật";
-  const currentPath = returns ? "/return-policy" : "/privacy-policy";
-  const [policy, setPolicy] = useState<Row | null>(null);
-  const [metadataStatus, setMetadataStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [attempt, setAttempt] = useState(0);
+export function Policies({ kind, policy }: { kind: PolicyTopic; policy: PolicyVersion | null }) {
+  const { title, label, href, lead, actions } = policyPages[kind];
+  const articles = useMemo(() => policySections(policy?.content ?? ""), [policy]);
   const [activeArticle, setActiveArticle] = useState("dieu-1");
   const [contentsOpen, setContentsOpen] = useState(false);
   const pageRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    if (returns) return;
-    let active = true;
-    void api("policy").then((result) => {
-      if (!active) return;
-      setPolicy(result);
-      setMetadataStatus("ready");
-    }).catch(() => {
-      if (active) setMetadataStatus("error");
-    });
-    return () => { active = false; };
-  }, [returns, attempt]);
-
-  useEffect(() => {
+    if (!articles.length) return;
     let frame = 0;
     const header = document.querySelector("header");
     const syncHeaderOffset = () => {
@@ -78,18 +87,15 @@ export function Policies({ returns = false }: { returns?: boolean }) {
           <span aria-hidden="true">/</span>
           <span>Chính sách</span>
           <span aria-hidden="true">/</span>
-          <span aria-current="page">{returns ? "Đổi trả" : "Bảo mật"}</span>
+          <span aria-current="page">{label}</span>
         </nav>
 
         <header className={styles.hero}>
           <div className={styles.heroCopy}>
             <p className="gh-kicker">An tâm cùng Gói Huế</p>
             <h1>{title}</h1>
-            <p className={styles.lead}>
-              {returns
-                ? "Đồng hành cùng bạn sau mỗi món quà, với thông tin đổi trả rõ ràng và dễ theo dõi."
-                : "Trân trọng sự tin cậy của bạn, từ mỗi thông tin sẻ chia đến từng món quà được gửi trao."}
-            </p>
+            <p className={styles.lead}>{lead}</p>
+            {policy && <p className={styles.version}>Phiên bản {policy.version}</p>}
           </div>
           <div className={styles.seal} aria-hidden="true">
             <span>GÓI HUẾ</span>
@@ -102,22 +108,22 @@ export function Policies({ returns = false }: { returns?: boolean }) {
         </header>
 
         <nav className={styles.policyTabs} aria-label="Các chính sách">
-          {policyPages.map((item) => (
-            <Link key={item.href} href={item.href} aria-current={currentPath === item.href ? "page" : undefined}>
+          {Object.values(policyPages).map((item) => (
+            <Link key={item.href} href={item.href} aria-current={href === item.href ? "page" : undefined}>
               {item.label}<span aria-hidden="true">↗</span>
             </Link>
           ))}
         </nav>
 
-        <div className={styles.layout}>
+        {policy ? <div className={styles.layout}>
           <aside className={styles.sidebar}>
             <nav className={styles.contents} aria-label="Mục lục chính sách">
               <div className={styles.contentsHeading}>
-                <span>Nội dung chính</span><span>01 — 07</span>
+                <span>Nội dung chính</span><span>{articles.length} mục</span>
               </div>
               <button className={styles.contentsToggle} type="button" aria-expanded={contentsOpen}
                 aria-controls="policy-contents" onClick={() => setContentsOpen((value) => !value)}>
-                Nội dung chính <span>{contentsOpen ? "Thu gọn −" : "7 mục +"}</span>
+                Nội dung chính <span>{contentsOpen ? "Thu gọn −" : `${articles.length} mục +`}</span>
               </button>
               <ol id="policy-contents" data-open={contentsOpen}>
                 {articles.map((article, index) => (
@@ -132,29 +138,15 @@ export function Policies({ returns = false }: { returns?: boolean }) {
               </ol>
               <a className={styles.backToTop} href="#policy-top">Về đầu trang <span aria-hidden="true">↑</span></a>
             </nav>
-            <div className={styles.support}>
-              <p className={styles.eyebrow}>Gói Huế đồng hành</p>
-              <h2>{returns ? "Cần hỗ trợ đơn hàng?" : "Thông tin của bạn"}</h2>
-              <p>{returns ? "Theo dõi đơn hàng và gửi yêu cầu hỗ trợ tại tài khoản của bạn." : "Xem và gửi yêu cầu về dữ liệu cá nhân tại trung tâm quyền riêng tư."}</p>
-              <Link href={returns ? "/account/orders" : "/account/privacy"}>
-                {returns ? "Mở đơn hàng" : "Trung tâm quyền riêng tư"}<span aria-hidden="true">↗</span>
-              </Link>
-            </div>
+            <nav className={styles.support} aria-label="Liên kết hỗ trợ">
+              <h2>{kind === "privacy" ? "Quản lý dữ liệu cá nhân" : "Xem đơn hàng"}</h2>
+              {actions.map((action) => (
+                <Link key={action.href} href={action.href}>{action.label}<span aria-hidden="true">↗</span></Link>
+              ))}
+            </nav>
           </aside>
 
           <div className={styles.document}>
-            <div className={styles.draftNotice}>
-              <span className={styles.draftBadge}>Bản dự thảo</span>
-              <p>Chưa công bố hiệu lực chính thức. Nội dung đang chờ phê duyệt.</p>
-              {!returns && (
-                <div className={styles.metadata} aria-live="polite">
-                  {metadataStatus === "loading" ? "Đang tải mã phiên bản…" : metadataStatus === "error" ? (
-                    <><span>Chưa tải được mã phiên bản.</span><button type="button" onClick={() => { setMetadataStatus("loading"); setAttempt((value) => value + 1); }}>Thử lại</button></>
-                  ) : <>Phiên bản: {String(policy?.version || "Chưa có mã phiên bản")}</>}
-                </div>
-              )}
-            </div>
-
             <article className={styles.paper} aria-label={title}>
               {articles.map((article, index) => (
                 <section key={article.id} id={article.id} className={styles.article} aria-labelledby={`${article.id}-title`}>
@@ -162,17 +154,25 @@ export function Policies({ returns = false }: { returns?: boolean }) {
                     <span className={styles.chapter} aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
                     <h2 id={`${article.id}-title`}>{article.title}</h2>
                   </div>
-                  <div className={styles.copy}>{article.content}</div>
+                  <PolicyPreview content={article.content} className={styles.copy} />
                 </section>
               ))}
               <div className={styles.documentEnd} aria-hidden="true"><span />❖<span /></div>
-              <p className={styles.signature}>Gói Huế · Nâng niu từng món quà, trân trọng từng niềm tin.</p>
-              <Link className={styles.documentAction} href={returns ? "/account/orders" : "/account/privacy"}>
-                {returns ? "Theo dõi đơn hàng của bạn" : "Quản lý dữ liệu cá nhân"}<span aria-hidden="true">↗</span>
-              </Link>
+              <div className={styles.documentActions}>
+                {actions.map((action) => (
+                  <Link key={action.href} className={styles.documentAction} href={action.href}>
+                    {action.label}<span aria-hidden="true">↗</span>
+                  </Link>
+                ))}
+              </div>
             </article>
           </div>
-        </div>
+        </div> : (
+          <section className={styles.unavailable} role="status">
+            <p>Hiện chưa tải được chính sách. Vui lòng thử lại.</p>
+            <button type="button" onClick={() => window.location.reload()}>Tải lại trang</button>
+          </section>
+        )}
       </div>
     </main>
   );

@@ -170,6 +170,17 @@ public class GuestCommerceApi {
         var guest = guest(request);
         var order = guest == null ? null : findOwnedOrder(number, guest);
         if (order != null) return receipt(order, guest);
+        return publicOrder(grantedOrder(number, request));
+    }
+
+    Map<String,Object> verifiedOrder(String number, HttpServletRequest request) {
+        number = orderNumber(number);
+        var guest = guest(request);
+        var order = guest == null ? null : findOwnedOrder(number, guest);
+        return order != null ? order : grantedOrder(number, request);
+    }
+
+    private Map<String,Object> grantedOrder(String number, HttpServletRequest request) {
         for (var value : cookieValues(request, ORDER_COOKIE)) {
             if (!value.matches("[a-f0-9]{64}")) continue;
             var rows = db.query("""
@@ -177,7 +188,7 @@ public class GuestCommerceApi {
                     WHERE g.token_hash=? AND g.expires_at>now() AND r.kind='order' AND r.guest_owner_id IS NOT NULL
                         AND r.data->>'number'=?
                     """, (row, index) -> app.decode(row.getString(1)), app.hash(value), number);
-            if (!rows.isEmpty()) return publicOrder(rows.getFirst());
+            if (!rows.isEmpty()) return rows.getFirst();
         }
         throw missingOrder();
     }

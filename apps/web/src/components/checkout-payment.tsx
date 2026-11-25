@@ -41,11 +41,11 @@ export function VietQrDialog({ order, open, onClose, orderDetails }: {
   orderDetails?: string;
 }) {
   return (
-    <Dialog open={open} title="Thanh toán VietQR" onClose={onClose} className={styles.dialog}>
+    <Dialog open={open} title="Mã VietQR" onClose={onClose} className={styles.dialog}>
       <p className={styles.orderNumber}>Mã đơn hàng <strong>{String(order.number)}</strong></p>
       {open && <PaymentPanel order={order} />}
       <div className={styles.actions}>
-        <Button variant="secondary" onClick={onClose}>Thanh toán sau</Button>
+        <Button variant="secondary" onClick={onClose}>Đóng mã QR</Button>
         {orderDetails && <Link className={styles.primaryLink} href={orderDetails} replace>Xem chi tiết đơn hàng</Link>}
       </div>
     </Dialog>

@@ -9,6 +9,7 @@ import { codAmountDue, codHasNoCollection, orderPaymentLabel } from "@/lib/order
 import { Button, TextField } from "@/shared/ui";
 import { VietQrDialog } from "./checkout-payment";
 import { PaymentPanel } from "./payment-panel";
+import { GuestSupport } from "./guest-support";
 import { ProductImage } from "./product/product-image";
 import styles from "./guest-order.module.css";
 
@@ -81,6 +82,12 @@ export function GuestOrderPage({ number, confirmation }: { number: string; confi
     };
   }, [number, refresh]);
 
+  const viewedNumber = order?.number;
+  useEffect(() => {
+    if (viewedNumber && window.location.hash === "#ho-tro-don-hang")
+      document.getElementById("ho-tro-don-hang")?.scrollIntoView({ block: "start" });
+  }, [viewedNumber]);
+
   async function lookup(event: FormEvent<HTMLFormElement>) {
     const input = fields(event);
     if (busy) return;
@@ -90,7 +97,7 @@ export function GuestOrderPage({ number, confirmation }: { number: string; confi
       const result: GuestOrder = await api("guest/orders/lookup", "POST", input);
       setOrder(result);
       setRefresh((value) => value + 1);
-      router.replace(guestOrderPath(result.number));
+      router.replace(guestOrderPath(result.number) + (window.location.hash === "#ho-tro-don-hang" ? "#ho-tro-don-hang" : ""));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Chưa tra cứu được đơn hàng.");
     } finally {
@@ -132,6 +139,8 @@ export function GuestOrderPage({ number, confirmation }: { number: string; confi
             <Button type="submit" loading={busy} loadingLabel="Đang tra cứu…">Tra cứu đơn hàng <span aria-hidden="true">→</span></Button>
           </form>
           <p className={styles.muted}>Đã đặt bằng tài khoản? <Link href="/account/orders">Xem đơn hàng của tôi</Link>.</p>
+          <p className={styles.muted}>Xem <Link href="/shipping-payment-policy">hướng dẫn tra cứu và theo dõi đơn</Link>.</p>
+          <p className={styles.muted} id="ho-tro-don-hang">Để gửi yêu cầu hỗ trợ hoặc theo dõi phản hồi, hãy tra cứu bằng mã đơn và mã tra cứu ở trên.</p>
         </div>
       </main>
     );
@@ -204,6 +213,8 @@ export function GuestOrderPage({ number, confirmation }: { number: string; confi
           </div>
         </div>
 
+        <GuestSupport key={order.number} number={order.number} />
+        <p className={styles.muted}>Xem <Link href="/shipping-payment-policy">chính sách đặt hàng và giao hàng</Link> hoặc <Link href="/return-policy">hướng dẫn đổi trả</Link>.</p>
         <Link className={styles.recent} href="/products">Tiếp tục mua sắm →</Link>
         {openQr && <VietQrDialog order={paymentOrder} open onClose={closeQr} orderDetails={guestOrderPath(order.number)} />}
       </div>

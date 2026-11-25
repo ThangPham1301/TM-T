@@ -56,7 +56,7 @@ export function PaymentPanel({ order, showQr = true }: { order: Row; showQr?: bo
     );
   const paymentHeading = (
     <div className={styles.paymentHeading}>
-      <p><strong>VietQR demo — không chuyển tiền thật</strong> · {label(status)}</p>
+      <p><strong>VietQR — Không chuyển tiền vào mã này</strong> · {label(status)}</p>
       {canShowQr && remain && <p className={styles.paymentDeadline}>{remain}</p>}
     </div>
   );
@@ -85,7 +85,7 @@ export function PaymentPanel({ order, showQr = true }: { order: Row; showQr?: bo
           <div className={styles.paymentBody}>
             {paymentHeading}
             <dl className={styles.paymentDetails}>
-              <div><dt>Số tiền thử nghiệm</dt><dd>{money(payment.amount)}</dd></div>
+              <div><dt>Số tiền hiển thị</dt><dd>{money(payment.amount)}</dd></div>
               <div><dt>Nội dung chuyển khoản</dt><dd>{content}</dd></div>
               <div><dt>Tài khoản nhận</dt><dd>{String(payment.bankAccount)}{payment.bankName ? ` · ${String(payment.bankName)}` : ""}</dd></div>
             </dl>
@@ -117,7 +117,7 @@ export function PaymentPanel({ order, showQr = true }: { order: Row; showQr?: bo
     <div className="store-payment">
       {paymentHeading}
       {expired && <p role="status">Phiên VietQR đã hết hạn. Hệ thống đang cập nhật trạng thái đơn hàng.</p>}
-      {pending && !expired && !showQr && <p>Đang chờ khách hàng thanh toán VietQR. {remain}</p>}
+      {pending && !expired && !showQr && <p>{remain}</p>}
       {pStatus === "PENDING" && !pending && <p>{order.paymentStatus === "PAID" ? "Đơn hàng đã được ghi nhận thanh toán." : "Đơn hàng không còn chờ thanh toán."}</p>}
       {pStatus === "PAID" && (
         <p>

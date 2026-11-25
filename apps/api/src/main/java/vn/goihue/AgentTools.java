@@ -89,8 +89,8 @@ public class AgentTools {
                 Map.of("subtotal", Map.of("type", "integer", "minimum", 0, "maximum", 100000000)), List.of()),
             definition("lookup_order", "Tra đúng mã GH-XXXXXXXX thuộc khách đã đăng nhập. Quyền chủ sở hữu do backend xác định. Hỏi mã đơn trước khi tra cứu.",
                 Map.of("number", Map.of("type", "string", "pattern", "^GH-[A-Fa-f0-9]{8}$")), List.of("number")),
-            definition("get_policy", "Đọc chính sách bảo mật theo phiên bản hoặc thông báo đổi trả dự thảo cùng trang nguồn. Giữ nhãn DRAFT trong câu trả lời.",
-                Map.of("topic", Map.of("type", "string", "enum", List.of("privacy", "returns"))), List.of("topic")),
+            definition("get_policy", "Đọc chính sách công khai đang áp dụng về quyền riêng tư, đặt hàng hoặc đổi trả. Trích đúng nội dung, phiên bản và liên kết nguồn.",
+                Map.of("topic", Map.of("type", "string", "enum", List.of("privacy", "shipping", "returns"))), List.of("topic")),
             definition("get_memory", "Đọc ngân sách, người nhận và dịp tặng mà khách cho phép ghi nhớ. Trả rỗng khi chưa đồng ý hoặc chưa đăng nhập.", Map.of(), List.of())
         );
     }
@@ -405,14 +405,20 @@ public class AgentTools {
     }
 
     private Result policy(String topic) {
-        app.require(Set.of("privacy", "returns").contains(topic), "Chính sách không hợp lệ.");
-        if (topic.equals("returns")) {
-            String text = "Chính sách đổi trả hiện là bản dự thảo chờ phê duyệt. Xem điều kiện và thời hạn đề xuất tại [Chính sách đổi trả](/return-policy).";
-            return new Result(Map.of("status", "DRAFT", "version", "return-1.0-draft", "url", "/return-policy", "notice", text), text, "Chính sách đổi trả · return-1.0-draft · DRAFT · /return-policy", List.of());
-        }
-        var data = (Map<?, ?>) app.policy();
-        var result = Map.<String, Object>of("version", data.get("version"), "status", data.get("status"), "content", data.get("content"), "url", "/privacy-policy");
-        return new Result(result, "Chính sách bảo mật phiên bản " + data.get("version") + " có trạng thái " + data.get("status") + ". Xem [Chính sách bảo mật](/privacy-policy).", "Chính sách bảo mật · " + data.get("version") + " · " + data.get("status"), List.of());
+        app.require(Set.of("privacy", "shipping", "returns").contains(topic), "Chính sách không hợp lệ.");
+        var data = app.publishedPolicy(topic);
+        String url = switch (topic) {
+            case "privacy" -> "/privacy-policy";
+            case "shipping" -> "/shipping-payment-policy";
+            default -> "/return-policy";
+        };
+        String title = app.str(data, "title");
+        String version = app.str(data, "version");
+        String content = app.str(data, "content");
+        return new Result(Map.of("topic", topic, "title", title, "version", version,
+                "status", data.get("status"), "content", content, "url", url),
+                "[" + title + "](" + url + ") · Phiên bản " + version + "\n\n" + content,
+                title + " · " + version, List.of());
     }
 
     List<Call> fallbackPlan(String message, Map<String, Object> slots, boolean giftContext) {
@@ -420,7 +426,11 @@ public class AgentTools {
         var calls = new ArrayList<Call>();
         var order = Pattern.compile("(?i)\\bGH-[a-f0-9]{8}\\b").matcher(message);
         if (order.find()) calls.add(new Call("lookup_order", Map.of("number", order.group())));
-        if (text.contains("ship") || text.contains("van chuyen") || text.contains("phi giao") || text.contains("giao hang")) calls.add(new Call("get_shipping", Map.of()));
+        if (text.contains("chinh sach") && (text.contains("giao hang") || text.contains("van chuyen") || text.contains("thanh toan") || text.contains("dat hang"))) {
+            calls.add(new Call("get_policy", Map.of("topic", "shipping")));
+        } else if (text.contains("ship") || text.contains("van chuyen") || text.contains("phi giao") || text.contains("giao hang")) {
+            calls.add(new Call("get_shipping", Map.of()));
+        }
         if (text.contains("doi tra") || text.contains("tra hang") || text.contains("hoan tien")) calls.add(new Call("get_policy", Map.of("topic", "returns")));
         if (text.contains("bao mat") || text.contains("rieng tu")) calls.add(new Call("get_policy", Map.of("topic", "privacy")));
         if (text.contains("ghi nho") || text.contains("so thich")) calls.add(new Call("get_memory", Map.of()));

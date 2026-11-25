@@ -7,9 +7,10 @@ async function proxy(
 ) {
   const path = (await ctx.params).path.join("/");
   const webhook = path === "payments/sepay/webhook" && req.method === "POST";
-  const guestApi = /^guest\/(commerce|cart\/(summary|merge)|orders\/(lookup|latest|GH-[A-Z0-9]{8}))$/u.test(path);
+  const guestApi = /^guest\/(commerce|cart\/(summary|merge)|orders\/(lookup|latest|GH-[A-Z0-9]{8}(?:\/support)?))$/u.test(path);
   if (
     !guestApi &&
+    !/^(?:policy\/(?:privacy|shipping|returns)|admin\/support(?:\/[a-f0-9-]{36})?)$/u.test(path) &&
     !/^orders\/[a-f0-9-]{36}\/reorder(?:\/preview)?$/u.test(path) &&
     !/^(policy|state|password|command|commerce|agent\/(chat|consent|history)|recommendations\/consent|payments\/sepay\/webhook|cart(?:\/summary)?|shipping|discounts|pricing|categories|products(?:\/[a-z0-9-]+)?|admin\/(products|categories|discounts|pricing)|catalog\/images\/[a-f0-9-]{36}(?:\/content)?|auth\/(login|register|logout)|evidence\/intents|evidence\/[a-f0-9-]{36}\/content|privacy\/[a-f0-9-]{36}\/export)$/u.test(
       path,

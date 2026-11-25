@@ -9,11 +9,13 @@
 .heroCopy > :global(.gh-kicker) { margin: 0 0 14px; }
 .hero h1 { margin: 0 0 18px; color: var(--nau-dam); font: 600 clamp(2rem, 4.2vw, 3.5rem)/1.22 var(--chu-de); letter-spacing: -.025em; text-wrap: balance; }
 .hero p.lead { max-width: 58ch; margin: 0; color: var(--phu); font-size: 1rem; line-height: 1.8; }
+.version { margin: 12px 0 0; color: var(--phu); font-size: .8125rem; }
+.unavailable { padding: 24px; border: 1px solid var(--vien); background: var(--paper-face); }
 .seal { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; width: 132px; height: 148px; flex-shrink: 0; margin-right: 24px; color: var(--nau); border: 1px solid var(--mat); outline: 1px solid var(--vien); outline-offset: 5px; border-radius: 70px 70px 4px 4px; background: var(--paper-face); }
 .seal span { font-size: .625rem; font-weight: 600; letter-spacing: .15em; }
 .seal svg { width: 48px; height: 48px; stroke: var(--nau); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 .seal svg path + path { stroke: var(--mat); stroke-width: 2; }
-.policyTabs { display: flex; gap: 32px; border-bottom: 1px solid var(--vien); margin-bottom: 36px; }
+.policyTabs { display: flex; flex-wrap: wrap; gap: 0 32px; border-bottom: 1px solid var(--vien); margin-bottom: 36px; }
 .policyTabs a { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 52px; padding: 0 2px 12px; margin-bottom: -1px; border-bottom: 2px solid transparent; color: var(--phu); font-size: .875rem; text-decoration: none; }
 .policyTabs a[aria-current] { color: var(--nau-dam); border-bottom-color: var(--nau-dam); font-weight: 600; }
 .policyTabs a:hover { color: var(--nau-dam); }
@@ -33,17 +35,10 @@
 .backToTop:hover { color: var(--nau-dam); }
 .support { padding: 24px; background: var(--nau-cung-dinh); color: var(--kem); position: relative; }
 .support::before { content: ""; position: absolute; inset: 5px; border: 1px solid var(--mat); opacity: .55; pointer-events: none; }
-.support p.eyebrow { margin: 0 0 10px; color: var(--mat-sang); font-size: .625rem; letter-spacing: .1em; text-transform: uppercase; }
 .support h2 { color: var(--kem); margin: 0 0 10px; font: 500 1.125rem/1.5 var(--chu-de); }
-.support p { color: var(--kem-dam); margin: 0 0 18px; font-size: .8125rem; line-height: 1.8; }
 .support a { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; border-top: 1px solid color-mix(in srgb, var(--mat) 40%, transparent); padding-top: 12px; color: var(--mat-sang); font-size: .8125rem; text-decoration: none; }
 .support a:hover { color: var(--kem); }
 .document { min-width: 0; }
-.draftNotice { border-left: 2px solid var(--mat); padding: 2px 0 2px 20px; margin-bottom: 28px; }
-.draftBadge { display: inline-block; padding: 4px 8px; border: 1px solid var(--vien); color: var(--nau-dam); background: var(--kem-dam); font-size: .625rem; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; }
-.draftNotice > p { margin: 8px 0 0; color: var(--phu); font-size: .8125rem; line-height: 1.7; }
-.metadata { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 8px; color: var(--phu); font-size: .75rem; }
-.metadata button { min-height: 36px; border: 0; padding: 4px 8px; background: transparent; color: var(--nau-dam); font: inherit; text-decoration: underline; cursor: pointer; }
 .paper { border: 1px solid var(--vien); background: var(--paper-face); padding: 0 clamp(24px, 3.5vw, 48px) 32px; box-shadow: var(--shadow-card); position: relative; }
 .paper::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: var(--mat); }
 .article { padding: 32px 0; scroll-margin-top: var(--policy-anchor-offset, 16px); }
@@ -55,20 +50,16 @@
 .copy p { margin: 0 0 16px; }
 .copy p:last-child { margin-bottom: 0; }
 .copy strong { color: var(--nau-dam); font-weight: 600; }
-.copy h3 { color: var(--nau-dam); font: 600 .875rem/1.6 var(--chu-doc); margin: 0 0 8px; }
 .copy a { color: var(--nau-dam); font-weight: 600; text-decoration: underline; }
 .copy ul { padding-left: 20px; margin: 16px 0; }
 .copy li { padding-left: 4px; margin-block: 8px; }
 .copy li::marker { color: var(--nau); }
-.copy .detailGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-block: 18px; }
 .copy .note { padding: 18px 20px; background: var(--kem-am); border: 1px solid var(--vien); margin-block: 14px; }
-.copy .detailGrid .note { margin: 0; }
 .copy .note p { margin-top: 8px; font-size: .8125rem; }
-.copy .note > div + div { margin-top: 12px; }
 .documentEnd { display: flex; align-items: center; justify-content: center; gap: 14px; color: var(--nau); font-size: .875rem; }
 .documentEnd span { height: 1px; flex: 1; background: var(--vien); }
-.signature { margin: 18px 0 0; color: var(--phu); text-align: center; font: italic 400 .8125rem/1.8 var(--chu-de); }
-.documentAction { display: flex; align-items: center; justify-content: center; gap: 16px; min-height: 48px; margin: 16px auto 0; width: fit-content; max-width: 100%; padding: 8px 18px; border: 1px solid var(--nau); background: var(--kem-am); color: var(--nau-dam); font-size: .8125rem; font-weight: 600; text-decoration: none; }
+.documentActions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 16px; }
+.documentAction { display: flex; align-items: center; justify-content: center; gap: 16px; min-height: 48px; max-width: 100%; padding: 8px 18px; border: 1px solid var(--nau); background: var(--kem-am); color: var(--nau-dam); font-size: .8125rem; font-weight: 600; text-decoration: none; }
 .documentAction:hover { background: var(--kem-dam); }
 .page :is(a, button):focus-visible { outline: 2px solid var(--nau); outline-offset: 4px; }
 @media (max-width: 1100px) {
@@ -95,19 +86,18 @@
   .hero h1 { font-size: 2rem; margin-bottom: 14px; }
   .hero p.lead { font-size: .875rem; }
   .seal { display: none; }
-  .policyTabs { gap: 20px; margin-bottom: 24px; }
-  .policyTabs a { flex: 1; font-size: .75rem; gap: 8px; }
+  .policyTabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 24px; }
+  .policyTabs a { justify-content: flex-start; font-size: .75rem; line-height: 1.4; }
+  .policyTabs a span { display: none; }
   .contents { padding: 18px 14px 12px; }
   .contents ol { grid-template-columns: minmax(0, 1fr); padding-top: 10px; gap: 0; }
   .contents li a { padding-block: 9px; }
   .contents a.backToTop { display: none; }
   .layout { gap: 24px; }
-  .draftNotice { padding-left: 14px; margin-bottom: 22px; }
   .paper { padding: 0 20px 24px; }
   .article { padding-block: 26px; }
   .articleHeading { gap: 12px; margin-bottom: 14px; }
   .copy { font-size: .8125rem; }
-  .copy .detailGrid { grid-template-columns: minmax(0, 1fr); }
   .copy .note { padding: 16px; }
 }
 @media (prefers-reduced-motion: reduce) { .contents li a { transition: none; } }

@@ -24,7 +24,18 @@ Các thao tác ghi của trình duyệt yêu cầu Origin tin cậy và same-ori
 | POST guest/orders/lookup | Cần mã đơn và mã tra cứu. Trả 404 chung khi không có quyền; giới hạn số lần thử, vượt giới hạn trả 429. Thành công cấp cookie riêng, giới hạn đúng một đơn và có hiệu lực 30 phút. |
 | GET guest/orders/{number} | Cookie giỏ ban đầu hoặc quyền tra cứu của đúng đơn. Chỉ trả sản phẩm, số tiền, trạng thái và mã vận đơn. Mã QR chỉ trả khi còn chờ thanh toán và còn hạn. Phản hồi bỏ địa chỉ, điện thoại, ghi chú nội bộ và thông tin đối soát. |
 
-Cookie giỏ HttpOnly/SameSite Strict, thời hạn 7 ngày kể từ lần cập nhật giỏ cuối. Bật Secure theo cấu hình HTTPS hiện tại. Mã tra cứu lưu dạng hash và cấp lại chỉ cho trình duyệt có phiên giỏ ban đầu. Tác vụ dọn phiên xóa giỏ hết hạn và quyền truy cập tạm thời. Đơn hàng và dữ liệu giao hàng được giữ theo chính sách lưu trữ giao dịch của cửa hàng. Luồng quản trị nhận đơn khách với `customerType=GUEST`. Khách có thể xem đơn gần nhất hoặc mở đơn bằng mã tại `/tra-cuu-don-hang`. VietQR trên luồng này là demo.
+Cookie giỏ HttpOnly/SameSite Strict, thời hạn 7 ngày kể từ lần cập nhật giỏ cuối. Bật Secure theo cấu hình HTTPS hiện tại. Mã tra cứu lưu dạng hash và cấp lại chỉ cho trình duyệt có phiên giỏ ban đầu. Tác vụ dọn phiên xóa giỏ hết hạn và quyền truy cập tạm thời. Luồng quản trị nhận đơn khách với `customerType=GUEST`. Khách có thể xem đơn gần nhất hoặc mở đơn bằng mã tại `/tra-cuu-don-hang`. VietQR trên luồng này là demo.
+
+### Hỗ trợ đơn vãng lai
+
+| Endpoint | Quyền | Kết quả |
+| --- | --- | --- |
+| GET /guest/orders/{number}/support | Phiên gốc của đơn hoặc cookie tra cứu còn hạn cho đúng đơn | Tối đa 30 hồ sơ gần nhất, có phản hồi. Thiếu quyền hoặc sai đơn trả 404. |
+| POST /guest/orders/{number}/support | Cùng quyền xem đơn, Origin hợp lệ và Idempotency-Key | Gắn hồ sơ với ID đơn lấy phía server, trạng thái SUBMITTED. Một hồ sơ đang mở trên mỗi chủ đề. Gửi lại cùng khóa/nội dung lấy hồ sơ đã lưu, khóa trùng với nội dung khác trả 409. Phạm vi gồm giao nhận, đổi trả, dữ liệu cá nhân và vấn đề khác. Giới hạn số lần gửi trả 429. |
+| GET /admin/support | ADMIN, order.manage | Danh sách phân trang 30 hồ sơ. Lọc trạng thái và mã đơn. |
+| PUT /admin/support/{id} | ADMIN, order.manage và Origin hợp lệ | Gửi phản hồi công khai cho người xem được đơn, chuyển IN_REVIEW hoặc RESOLVED. Revision cũ trả 409. Hồ sơ đã đóng chỉ đọc. Nhật ký ghi tác nhân và mã hồ sơ. |
+
+Hộp tiếp nhận đặt tại `/admin/support`. Khách xem phản hồi tại chi tiết đơn đã xác minh. Yêu cầu đổi trả/dữ liệu của khách vãng lai được chuyển để xử lý thủ công. Quyền tra cứu đơn chỉ cho phép tiếp nhận yêu cầu, còn chủ thể dữ liệu cần được xác minh riêng trước khi cung cấp hay xóa dữ liệu. Quản trị viên tránh đưa mã tra cứu, chứng từ nhạy cảm hoặc dữ liệu cá nhân vào phản hồi mà người có quyền tra cứu đơn có thể đọc.
 
 ### API của cửa hàng và tài khoản
 
@@ -120,7 +131,7 @@ COD hiển thị khoản phải thu khi giao và thời điểm thu sau khi ghi 
 | privacy-create | type ACCESS/EXPORT/DELETE/RESTRICT/COMPLAINT, description≤2000 | CUSTOMER |
 | privacy-update | id, revision, status, note≤2000 | ADMIN; state machine bên dưới |
 | privacy-supplement | id, revision, note | Owner, hồ sơ chưa kết thúc |
-| return-create | orderId, lineId (productId snapshot), quantity, reason WRONG_ITEM/MISSING_ITEM/DAMAGED/UNSAFE/QUALITY, resolution REFUND/REPLACEMENT, description, evidenceIds≤5 | CUSTOMER/đơn DELIVERED; kiểm cửa sổ 7 ngày dự thảo, ngoại lệ UNSAFE/QUALITY; tổng quantity của case chưa reject không vượt lượng mua theo line |
+| return-create | orderId, lineId (productId snapshot), quantity, reason WRONG_ITEM/MISSING_ITEM/DAMAGED/UNSAFE/QUALITY, resolution REFUND/REPLACEMENT, description, evidenceIds≤5 | CUSTOMER/đơn DELIVERED; kiểm thời hạn 7 ngày kể từ khi ghi nhận giao hàng, ngoại lệ UNSAFE/QUALITY; tổng quantity của case chưa reject không vượt lượng mua theo line |
 | return-update | id, revision, status, note; duyệt thêm approvedQuantity/resolution/returnRequired; kiểm hàng thêm disposition; hoàn tất thêm reference≤200 | ADMIN |
 | return-supplement | id, revision, note, evidenceIds tùy chọn | Owner, case chưa kết thúc; ảnh phải thuộc owner/đã upload thành công, không trùng và tổng ảnh của case tối đa 5; EVIDENCE_REQUIRED chuyển lại REVIEWING |
 
@@ -191,7 +202,7 @@ Trang `/account/orders?order={id}` tự mở chi tiết đơn vừa đặt, hi�
 | 409 | Phiên bản/key thay đổi; người dùng tải lại |
 | 422 | Lỗi điều kiện nghiệp vụ an toàn |
 | 503 BFF | Backend chưa kết nối, thông báo thử lại |
-| Policy | Dự thảo chờ phê duyệt, không có ngày hiệu lực bịa đặt |
+| Policy | Website và chatbot đọc nội dung và mã của phiên bản đang công bố. Bản nháp chỉ có trong Admin. |
 | Evidence | Ảnh private, xem trực tiếp khi click; trả 404 nếu thiếu tệp và giao diện hiển thị trạng thái không có ảnh; chưa có antivirus |
 
 Error từ backend gồm code, message, requestId. BFF có thể trả message riêng khi route/origin/size/upstream lỗi. Không chạy test nghiệp vụ trong lần chuyển khung theo yêu cầu người dùng.
@@ -223,9 +234,10 @@ Trang nhật ký ADMIN hiển thị tối đa 200 sự kiện gần nhất. Có 
 
 ### Public policy presentation
 
-- Privacy and returns pages share storefront paper, brown/gold colors, typography, policy navigation and responsive article layout. Contents anchors indicate the section currently being read. Draft status remains visible on both pages.
-- Privacy version metadata: loading displays a loading message; success displays the API version; a missing version is explicit; a failed request leaves the policy copy readable and provides a retry action. No placeholder version or update date is presented as API data.
-- Sidebar links retain authenticated account destinations. On mobile the contents appear above the document in an expandable menu, collapsed initially. Anchor offsets follow the responsive storefront header.
+- Privacy, ordering/payment/shipping and returns pages share the storefront design and a responsive table of contents. The payment policy identifies COD as the supported way to pay and explains that the QR shown on the site does not accept real transfers.
+- `GET /policy/{topic}` returns the same published Markdown, version and publication timestamp used by both the public page and `get_policy` in the shopping advisor. Legacy `GET /policy` returns the published privacy document. A missing or unavailable document displays a retry option on the storefront.
+- Admin edits drafts at `/admin/policies`. `policy` creates a new version (topic, version, content) or updates an existing draft with its ID and revision. `policy-publish` takes the selected version ID and revision plus the current published ID. Publication atomically supersedes the old version and can restore a previous version. Published content is immutable. V5 seeds three version 1.0 policies from the storefront copy and preserves legacy privacy drafts for viewing or copying.
+- The footer and checkout link to all three policies. Checkout opens policy links in a new tab so customers can continue filling in the form. The three public policies link to the support section of verified guest orders. Authenticated return processing remains available from the customer's own order.
 
 
 ## GA4 safe commerce snapshots (23 November 2026)

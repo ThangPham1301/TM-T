@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
+import type { PolicyVersion } from "./policies";
 
 export type Row = { id: string; [key: string]: unknown };
 export type StoreState = {
@@ -20,7 +21,7 @@ export type StoreState = {
   returns: Row[];
   consents: Row[];
   policy: Row;
-  policyVersions?: Row[];
+  policyVersions?: PolicyVersion[];
   audit?: Row[];
   cartCount: number;
 };
@@ -108,8 +109,9 @@ for (const [k, v] of Object.entries(windows1252Map)) {
   cp1252RevMap[v] = Number(k);
 }
 
-export function cleanText(str: unknown): string {
-  if (typeof str !== "string" || !str) return String(str ?? "");
+export function cleanText(value: unknown): string {
+  if (typeof value !== "string" || !value) return String(value ?? "");
+  const str = value.normalize("NFC");
   if (!/[\u00C0-\u00FF\u0100-\u017E\u2010-\u203A]/.test(str)) return str;
   try {
     const bytes: number[] = [];
@@ -125,7 +127,7 @@ export function cleanText(str: unknown): string {
     }
     return new TextDecoder("utf-8", { fatal: true }).decode(
       new Uint8Array(bytes),
-    );
+    ).normalize("NFC");
   } catch {
     return str;
   }

@@ -8,6 +8,84 @@ servers:
 security:
   - Session: []
 paths:
+  /guest/orders/{number}/support:
+    parameters:
+      - {in: path, name: number, required: true, schema: {type: string, pattern: '^GH-[A-Z0-9]{8}$'}}
+    get:
+      operationId: listGuestOrderSupport
+      security: []
+      description: Requires the original guest order session or a valid HttpOnly access grant scoped to this exact order.
+      responses:
+        '200':
+          description: Up to 30 latest support requests and replies for the verified order
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/GuestSupportTicket'}}
+        '404': {$ref: '#/components/responses/Error'}
+    post:
+      operationId: submitGuestOrderSupport
+      security: []
+      description: Same order proof as GET and trusted Origin. A retry with the same key and content returns the existing ticket. Only one open ticket per order and topic.
+      parameters:
+        - {$ref: '#/components/parameters/Idempotency'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [topic, message]
+              properties:
+                topic: {type: string, enum: [DELIVERY, RETURNS, PRIVACY, OTHER]}
+                message: {type: string, minLength: 1, maxLength: 2000}
+      responses:
+        '200':
+          description: Saved support ticket
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GuestSupportTicket'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+  /admin/support:
+    get:
+      operationId: listGuestSupportInbox
+      description: ADMIN with order.manage. Tickets include orderNumber. No lookup secrets or recipient details are returned.
+      parameters:
+        - {in: query, name: status, schema: {type: string, enum: [ALL, SUBMITTED, IN_REVIEW, RESOLVED], default: SUBMITTED}}
+        - {in: query, name: page, schema: {type: integer, minimum: 0, maximum: 10000, default: 0}}
+        - {in: query, name: number, schema: {type: string, pattern: '^GH-[A-Z0-9]{8}$'}}
+      responses:
+        '200': {description: Items and hasMore for a page of up to 30 tickets}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+  /admin/support/{id}:
+    put:
+      operationId: respondToGuestSupport
+      description: ADMIN with order.manage, trusted Origin and current revision. Saves a guest-visible response. A closed request cannot be changed.
+      parameters:
+        - {$ref: '#/components/parameters/Id'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, reply, revision]
+              properties:
+                status: {type: string, enum: [IN_REVIEW, RESOLVED]}
+                reply: {type: string, minLength: 1, maxLength: 2000}
+                revision: {type: integer, minimum: 1}
+      responses:
+        '200': {description: Updated support ticket}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
   /orders/{id}/reorder/preview:
     post:
       operationId: previewOrderReorder
@@ -592,11 +670,25 @@ paths:
         '401': {$ref: '#/components/responses/Error'}
   /policy:
     get:
-      operationId: currentDraftPolicy
-      summary: Current draft policy
+      operationId: currentPrivacyPolicy
+      summary: Current published privacy policy (legacy path)
       security: []
       responses:
-        '200': {description: 'Latest DRAFT privacy policy'}
+        '200': {description: Same document and version as GET /policy/privacy}
+  /policy/{topic}:
+    get:
+      operationId: publishedPolicy
+      summary: Current published policy with its exact version and Markdown content
+      security: []
+      parameters:
+        - {in: path, name: topic, required: true, schema: {type: string, enum: [privacy, shipping, returns]}}
+      responses:
+        '200':
+          description: The published document read by the storefront and advisor. Drafts are available in ADMIN state only.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PublishedPolicy'}
+        '404': {$ref: '#/components/responses/Error'}
   /auth/{action}:
     post:
       operationId: authenticate
@@ -756,7 +848,11 @@ paths:
                 - {$ref: '#/components/schemas/Mutation'}
                 - type: object
                   properties:
-                    action: {type: string, enum: [profile, address-save, address-delete, consent, policy, privacy-create, privacy-update, privacy-supplement, return-create, return-submit, return-update, return-supplement, return-confirm, return-withdraw]}
+                    action: {type: string, enum: [profile, address-save, address-delete, consent, policy, policy-publish, privacy-create, privacy-update, privacy-supplement, return-create, return-submit, return-update, return-supplement, return-confirm, return-withdraw]}
+                    topic: {type: string, enum: [privacy, shipping, returns], description: Policy topic for draft creation or edit. Omitted defaults to privacy for legacy clients.}
+                    version: {type: string, maxLength: 40, description: Unique for the policy topic. Immutable when editing an existing draft.}
+                    content: {type: string, maxLength: 16000, description: Policy draft Markdown. To edit send its id and revision.}
+                    publishedId: {type: string, format: uuid, description: Current published record ID to acknowledge before policy-publish. Also send the candidate id and revision.}
                     isDefault: {type: boolean, description: Optional address-save flag; updates to other default addresses increment their revisions.}
       responses:
         '200': {description: 'Persisted record or acknowledgement'}
@@ -956,6 +1052,30 @@ components:
         unitsPerRecipient: {type: integer, minimum: 1, maximum: 100, default: 1}
         shippingInBudget: {type: string, enum: [UNSPECIFIED, INCLUDED, EXCLUDED], default: UNSPECIFIED}
         selectionMode: {type: string, enum: [ANY, SAME, DIFFERENT], default: ANY}
+    GuestSupportTicket:
+      type: object
+      required: [id, topic, status, message, reply, revision, createdAt, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        topic: {type: string, enum: [DELIVERY, RETURNS, PRIVACY, OTHER]}
+        status: {type: string, enum: [SUBMITTED, IN_REVIEW, RESOLVED]}
+        message: {type: string}
+        reply: {type: string}
+        revision: {type: integer}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    PublishedPolicy:
+      type: object
+      required: [id, topic, title, version, status, content, revision, publishedAt]
+      properties:
+        id: {type: string, format: uuid}
+        topic: {type: string, enum: [privacy, shipping, returns]}
+        title: {type: string}
+        version: {type: string}
+        status: {type: string, enum: [PUBLISHED]}
+        content: {type: string, maxLength: 16000}
+        revision: {type: integer}
+        publishedAt: {type: string, format: date-time}
     Mutation:
       type: object
       required: [action]
