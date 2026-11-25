@@ -2,6 +2,59 @@
 
 Ứng dụng dùng Docker Compose với ba service `web`, `api`, `db`. Repository đã có `compose.coolify.yml` chứa cấu hình HTTPS, WebSocket, chatbot và dữ liệu bền vững. Domain dự kiến là `https://goihue.io.vn`.
 
+## Nâng cấp deployment đang chạy — 25/11/2026
+
+Đợt này gồm sửa chatbot hỏi lặp số người nhận quà và đồng bộ UI cart, gợi ý, checkout, chính sách, bảo mật và quyền riêng tư admin. **Rebuild cả `api` và `web` từ cùng commit trên `main`**. Restart container cũ sẽ không lấy được source/prompt/CSS mới.
+
+### Chuẩn bị trước khi redeploy
+
+1. Giữ application hiện có trên Coolify; ghi lại commit/image đang chạy và tên hai volume `database`, `evidence`. Không tạo application/database mới cho lần nâng cấp này.
+2. Sao lưu PostgreSQL và thư mục `/data` của API ra ngoài container, lưu ở nơi riêng tư ngoài repository. Kiểm tra file backup có thể đọc trước khi tiếp tục. Ví dụ trên **SSH/Linux**, thay tên container bằng tên thực tế của application hiện tại:
+
+   ```bash
+   umask 077
+   DB_CONTAINER='replace-with-current-db-container-name'
+   API_CONTAINER='replace-with-current-api-container-name'
+   docker exec "$DB_CONTAINER" pg_dump -U goihue -d goihue -Fc > goihue-before-release.dump
+   docker exec -i "$DB_CONTAINER" pg_restore --list < goihue-before-release.dump > goihue-before-release.list
+   docker cp "${API_CONTAINER}:/data" ./goihue-evidence-before-release
+   ```
+
+   Giữ bản sao ngoài VPS theo quy trình backup đang dùng. Không chạy `down --volumes`, xóa volume hoặc restore dữ liệu local đè lên VPS khi redeploy.
+3. Không có biến môi trường/API key/secret mới trong đợt này. Giữ `DB_PASSWORD`, thông tin admin, cặp AWS credentials và `APP_SEPAY_SECRET` hiện có. Không đổi mật khẩu database chỉ bằng cách thay environment trên volume cũ.
+4. Kiểm tra `APP_PUBLIC_ORIGINS` khớp origin khách thực sự truy cập, ví dụ `https://goihue.io.vn`; nếu phục vụ thêm `www`, thêm `https://www.goihue.io.vn` và cấu hình domain tương ứng. Compose truyền giá trị này cho cả BFF và API, đồng thời bật cookie Secure.
+5. Giữ `NEXT_PUBLIC_RECOMMENDATIONS_ENABLED=true`, `NEXT_PUBLIC_AI_CHAT_ENABLED=true` để demo. `NEXT_PUBLIC_GA_ENABLED` và `NEXT_PUBLIC_GA_MEASUREMENT_ID` cũng là build args; thay các biến `NEXT_PUBLIC_*` cần rebuild `web`. Secret AWS/SePay chỉ thuộc runtime của `api`, không đưa vào build args hoặc biến `NEXT_PUBLIC_*`.
+
+### Redeploy và migration
+
+- Trong application hiện có: source branch `main`, Base Directory `/`, Compose Location `/compose.coolify.yml`; domain HTTPS trỏ service `web`, cổng nội bộ `3000`. API/DB giữ trong mạng nội bộ. Với ứng dụng Git/Compose, source file trong repository là cấu hình gốc. [Coolify Docker Compose](https://coolify.io/docs/applications/builds/docker-compose)
+- Redeploy commit vừa push, build cả API/web và giữ nguyên volumes. Nếu bật auto deploy theo `main`, thao tác push có thể tự khởi động deployment; kiểm tra Deployment Logs để biết trạng thái thực tế.
+- Riêng các sửa UI/chatbot của đợt này không thêm migration. Tuy nhiên `main` đã có `V5__guest_support_and_policies.sql`; VPS chưa nhận commit hỗ trợ khách vãng lai/chính sách sẽ chạy migration còn thiếu khi API khởi động. Không sửa checksum hay đánh dấu migration hoàn tất thủ công.
+- Chờ API khởi động/migration xong và healthcheck `web` đạt. Healthcheck gọi phí ship qua BFF/API; khi API chưa sẵn sàng, giữ trạng thái lỗi/chờ, không thay bằng dữ liệu mẫu.
+- Kiểm tra log không có migration failure, lỗi kết nối DB hay thiếu credentials. Kiểm tra domain thật sau deploy; các ghi nhận DNS/Cloudflare ở phần hướng dẫn ban đầu bên dưới là lịch sử, không phải kết luận cho deployment hiện tại.
+
+### Kiểm tra sau deploy
+
+Chạy bằng Python 3.11+ trên máy có source đã cập nhật, không cần SSH hay mật khẩu:
+
+```bash
+python scripts/check-deployment.py --base-url https://goihue.io.vn
+```
+
+Script chỉ GET catalog, danh mục, phí ship, gợi ý, chính sách đã công bố, các trang công khai và JS/CSS build. Kiểm tra schema, sản phẩm gợi ý thuộc catalog, giữ xác minh TLS và trả exit code khác 0 nếu lỗi; không tạo giỏ/đơn, không gọi model, không gửi webhook và không gửi sự kiện GA qua trình duyệt. Catalog rỗng hoặc checkout đang tạm dừng được báo cảnh báo riêng. Script này **không chứng minh** commit đang chạy đúng nếu deployment vẫn phục vụ một bản cũ hợp lệ; đối chiếu SHA trong Coolify Deployment Logs.
+
+Sau đó kiểm tra bằng trình duyệt trên domain thật:
+
+1. Đăng nhập lại và kiểm tra WSS `/api/store/live` nhận 101, cookie Secure và phiên vẫn còn sau reload.
+2. Giỏ có hàng: tăng/giảm số lượng, mở rồi hủy xóa giỏ, gợi ý dạng thẻ nhỏ, tổng tiền/ship chính xác. Kiểm tra điện thoại: nút chat nằm trên thanh thanh toán/điều hướng, không còn nhãn ngang.
+3. Menu Bộ sưu tập không còn mục “Sản phẩm nổi bật”; vẫn vào được danh mục, gợi ý và toàn bộ sản phẩm. Admin xem `/admin/policies`, `/admin/privacy`, `/account/security`; đổi mục chính sách nhưng không cần công bố lại nội dung hay đổi mật khẩu thật để thử UI.
+4. Hội thoại mới: “Tư vấn quà tặng mẹ dưới 200k” → “Tặng mỗi mẹ thôi”. Trợ lý giữ ngân sách, tư vấn cho một người và không hỏi lặp số người. Kiểm tra nhãn provider để xác nhận Bedrock thực sự chạy; smoke script không xác minh AWS credentials/model.
+5. Dùng tài khoản demo riêng để kiểm tra consent/lịch sử, COD và một đơn VietQR trong SePay Test mode. Kiểm tra delivery HMAC và trạng thái đơn trên UI; không dùng khoản chuyển tiền thật để thử.
+
+### Nếu cần rollback
+
+Giữ thông tin commit/image cũ trước deploy. Khi code mới lỗi, redeploy **cả API và web** về phiên bản đã biết hoạt động, giữ nguyên volumes và credentials, rồi chạy lại các bước kiểm tra. Rollback code không rollback database hay các đơn vừa phát sinh. Nếu lỗi liên quan migration/dữ liệu, dừng thao tác ghi mới và xác minh phương án khôi phục trên database riêng trước khi chuyển; không tự restore backup đè dữ liệu đang nhận đơn.
+
 ## 1. Tạo ứng dụng trên Coolify
 
 1. Đưa commit đã kiểm tra lên Git và chọn đúng repository/branch trong Coolify.

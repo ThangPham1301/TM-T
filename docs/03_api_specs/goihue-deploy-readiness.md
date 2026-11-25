@@ -1,5 +1,19 @@
 # Gói Huế — kiểm tra trước deploy
 
+## Đợt chuẩn bị redeploy ngày 25/11/2026
+
+Phạm vi: sửa tư vấn quà cho một người không hỏi lặp số người, giữ ngân sách/ngữ cảnh; đồng bộ cart, rail gợi ý, checkout, chính sách và bảo mật/quyền riêng tư admin; bỏ mục menu trùng và nhãn ngang cạnh nút chat. Rebuild cả `api` và `web`. Không thêm secret hay migration trong các sửa này; nếu VPS chưa cập nhật `main`, migration V5 hỗ trợ khách vãng lai/chính sách vẫn cần được áp dụng tự động.
+
+- API Docker build: đạt; web production build/typecheck: đạt; frontend lint: 0 lỗi, 4 cảnh báo có sẵn.
+- `scripts/test-agent-demo.py`: **153/153 đạt** với database riêng, bao gồm câu “Tặng mỗi mẹ thôi”, model tự gọi planner không cần thiết, context/budget và consent. Đây là kiểm tra protocol fixture; không thay kiểm chứng AWS credentials trên VPS.
+- `scripts/test-system-demo.py`: **50/50 đạt** qua HTTPS proxy, BFF, API và database riêng, gồm checkout/COD/VietQR, HMAC, WSS, phiên và phân quyền. Script đã cập nhật kỳ vọng giá thay đổi thành HTTP 409 theo implementation/contract hiện tại; không đổi hành vi backend để chạy test.
+- Trình duyệt local: đã kiểm tra cart, menu, mở/đóng chat, form bảo mật và các trang liên quan trên 320–1440px; gợi ý lỗi/retry/rỗng; nút chat không che thanh thanh toán/điều hướng. Form bảo mật chỉ thử validation, hiện/ẩn và reset, không đổi mật khẩu thật.
+- Thêm `scripts/check-deployment.py`: kiểm tra chỉ đọc qua domain, không yêu cầu secret và không tạo dữ liệu mua hàng. **19/19 kiểm tra đạt trên local**. Các kiểm tra cô lập của script chạy bằng `python scripts/test-deployment-check.py`.
+
+Quy trình backup, giữ volumes/credentials, rebuild, xác nhận SHA, kiểm tra domain và rollback nằm ở [hướng dẫn Coolify, phần nâng cấp 25/11](../05_deployment/goihue-coolify.md#nâng-cấp-deployment-đang-chạy--25112026). **Đợt này chưa deploy hay xác minh trạng thái VPS**; kết quả bên trên là bằng chứng local/fixture.
+
+## Hồ sơ kiểm tra lịch sử ngày 19/11/2026
+
 Ngày kiểm tra: 19/11/2026. Mục tiêu: demo trên Coolify với domain dự kiến `goihue.io.vn`. Đã tích hợp với `main` tại `6d15715`, giữ nghiệp vụ COD/VietQR và giao diện heritage của main cùng AI/consent và các kiểm tra webhook từ nhánh demo. Cần push merge commit để Coolify lấy đúng phiên bản.
 
 ## Kết luận
