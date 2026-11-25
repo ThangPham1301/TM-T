@@ -8,6 +8,7 @@ import { StoreHeader, StoreFooter } from "@/shared/layout/store-shell";
 export function SiteHeader() {
   const { state, guestCart, busy, run, logout } = useStore();
   const pathname = usePathname();
+  if (state?.user?.role === "ADMIN" && pathname === "/account/security") return null;
   if (pathname === "/admin/pricing" || pathname === "/admin/discounts") return null;
   if (pathname && ["/admin", "/admin/orders", "/admin/products", "/admin/categories", "/admin/returns", "/admin/settings", "/admin/privacy", "/admin/policies", "/admin/audit", "/admin/support"].includes(pathname) && state?.user?.role === "ADMIN") return null;
   return <StoreHeader user={state?.user ? { name: String(state.user.name), role: String(state.user.role) } : null} cartCount={state?.cartCount ?? guestCart?.count} busy={busy} onLogout={() => void run(logout)} />;

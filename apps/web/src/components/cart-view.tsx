@@ -37,7 +37,7 @@ export function CartView({ summary, fetching, error, disabled, blocked, refresh,
       <span className={styles.motto}>● &nbsp; Ngự phẩm đất Cố Đô · Gói trọn yêu thương</span>
     </div></div>
     <section className={styles.container}>
-      <header className={styles.heading}><div><span className={styles.kicker}>Gói trọn ân tình</span><h1>Giỏ Hàng Cố Đô</h1></div>
+      <header className={styles.heading}><div><span className={styles.kicker}>Gói trọn ân tình</span><h1>Giỏ hàng của bạn</h1></div>
         {summary && <span className={styles.count}><Icon name="inventory_2" /> Hiện có <strong>{rows.length} thức quà</strong> trong giỏ</span>}
       </header>
       {mergeNotice}
@@ -78,6 +78,7 @@ export function CartView({ summary, fetching, error, disabled, blocked, refresh,
             <button type="button" className={styles.clear} disabled={disabled} onClick={() => setConfirmClear(true)}><Icon name="delete_sweep" /> Xóa tất cả</button>
           </div></div>
           <aside className={styles.packing}><span className={styles.packingIcon}><Icon name="verified" /></span><div><h2>Quy chuẩn đóng gói Cố Đô</h2><p>Đặc sản được chuẩn bị cẩn thận để gửi đến bạn và người thân.</p></div></aside>
+          {recommendations}
         </div>
         <aside className={styles.summary}><header><h2>Tóm tắt đơn hàng</h2><Icon name="receipt_long" /></header>
           <dl><div><dt>Tạm tính ({rows.length} món)</dt><dd>{money(summary.subtotal)}</dd></div><DiscountPriceRow summary={summary} surface="cart_summary" /><div><dt>Phí vận chuyển ước tính</dt><dd>{money(summary.shippingFee)}</dd></div></dl>
@@ -90,9 +91,9 @@ export function CartView({ summary, fetching, error, disabled, blocked, refresh,
           <ul className={styles.benefits}><li><Icon name="payments" />Thanh toán khi nhận hàng (COD)</li><li><Icon name="package_2" />{guest ? "Theo dõi đơn hàng bằng mã tra cứu" : "Theo dõi đơn hàng trong tài khoản"}</li><li><Icon name="support_agent" />Hỗ trợ sau bán hàng</li></ul>
         </aside>
       </div>}
+      {summary && rows.length === 0 && recommendations}
     </section>
     {summary && rows.length > 0 && <div className={styles.mobileBar}><div><small>Tổng thanh toán</small><strong>{money(summary.total)}</strong></div><button type="button" className={styles.primary} disabled={!canCheckout} onClick={checkout}>Tiến hành đặt hàng →</button></div>}
-    {summary && recommendations}
     <Dialog open={confirmClear} title="Xóa tất cả sản phẩm?" closeLabel="Đóng" onClose={() => setConfirmClear(false)}>
       <p>Bạn có chắc muốn xóa toàn bộ {rows.length} sản phẩm khỏi giỏ hàng?</p>
       <p className={styles.dialogHint}>Bạn có thể thêm lại sản phẩm từ bộ sưu tập.</p>

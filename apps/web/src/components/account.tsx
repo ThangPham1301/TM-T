@@ -5,6 +5,7 @@ import { PasswordSettings } from "./account-settings";
 import { useCurrentTime } from "@/lib/use-current-time";
 import { AccountProfile } from "./account-profile";
 import { AccountAddresses } from "./account-addresses";
+import { LanAdminShell } from "./lan-admin-shell";
 import { AccountSecurity } from "./account-security";
 import { AccountPrivacy } from "./account-privacy";
 import { AccountOrders } from "./account-orders";
@@ -827,6 +828,10 @@ export function Account({
 
   if (admin && section === "privacy") {
     return <AdminPrivacy rows={state.privacy} selected={current} detail={detailPanel} onSelect={setSelected} />;
+  }
+
+  if (!admin && state.user.role === "ADMIN" && section === "security") {
+    return <LanAdminShell section="security"><main className="store-page lan-page lan-admin"><AccountSecurity /></main></LanAdminShell>;
   }
 
   if (!admin) {

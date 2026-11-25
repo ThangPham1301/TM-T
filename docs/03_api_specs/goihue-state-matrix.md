@@ -267,3 +267,12 @@ GA4 integration: successful atomic reorder returns identity-free `measurementMut
 
 - A named individual in gift intent (mother, father, spouse, etc.) supplies recipientCount=1 when no explicit conflicting group count exists. "Tặng mỗi mẹ thôi" and similar singular clarifications update it to one while retaining the budget and the products just suggested. Collective recipients are not collapsed into one individual.
 - A budget alone never forces group arithmetic. Ordinary gift advice uses current catalog/recommendation tools, even if the model requests plan_purchase. Quantity/distribution, multi-recipient and explicitly all-in constraints still use the verified planner and ask only genuinely missing constraints.
+
+
+### Shared storefront styling and admin account security
+
+- Cart: use the shared cream, brown, gold and paper surfaces. Keep loading, retry, empty, unavailable stock, changed price, shipping pause and disabled checkout states. Recommendations stay inside the cart content column, using compact image-and-copy cards on desktop and a single column on mobile; retain loading, retry and empty states.
+- Store navigation: remove the redundant featured-products entry; preserve recommendations, category links and the full catalog link. The floating assistant keeps its accessible open/close button and social links without the horizontal invitation label. On mobile cart, keep the launcher above the checkout bar.
+- Admin policies and privacy requests: use shared surfaces, typography and borders, retaining version selection, read/editor views, loading, empty, errors and existing actions. Public policies continue to display the published document without content changes.
+- Account security: administrators use the existing admin navigation at `/account/security`; customers retain account navigation. Keep password reveal/hide, strength hint, reset, required/minimum-length validation, mismatch feedback, loading and server error states. Successful password changes retain the current session and end other sessions. No password is changed during visual verification.
+- Related account and checkout views inherit the same storefront palette through shared theme aliases. No endpoint, authorization rule or request/response schema changes.

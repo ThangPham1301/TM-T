@@ -150,12 +150,6 @@ export function StoreHeader({
             >
               <ul>
                 <li>
-                  <Link href="/products">
-                    <strong>Sản phẩm nổi bật</strong>
-                    <small>Những món được chọn lọc tại cửa hàng</small>
-                  </Link>
-                </li>
-                <li>
                   <Link href="/recommendations">
                     <strong>Gợi ý từ cửa hàng</strong>
                     <small>Gợi ý mua sắm dành cho bạn</small>

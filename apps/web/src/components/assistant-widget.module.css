@@ -62,22 +62,7 @@
   visibility: hidden;
 }
 
-.pill {
-  border: 1px solid #e5dac8;
-  background: #fffdf8;
-  color: #573722;
-  font-weight: 600;
-  font-size: 14px;
-  padding: 12px 16px;
-  border-radius: 999px;
-  box-shadow: 0 10px 30px rgba(45, 32, 22, 0.18);
-  cursor: pointer;
-  min-height: 44px;
-}
 
-.pill:hover {
-  background: #f4ebdd;
-}
 
 .fab {
   --fab-bg: var(--gh-primary);
@@ -631,14 +616,19 @@
   cursor: default;
 }
 
-@media (max-width: 639px) {
+@media (max-width: 1100px) {
+  .dock { --dock-bottom: 78px; }
+  .panel { bottom: calc(146px + env(safe-area-inset-bottom)); height: min(600px, calc(100dvh - 178px - env(safe-area-inset-bottom))); }
+}
+
+@media (max-width: 640px) {
   .dock:has(.launcher[data-cart="true"]) {
-    --dock-bottom: 78px;
+    --dock-bottom: 150px;
   }
 
   .panel[data-cart="true"] {
-    bottom: calc(146px + env(safe-area-inset-bottom));
-    height: min(600px, calc(100dvh - 166px - env(safe-area-inset-bottom)));
+    bottom: calc(218px + env(safe-area-inset-bottom));
+    height: min(600px, calc(100dvh - 240px - env(safe-area-inset-bottom)));
   }
 }
 
@@ -658,7 +648,4 @@
     border-radius: 0;
   }
 
-  .pill {
-    display: none;
-  }
 }

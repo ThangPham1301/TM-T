@@ -41,6 +41,7 @@ export const adminNavigationGroups: readonly {
     key: "system", label: "Quản trị hệ thống", icon: "settings",
     items: [
       { key: "policies", href: "/admin/policies", label: "Chính sách", icon: "article" },
+      { key: "security", href: "/account/security", label: "Bảo mật tài khoản", icon: "lock" },
       { key: "audit", href: "/admin/audit", label: "Nhật ký hoạt động", icon: "history" },
     ],
   },

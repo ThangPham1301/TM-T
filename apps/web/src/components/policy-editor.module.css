@@ -25,7 +25,7 @@
 .reader {
   padding: 17px 20px 22px;
   min-height: 13rem;
-  max-height: clamp(13rem, calc(100dvh - 38rem), 28rem);
+  max-height: clamp(13rem, calc(100dvh - 30rem), 32rem);
   overflow: auto;
   scrollbar-width: thin;
   overscroll-behavior: contain;
@@ -67,3 +67,7 @@
   .editorTop { grid-template-columns: 1fr; }
   .reader { max-height: 55dvh; }
 }
+
+.reader h3 { color: var(--nau-dam); font-family: var(--chu-de); line-height: 1.5; }
+.readerNav { background: var(--kem); }
+.viewBar button { min-height: 40px; }

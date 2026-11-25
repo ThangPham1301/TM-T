@@ -121,7 +121,7 @@ function SocialLinks() {
 export function AssistantWidget() {
   const pathname = usePathname();
   const { state, loading } = useStore();
-  if (pathname === "/admin" || pathname.startsWith("/admin/")) return null;
+  if (pathname === "/admin" || pathname.startsWith("/admin/") || state?.user?.role === "ADMIN" && pathname === "/account/security") return null;
   const onCart = pathname === "/cart";
   if (
     loading ||
@@ -846,15 +846,6 @@ function ChatSession({
       >
         <SocialLinks />
         <div className={styles.chatControls}>
-          {!chatOpen && (
-            <button
-              type="button"
-              className={styles.pill}
-              onClick={() => setOpen(true)}
-            >
-              Hỏi trợ lý Gói Huế
-            </button>
-          )}
           <button
             type="button"
             className={styles.fab}

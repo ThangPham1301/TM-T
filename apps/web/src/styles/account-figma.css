@@ -6,34 +6,33 @@
   font-display: block;
 }
 
-/* Hue Heritage Craft — Account & Privacy Design System
-   Matches UI_Figma/02_Tai_khoan specifications strictly */
+/* Account surfaces share the storefront paper, ink and brown/gold tokens. */
 
 :root {
-  --af-surface: #fff8f5;
-  --af-surface-dim: #ebd6c7;
-  --af-surface-bright: #fff8f5;
-  --af-surface-container-lowest: #ffffff;
-  --af-surface-container-low: #fff1e8;
-  --af-surface-container: #ffeadb;
-  --af-surface-container-high: #fae4d5;
-  --af-surface-container-highest: #f4dfcf;
-  --af-on-surface: #241910;
-  --af-on-surface-variant: #50443e;
-  --af-primary: #3e220e;
-  --af-primary-container: #573722;
-  --af-on-primary: #ffffff;
-  --af-secondary: #805601;
-  --af-secondary-gold: #c99643;
-  --af-secondary-container: #fec56d;
-  --af-on-secondary-container: #775000;
-  --af-tertiary: #40210c;
-  --af-tertiary-container: #593620;
-  --af-error: #ba1a1a;
-  --af-error-container: #ffdad6;
-  --af-outline: #82746d;
-  --af-outline-variant: #d4c3ba;
-  --af-background: #fff8f5;
+  --af-surface: var(--kem);
+  --af-surface-dim: var(--kem-dam);
+  --af-surface-bright: var(--kem);
+  --af-surface-container-lowest: var(--kem);
+  --af-surface-container-low: var(--kem-am);
+  --af-surface-container: var(--kem-am);
+  --af-surface-container-high: var(--kem-dam);
+  --af-surface-container-highest: var(--kem-dam);
+  --af-on-surface: var(--muc);
+  --af-on-surface-variant: var(--phu);
+  --af-primary: var(--nau-dam);
+  --af-primary-container: var(--nau-cung-dinh);
+  --af-on-primary: var(--kem);
+  --af-secondary: var(--nau);
+  --af-secondary-gold: var(--mat);
+  --af-secondary-container: var(--kem-dam);
+  --af-on-secondary-container: var(--nau-dam);
+  --af-tertiary: var(--nau-cung-dinh);
+  --af-tertiary-container: var(--nau-dam);
+  --af-error: var(--loi);
+  --af-error-container: var(--gh-danger-surface);
+  --af-outline: var(--phu);
+  --af-outline-variant: var(--vien);
+  --af-background: var(--kem);
 }
 
 /* Material Symbols font configuration */
