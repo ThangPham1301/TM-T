@@ -314,7 +314,7 @@ http {
         summary = alice.request("cart/summary")
         old_price = summary["items"][0]["price"]
         changed = save_product(product, price=old_price + 1000)
-        alice.mutate("checkout", expected=422, cartToken=summary["cartToken"], shippingRevision=summary["shipping"]["revision"], recipient="Synthetic", phone="0900000000", address="Synthetic", paymentMethod="COD")
+        alice.mutate("checkout", expected=409, cartToken=summary["cartToken"], shippingRevision=summary["shipping"]["revision"], recipient="Synthetic", phone="0900000000", address="Synthetic", paymentMethod="COD")
         check(alice.request("cart/summary")["items"][0]["priceChanged"], "checkout rejects stale catalog prices and exposes a refresh instruction")
         alice.mutate("cart-refresh", cartToken=summary["cartToken"])
         summary = alice.request("cart/summary")
