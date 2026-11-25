@@ -31,6 +31,16 @@ public class CatalogService {
         String id=app.str(b,"imageId");if(id.isEmpty()){value.remove("imageId");value.put("image","/images/product-placeholder.svg");return;}
         var file=get(id,"catalog-image");app.require(app.str(file,"status").equals("READY"),"Ảnh chưa được tải hoàn tất.");value.put("imageId",id);value.put("image","/api/store/catalog/images/"+id);
     }
+    void images(Map<String,Object> value,Map<String,Object> b){
+        if(!b.containsKey("images"))return;
+        app.require(b.get("images") instanceof List<?>,"Danh sách ảnh không hợp lệ.");
+        var raw=(List<?>)b.get("images");
+        app.require(raw.size()<=10,"Mỗi sản phẩm có tối đa 10 ảnh.");
+        var images=new ArrayList<String>();
+        for(var item:raw){app.require(item instanceof String,"Đường dẫn ảnh không hợp lệ.");String path=((String)item).trim();app.require(!path.isEmpty()&&path.length()<=300&&(path.startsWith("/")||path.startsWith("https://")),"Đường dẫn ảnh không hợp lệ.");images.add(path);}
+        value.put("images",images);
+        if(!images.isEmpty())value.put("image",images.getFirst());
+    }
     public Map<String,Object> saveProduct(Map<String,Object> a,Map<String,Object> b){
         app.permission(a,"catalog.manage");boolean edit=!app.str(b,"id").isEmpty();var p=edit?get(app.str(b,"id"),"product"):new LinkedHashMap<String,Object>();if(edit)revision(p,b);
         String slug=code(b,"slug"),category=app.text(b,"category",120);
@@ -38,7 +48,7 @@ public class CatalogService {
         app.require(db.queryForObject("SELECT count(*) FROM records WHERE kind='product' AND data->>'slug'=? AND id<>?",Integer.class,slug,edit?app.uuid(app.str(p,"id")):UUID.randomUUID())==0,"Slug đã tồn tại.");
         int price=app.number(b,"price"),stock=app.number(b,"stock");app.require(price>0&&price<=10_000_000&&stock>=0&&stock<=1_000_000,"Giá hoặc tồn kho không hợp lệ.");
         app.require(!p.containsKey("priceFloor") || price >= app.number(p, "priceFloor"), "Giá thường không được thấp hơn giá sàn.");
-        p.put("slug",slug);p.put("category",category);p.put("name",app.text(b,"name",150));p.put("description",app.text(b,"description",4000));p.put("price",price);p.put("stock",stock);p.put("active",Boolean.TRUE.equals(b.get("active")));if(!p.containsKey("image"))p.put("image","/images/product-placeholder.svg");image(p,b);if(edit)p.put("revision",app.number(p,"revision")+1);return app.save("product",null,p);
+        p.put("slug",slug);p.put("category",category);p.put("name",app.text(b,"name",150));p.put("description",app.text(b,"description",4000));p.put("price",price);p.put("stock",stock);p.put("active",Boolean.TRUE.equals(b.get("active")));if(!p.containsKey("image"))p.put("image","/images/product-placeholder.svg");image(p,b);images(p,b);if(edit)p.put("revision",app.number(p,"revision")+1);return app.save("product",null,p);
     }
     public Map<String,Object> mutation(Map<String,Object> a,Map<String,Object> b){
         app.permission(a,"catalog.manage");String action=app.str(b,"action");

@@ -1099,6 +1099,7 @@ components:
         cartToken: {type: string, minLength: 64, maxLength: 64}
         shippingRevision: {type: integer, minimum: 1}
         imageId: {type: string, description: Empty clears image; absent preserves current image; UUID references a READY catalog upload}
+        images: {type: array, maxItems: 10, items: {type: string, maxLength: 300}, description: Optional product gallery for product-save; the first entry becomes the primary image field; absent preserves the current gallery}
         kind: {type: string, enum: [product, category]}
         code: {type: string, maxLength: 120}
         sortOrder: {type: integer, minimum: 0, maximum: 10000}

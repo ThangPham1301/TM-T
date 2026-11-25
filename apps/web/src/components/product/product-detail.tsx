@@ -129,7 +129,8 @@ export function ProductDetail({ slug }: { slug: string }) {
     [missing, setMissing] = useState(false),
     [attempt, setAttempt] = useState(0);
   const [quantity, setQuantity] = useState(1),
-    [tab, setTab] = useState(0);
+    [tab, setTab] = useState(0),
+    [imageIndex, setImageIndex] = useState(0);
   const zoom = useRef<HTMLDialogElement>(null),
     tabList = useRef<HTMLDivElement>(null);
   const [relatedStrategy, setRelatedStrategy] = useState("");
@@ -143,6 +144,7 @@ export function ProductDetail({ slug }: { slug: string }) {
     ])
       .then(async ([p, c]) => {
         if (!live) return;
+        setImageIndex(0);
         setProduct(p);
         setCategories(c);
         setError("");
@@ -218,6 +220,12 @@ export function ProductDetail({ slug }: { slug: string }) {
       if (buyNow) router.push("/checkout");
     });
   }
+  const gallery = product
+    ? Array.isArray(product.images) && product.images.length > 0
+      ? product.images.map((src) => String(src))
+      : [String(product.image ?? "")]
+    : [];
+  const activeImage = gallery[Math.min(imageIndex, gallery.length - 1)] ?? "";
   const heritageStory = storyForCategory(product?.category);
   const category = categories.find((c) => c.code === product?.category),
     stock = Math.max(0, Number(product?.stock ?? 0));
@@ -270,21 +278,28 @@ export function ProductDetail({ slug }: { slug: string }) {
                 <ProductImage
                   fill
                   priority
-                  src={String(product.image ?? "")}
+                  src={activeImage}
                   alt={String(product.name)}
                   sizes="(max-width:760px) 90vw,48vw"
                 />
                 <span>Phóng to ↗</span>
               </button>
               <div className="lan-thumbnails">
-                <button aria-label="Ảnh chính" aria-pressed="true">
-                  <ProductImage
-                    src={String(product.image ?? "")}
-                    alt="Ảnh chính sản phẩm"
-                    width={88}
-                    height={88}
-                  />
-                </button>
+                {gallery.map((src, i) => (
+                  <button
+                    key={`${src}-${i}`}
+                    aria-label={i === 0 ? "Ảnh chính" : `Ảnh ${i + 1}`}
+                    aria-pressed={i === imageIndex}
+                    onClick={() => setImageIndex(i)}
+                  >
+                    <ProductImage
+                      src={src}
+                      alt={i === 0 ? "Ảnh chính sản phẩm" : `Ảnh sản phẩm ${i + 1}`}
+                      width={88}
+                      height={88}
+                    />
+                  </button>
+                ))}
               </div>
             </div>
             <div className="lan-purchase">
@@ -534,7 +549,7 @@ export function ProductDetail({ slug }: { slug: string }) {
               Đóng ảnh ×
             </button>
             <ProductImage
-              src={String(product.image ?? "")}
+              src={activeImage}
               alt={String(product.name)}
               width={900}
               height={900}

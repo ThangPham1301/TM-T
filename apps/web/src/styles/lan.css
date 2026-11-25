@@ -632,6 +632,11 @@ body:has(.lan-page) .brand-seal {
   border: 1px solid var(--lan-brown);
   cursor: pointer;
 }
+.lan-thumbnails button[aria-pressed="true"] {
+  border: 2px solid var(--lan-brown);
+  outline: 2px solid var(--lan-gold, #c99643);
+  outline-offset: 1px;
+}
 .lan-thumbnails img {
   display: block;
   object-fit: cover;
