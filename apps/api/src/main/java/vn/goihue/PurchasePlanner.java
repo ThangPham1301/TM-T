@@ -10,6 +10,7 @@ import java.util.stream.Collectors;
 final class PurchasePlanner {
     private static final String NUMBER = "(?:[0-9]{1,3}|mot|hai|ba|bon|tu|nam|sau|bay|tam|chin|muoi)";
     private static final String MONEY = "[0-9][0-9., ]*\\s*(?:k|tr|trieu|nghin|ngan|dong|vnd|d)\\b";
+    private static final String RECIPIENT = "(?:ban gai|ban trai|nguoi yeu|ban than|anh trai|chi gai|em trai|em gai|me|ma|bo|cha|ba|ong|vo|chong|sep)";
     private static final Set<String> FIELDS = Set.of("budget", "budgetScope", "recipientCount", "unitsPerRecipient", "shippingInBudget", "selectionMode");
     record Context(Integer budget, String budgetScope, Integer recipientCount, int unitsPerRecipient,
                    String shippingInBudget, String selectionMode) {
@@ -79,6 +80,20 @@ final class PurchasePlanner {
         return text.contains("tim mon khac") || text.contains("tim loai khac") || text.contains("chon mon khac") || text.contains("lua chon khac");
     }
 
+    boolean requiresPlanning(Context context, String message) {
+        String text = AgentTools.normalized(message);
+        return context.recipientCount() != null && context.recipientCount() > 1 || context.unitsPerRecipient() > 1
+            || !context.selectionMode().equals("ANY") || context.budgetScope().equals("PER_RECIPIENT")
+            || context.shippingInBudget().equals("INCLUDED")
+            || text.matches("(?s).*\\b(?:nhieu nguoi|moi nguoi|chia qua|chia phan|so phan|so nguoi|phuong an|tong tien|tinh tong|giao rieng)\\b.*");
+    }
+
+    boolean singleRecipientClarification(String message) {
+        String text = AgentTools.normalized(message);
+        return Pattern.compile("\\b(?:chi(?:\\s+(?:tang|cho))?|duy nhat|moi)\\s+(?:cho\\s+)?" + RECIPIENT + "\\b(?:\\s+(?:minh|toi|em))?(?:\\s+thoi)?(?:[.!?]|$)").matcher(text).find()
+            || Pattern.compile("^(?:tang\\s+)?" + RECIPIENT + "\\s+(?:minh\\s+|toi\\s+|em\\s+)?thoi[.!?]*$").matcher(text).find();
+    }
+
     Update update(Context previous, String message) {
         String text = AgentTools.normalized(message);
         Integer budget = previous.budget(), recipients = previous.recipientCount();
@@ -98,6 +113,14 @@ final class PurchasePlanner {
             // "mỗi người" is a unit qualifier, never a second recipient count.
             recipients = number(people.group(1)); count = true;
         }
+        // A named individual is enough for ordinary gift advice; never make the model ask for a count.
+        boolean collective = text.matches("(?s).*\\b(?:(?:cac|nhieu|vai|hai|2)\\s+" + RECIPIENT
+            + "|bo me|ba me|cha me|ong ba|" + RECIPIENT + "\\s*(?:,|va|voi|cung|&)\\s*\\S+|gia dinh|ban be)\\b.*");
+        boolean onlyOne = singleRecipientClarification(message);
+        boolean namedIndividual = Pattern.compile("\\b(?:tang|bieu|cho)\\s+(?:chi\\s+|moi\\s+)?" + RECIPIENT
+            + "\\b(?!\\s+(?:xung|rang|den|trang|qua)\\b)").matcher(text).find();
+        if (!count && !collective && (onlyOne || recipients == null && namedIndividual)) recipients = 1;
+        if (onlyOne && !collective) recipients = 1;
         var each = Pattern.compile("\\bmoi (?:nguoi|phan|suat)\\s+(?:la\\s+|duoc\\s+)?(" + NUMBER + ")\\s+(?:san pham|mon|goi|hop|phan)\\b").matcher(text);
         while (each.find()) { units = number(each.group(1)); count = true; }
         if (Pattern.compile("moi (?:nguoi|phan|suat)\\s+(?:(?:co|toi da|duoi|khoang|tam|ngan sach|la)\\s+)*" + MONEY
@@ -114,7 +137,8 @@ final class PurchasePlanner {
             || text.matches("(?s).*con\\s+(?:tra|banh|me xung|hop qua).*thi sao.*")) && !monetary && !count && !text.contains("phuong an");
         if (freshTopic) return new Update(Context.empty(), false);
         if (recipients != null && (recipients < 1 || recipients > 100) || units < 1 || units > 100) return new Update(Context.empty(), true);
-        return new Update(new Context(budget, scope, recipients, units, shipping, selection), requested);
+        var context = new Context(budget, scope, recipients, units, shipping, selection);
+        return new Update(context, requested && requiresPlanning(context, message));
     }
 
     AgentTools.Result plan(Context request, ProductConversation.Scope scope, String message) {

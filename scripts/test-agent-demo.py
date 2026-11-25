@@ -117,6 +117,16 @@ class ModelFixture(http.server.BaseHTTPRequestHandler):
             self.release.wait(15)
             content = [{"text": "Đã xử lý lượt kiểm tra đồng thời."}]
             stop = "end_turn"
+        elif "MODEL_SINGLE_COUNT_QUESTION" in prompt:
+            content = [{"text": "Bạn cần tặng bao nhiêu người để mình tính đủ số phần quà?"}]
+            stop = "end_turn"
+        elif "MODEL_PLAN_SINGLE" in prompt:
+            if not results:
+                content = [{"toolUse": {"toolUseId": "fixture-single-plan", "name": "plan_purchase", "input": {"budget": 1, "recipientCount": 9, "unitsPerRecipient": 99}}}]
+                stop = "tool_use"
+            else:
+                content = [{"text": "Mình gợi ý các món trong ngân sách đã nêu; bạn chọn theo khẩu vị của người nhận nhé."}]
+                stop = "end_turn"
         elif "MODEL_PLAN_BAD" in prompt:
             if not results:
                 content = [{"toolUse": {"toolUseId": "fixture-plan", "name": "plan_purchase", "input": {"budget": 1, "recipientCount": 1, "unitsPerRecipient": 100, "budgetScope": "PER_RECIPIENT"}}}]
@@ -584,6 +594,47 @@ def main():
         check(event_data(new_topic, "purchase_context")[0] == {} and not event_data(new_topic, "purchase_plan"), "a fresh discovery topic clears purchase constraints instead of silently reusing a group allocation")
         plan_history.request("agent/consent", "PUT", {"historyUse": False, "memoryUse": False, "revision": 1}, str(uuid.uuid4()))
         check(not plan_history.request("agent/history?conversationId=" + plan_conversation)["messages"], "withdrawing history consent also erases purchase constraints and computed quotes")
+        single_gift = Browser()
+        single_gift.register("singular-gift@example.invalid")
+        mother, mother_body = single_gift.chat("MODEL_PLAN_SINGLE Tư vấn quà tặng mẹ dưới 200k")
+        mother_context = event_data(mother, "purchase_context")[0]
+        check(mother_context.get("recipientCount") == 1 and mother_context["budget"] == 200000,
+              "a named mother supplies one gift recipient without asking for a numeric count")
+        mother_ids = [card["id"] for card in event_data(mother, "product_cards")[0]["items"]]
+        same_gifts, _ = single_gift.chat("MODEL_PLAN_SINGLE Tặng mỗi mẹ thôi", context=mother_ids, purchase=mother_context)
+        check([card["id"] for card in event_data(same_gifts, "product_cards")[0]["items"]] == mother_ids,
+              "a recipient-only clarification keeps the previously suggested products instead of opening a new popular list")
+        check(event_data(mother, "product_cards")[0]["items"] and all(card["price"] <= 200000 for card in event_data(mother, "product_cards")[0]["items"])
+              and all(call["name"] != "plan_purchase" for call in event_data(mother, "tool_call")) and not event_data(mother, "purchase_plan"),
+              "an unnecessary model-selected planner is rerouted to grounded gift advice and ignores invented quantities")
+        old_context = {"budget": 200000, "budgetScope": "TOTAL", "unitsPerRecipient": 1, "shippingInBudget": "UNSPECIFIED", "selectionMode": "ANY"}
+        old_history = [{"role": "user", "content": "Tư vấn quà tặng mẹ dưới 200k"},
+                       {"role": "assistant", "content": "Bạn cần tặng bao nhiêu người để mình tính đủ số phần quà?"}]
+        for clarification in ("Tặng mỗi mẹ thôi", "Chỉ mẹ thôi", "Tặng mẹ thôi", "Chỉ tặng bố thôi", "Tặng mỗi vợ thôi", "Một người thôi"):
+            events, _ = single_gift.chat("MODEL_PLAN_SINGLE " + clarification, purchase=old_context, history=old_history)
+            current = event_data(events, "purchase_context")[0]
+            check(current.get("recipientCount") == 1 and current.get("budget") == 200000 and not event_data(events, "purchase_plan")
+                  and event_data(events, "product_cards")[0]["items"] and "bao nhiêu người" not in answer(events),
+                  "singular clarification preserves the earlier budget and breaks the repeated question: " + clarification)
+        legacy_only, _ = single_gift.chat("MODEL_PLAN_SINGLE Tặng mỗi mẹ thôi", history=old_history)
+        check(event_data(legacy_only, "purchase_context")[0].get("recipientCount") == 1 and event_data(legacy_only, "purchase_context")[0].get("budget") == 200000,
+              "text-only history also restores the budget when a legacy chat clarifies one recipient")
+        no_recipient, _ = single_gift.chat("MODEL_PLAN_SINGLE Tư vấn quà dưới 200k")
+        check(not event_data(no_recipient, "purchase_plan") and event_data(no_recipient, "product_cards")[0]["items"],
+              "a budget without a recipient does not force an irrelevant quantity questionnaire")
+        repeated_question, _ = single_gift.chat("MODEL_SINGLE_COUNT_QUESTION Tặng mỗi mẹ thôi", purchase=old_context, history=old_history)
+        check("bao nhiêu người" not in answer(repeated_question) and event_data(repeated_question, "product_cards")[0]["items"],
+              "a direct model count question is replaced with catalog advice when one recipient is already known")
+        for collective in ("Tặng mẹ và bố dưới 200k", "Tặng gia đình dưới 200k", "Tặng bố mẹ dưới 200k"):
+            events, _ = single_gift.chat("MODEL_PLAN_SINGLE " + collective)
+            check(event_data(events, "purchase_context")[0].get("recipientCount") != 1,
+                  "collective wording is not incorrectly collapsed into a single person: " + collective)
+        group, group_body = single_gift.chat("MODEL_PLAN_SINGLE Tổng ngân sách 200k tặng nhiều người mỗi người một gói")
+        check(event_data(group, "purchase_plan")[0]["code"] == "NEED_RECIPIENT_COUNT",
+              "genuine group allocation still asks for a missing recipient count")
+        clarified, _ = single_gift.chat("MODEL_PLAN_SINGLE Một người thôi", purchase=event_data(group, "purchase_context")[0])
+        check(event_data(clarified, "purchase_context")[0].get("recipientCount") == 1 and not event_data(clarified, "purchase_plan"),
+              "a numeric one-person clarification releases the group questionnaire while retaining the budget")
         consent = alice.request("agent/consent")
         alice.request("agent/consent", "PUT", {"historyUse": True, "memoryUse": True, "revision": consent["revision"]}, str(uuid.uuid4()))
         race_key = str(uuid.uuid4())

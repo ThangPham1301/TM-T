@@ -262,3 +262,8 @@ Quotes expose identity-free `measurement` and new checkout orders persist the sa
 | Idempotent retry | Same key/body replays success without resetting an edited cart; changed body returns 409. |
 
 GA4 integration: successful atomic reorder returns identity-free `measurementMutation` net quantity changes with an operation ID stored in the idempotent result. Preview, rejected confirmations and unchanged quantities emit no cart event. The private account page queues safe `source_surface=reorder` deltas until checkout; source order IDs and recipient details never enter GA.
+
+### Singular gift recipients
+
+- A named individual in gift intent (mother, father, spouse, etc.) supplies recipientCount=1 when no explicit conflicting group count exists. "Tặng mỗi mẹ thôi" and similar singular clarifications update it to one while retaining the budget and the products just suggested. Collective recipients are not collapsed into one individual.
+- A budget alone never forces group arithmetic. Ordinary gift advice uses current catalog/recommendation tools, even if the model requests plan_purchase. Quantity/distribution, multi-recipient and explicitly all-in constraints still use the verified planner and ask only genuinely missing constraints.

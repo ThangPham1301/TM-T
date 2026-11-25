@@ -218,7 +218,8 @@ public class AgentApi {
             purchaseContext = planner.update(purchaseContext, message.content().getFirst().text()).context();
         var purchaseUpdate = planner.update(purchaseContext, text);
         purchaseContext = purchaseUpdate.context();
-        var scope = products.resolve(text, previousIds, previousAnswer, purchaseUpdate.requested());
+        var scope = products.resolve(text, previousIds, previousAnswer,
+            purchaseUpdate.requested() || planner.singleRecipientClarification(text));
         if (purchaseUpdate.requested() && planner.wantsAlternatives(text)) scope = ProductConversation.Scope.none();
         var explicit = AgentTools.slots(text);
         var slots = new LinkedHashMap<>(privacy.memory(owner));
@@ -247,6 +248,9 @@ public class AgentApi {
                 answer = fallback(execution, text, slots, giftContext);
             }
         } else answer = fallback(execution, text, slots, giftContext);
+        if (Integer.valueOf(1).equals(purchaseContext.recipientCount()) && !planner.requiresPlanning(purchaseContext, text)
+            && AgentTools.normalized(answer).matches("(?s).*\\b(?:can|muon|dinh)\\s+(?:tang|bieu)(?:\\s+qua)?\\s+(?:cho\\s+)?(?:bao nhieu|may)\\s+nguoi\\b.*"))
+            answer = fallback(execution, text, slots, true);
         if (scope.needsChoice()) answer = tools.contextProducts(scope).text();
         boolean shippingChecked = execution.results.entrySet().stream().anyMatch(entry -> entry.getKey().startsWith("get_shipping")
             || entry.getKey().startsWith("plan_purchase") && Boolean.TRUE.equals(entry.getValue().data().get("shippingVerified")));
@@ -331,6 +335,14 @@ public class AgentApi {
         AgentTools.Result call(String id, String name, Map<String, Object> input) {
             stream.check();
             if (++calls > 8) throw new PlatformApi.Problem(422, "Đã đạt giới hạn công cụ trong lượt tư vấn.");
+            // A model choosing the arithmetic tool must not turn ordinary gift advice into a count questionnaire.
+            // Unknown arguments retain their original tool so normal schema validation still rejects them.
+            if (name.equals("plan_purchase") && !planner.requiresPlanning(purchaseContext, customerMessage)
+                && Set.of("budget", "recipientCount", "unitsPerRecipient", "budgetScope", "shippingInBudget", "selectionMode").containsAll(input.keySet())) {
+                var lookup = tools.productLookup(customerMessage, Map.of(), true);
+                name = scope.active() ? "search_products" : lookup.name();
+                input = scope.active() ? Map.of() : lookup.input();
+            }
             stream.event("tool_call", Map.of("id", id, "name", name, "step", calls));
             AgentTools.Result result;
             try {

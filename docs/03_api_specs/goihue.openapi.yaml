@@ -13,6 +13,7 @@ paths:
       - {in: path, name: number, required: true, schema: {type: string, pattern: '^GH-[A-Z0-9]{8}$'}}
     get:
       operationId: listGuestOrderSupport
+      summary: List support requests for a verified guest order
       security: []
       description: Requires the original guest order session or a valid HttpOnly access grant scoped to this exact order.
       responses:
@@ -24,6 +25,7 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
     post:
       operationId: submitGuestOrderSupport
+      summary: Submit a support request for a verified guest order
       security: []
       description: Same order proof as GET and trusted Origin. A retry with the same key and content returns the existing ticket. Only one open ticket per order and topic.
       parameters:
@@ -52,6 +54,7 @@ paths:
   /admin/support:
     get:
       operationId: listGuestSupportInbox
+      summary: List guest support requests for staff
       description: ADMIN with order.manage. Tickets include orderNumber. No lookup secrets or recipient details are returned.
       parameters:
         - {in: query, name: status, schema: {type: string, enum: [ALL, SUBMITTED, IN_REVIEW, RESOLVED], default: SUBMITTED}}
@@ -65,6 +68,7 @@ paths:
   /admin/support/{id}:
     put:
       operationId: respondToGuestSupport
+      summary: Reply to a guest support request
       description: ADMIN with order.manage, trusted Origin and current revision. Saves a guest-visible response. A closed request cannot be changed.
       parameters:
         - {$ref: '#/components/parameters/Id'}
@@ -588,6 +592,8 @@ paths:
         Context never authorizes access to hidden products, private orders or a cart write, and is persisted only with history consent.
         Changing to a new product topic releases the previous set. Current price, stock and visibility are revalidated rather than trusted from history.
         If the final answer names a recognized product outside a resolved conversational set, it is replaced with advice derived from that set's current catalog descriptions.
+        A clearly named singular gift recipient implies one person; short clarifications such as "chỉ mẹ thôi" preserve the prior budget and update recipientCount to one.
+        Ordinary single-recipient gift advice uses catalog/recommendation lookup. A model-selected plan_purchase is rerouted to that lookup unless the customer's verified constraints require quantity, distribution or total-cost planning.
         plan_purchase uses recipientCount times unitsPerRecipient (at most 100 total units), current prices/stock, and the current single-order shipping configuration.
         Budget scope TOTAL and PER_RECIPIENT are distinct; per-recipient plans also verify a concrete distribution against each recipient's cap.
         The bounded solver considers uniform choices, two-type mixes and a cheapest-stock combination within at most eight candidates; it does not claim exhaustive global preference optimization.
