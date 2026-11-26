@@ -22,6 +22,9 @@ type GuestOrder = {
   paymentStatus: string;
   payment?: { status: string; expiresAt?: string; payload?: string };
   trackingReference?: string;
+  recipient?: string;
+  phone?: string;
+  address?: string;
   items: { productId: string; image?: string; name: string; quantity: number; price: number; netTotal?: number }[];
   history: { status: string; at: string }[];
   subtotal: number;
@@ -203,6 +206,12 @@ export function GuestOrderPage({ number, confirmation }: { number: string; confi
                 {!codHasNoCollection(paymentOrder) && order.paymentStatus === "UNPAID" && <p>Còn phải trả <strong>{money(codAmountDue(paymentOrder))}</strong></p>}
               </>}
             </section>
+            {(order.recipient || order.phone || order.address) && <section className={styles.card} aria-labelledby="guest-address">
+              <h2 id="guest-address">Địa chỉ giao hàng</h2>
+              {order.recipient && <p><strong>{order.recipient}</strong></p>}
+              {order.phone && <p>Số điện thoại <strong>{order.phone}</strong></p>}
+              {order.address && <p>{order.address}</p>}
+            </section>}
             <section className={styles.card} aria-labelledby="guest-shipping">
               <h2 id="guest-shipping">Tiến trình giao hàng</h2>
               {order.trackingReference && <p>Mã vận đơn <strong>{order.trackingReference}</strong></p>}

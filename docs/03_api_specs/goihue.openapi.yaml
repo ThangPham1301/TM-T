@@ -271,7 +271,7 @@ paths:
                 lookupCode: {type: string, minLength: 32, maxLength: 35}
       responses:
         '200':
-          description: Guest order summary and a 30-minute order-scoped access cookie; new orders include the stored identity-free measurement snapshot.
+          description: Guest order summary (including the delivery contact) and a 30-minute order-scoped access cookie; new orders include the stored identity-free measurement snapshot.
           content:
             application/json:
               schema: {$ref: './ga4-measurement.schema.yaml#/components/schemas/MeasuredResponse'}
@@ -287,7 +287,7 @@ paths:
         - {in: path, name: number, required: true, schema: {type: string, pattern: '^GH-[A-Z0-9]{8}$'}}
       responses:
         '200':
-          description: 'Items, amounts, statuses and pending VietQR demo details. New orders also return their stored measurement snapshot; legacy orders are not backfilled. The original guest session receives its lookup code outside measurement. Delivery contacts and internal notes are excluded.'
+          description: 'Items, amounts, statuses, delivery contact (recipient, phone, address) and pending VietQR demo details. New orders also return their stored measurement snapshot; legacy orders are not backfilled. The original guest session receives its lookup code outside measurement. Internal notes are excluded.'
           content:
             application/json:
               schema: {$ref: './ga4-measurement.schema.yaml#/components/schemas/MeasuredResponse'}
