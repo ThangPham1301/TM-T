@@ -68,12 +68,22 @@ function Collection() {
       .replace(/đ/g, "d")
       .replace(/Đ/g, "D")
       .toLocaleLowerCase("vi");
+  const tokens = (s: unknown) => normalize(s).split(/[^a-z0-9]+/).filter(Boolean);
+  const queryTokens = tokens(query);
+  const matchesQuery = (p: Row) => {
+    if (!queryTokens.length) return true;
+    const hay = [
+      ...tokens(p.name),
+      ...tokens(p.category),
+      ...tokens(categories.find((c) => c.code === p.category)?.name),
+    ];
+    return queryTokens.every((t) => hay.some((w) => w.startsWith(t)));
+  };
   const filtered = products.map((product) => applyPricing(product, feed)).filter(
     (p) =>
       (!scheduled || (Number(p.stock) > 0 && priceSource(p)?.source === "SCHEDULE")) &&
       (!group || group.productIds?.includes(p.id)) &&
-      (!query ||
-        normalize(`${p.name} ${p.description}`).includes(normalize(query))) &&
+      matchesQuery(p) &&
       (!category || p.category === category) &&
       (!stock || Number(p.stock) > 0) &&
       (!price ||
